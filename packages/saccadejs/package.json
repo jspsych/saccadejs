@@ -1,0 +1,54 @@
+{
+  "name": "saccadejs",
+  "version": "0.1.0",
+  "description": "saccade.js core: webcam eye tracking in the browser (MediaPipe face landmarks \u2192 ONNX eye embedding \u2192 ridge calibration), with a hardware-validated timing loopback",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "exports": {
+    "import": "./dist/index.js",
+    "require": "./dist/index.cjs"
+  },
+  "typings": "dist/index.d.ts",
+  "unpkg": "dist/index.browser.min.js",
+  "files": [
+    "src",
+    "dist",
+    "models"
+  ],
+  "source": "src/index.ts",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "npm test -- --watch",
+    "tsc": "tsc",
+    "build": "rollup --config",
+    "build:watch": "npm run build -- --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jspsych/saccadejs.git",
+    "directory": "packages/saccadejs"
+  },
+  "keywords": [
+    "jsPsych",
+    "eye tracking",
+    "webcam",
+    "gaze",
+    "saccade.js"
+  ],
+  "author": {
+    "name": "Josh de Leeuw",
+    "url": "https://github.com/jodeleeuw"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jspsych/saccadejs/issues"
+  },
+  "homepage": "https://github.com/jspsych/saccadejs/blob/main/packages/saccadejs/README.md",
+  "devDependencies": {
+    "@jspsych/config": "^3.3.3"
+  },
+  "dependencies": {
+    "onnxruntime-web": "^1.29.0",
+    "@mediapipe/tasks-vision": "^0.10.35"
+  }
+}

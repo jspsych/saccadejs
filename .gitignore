@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+dist/
+coverage/
+.vscode/
+.idea
+.claude/
+docs/build/
+docs/.docusaurus/
+docs/static/models/*.onnx

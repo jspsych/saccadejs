@@ -1,0 +1,101 @@
+{
+  "checkpoint": {
+    "entity": "vassar-cogsci-lab",
+    "project": "eye-tracking-multiframe",
+    "run": "kwppnkuj",
+    "file": "multiframe_random_s42_ext70.weights.h5"
+  },
+  "model": {
+    "file": "models/eye_embedding.onnx",
+    "input": {
+      "name": "eye_image",
+      "shape": [
+        1,
+        36,
+        144,
+        1
+      ],
+      "dtype": "float32"
+    },
+    "output": {
+      "name": "embedding",
+      "shape": [
+        1,
+        128
+      ],
+      "dtype": "float32"
+    },
+    "input_range": "uint8_0_255",
+    "embedding_dim": 128,
+    "opset": 17,
+    "has_einsum": false,
+    "domains": [
+      "",
+      "com.microsoft"
+    ],
+    "op_histogram": {
+      "Add": 29,
+      "Conv": 15,
+      "Gelu": 4,
+      "Gemm": 14,
+      "LayerNormalization": 25,
+      "MatMul": 24,
+      "MaxPool": 3,
+      "Mul": 6,
+      "Relu": 13,
+      "Reshape": 71,
+      "Softmax": 5,
+      "Tanh": 1,
+      "Transpose": 58,
+      "Unsqueeze": 19
+    }
+  },
+  "ridge": {
+    "lambda_default": 1.0,
+    "lambda_fewpoint": 3.0,
+    "center_targets": true,
+    "center": 0.5
+  },
+  "preprocess": {
+    "pad": 0.01,
+    "landmarks": {
+      "left": 226,
+      "right": 446,
+      "top": [
+        27,
+        257
+      ],
+      "bottom": [
+        23,
+        253
+      ]
+    },
+    "gray": "bt601",
+    "resize": {
+      "method": "cv2_inter_linear",
+      "width": 144,
+      "height": 36
+    },
+    "clahe": {
+      "clip": 2.0,
+      "tiles": [
+        8,
+        8
+      ]
+    },
+    "order": [
+      "crop",
+      "gray",
+      "resize",
+      "clahe"
+    ],
+    "note": "Browser landmarks come from the MediaPipe Tasks FaceLandmarker; training used the legacy mp.solutions FaceMesh (refine_landmarks). Indices match but coordinates differ slightly."
+  },
+  "versions": {
+    "keras": "3.14.1",
+    "tensorflow": "2.20.0",
+    "tf2onnx": "1.16.1",
+    "onnx": "1.17.0"
+  },
+  "exported_at": "2026-09-05T12:54:51.291356+00:00"
+}

@@ -1,0 +1,38 @@
+name: build
+
+on: [push, pull_request]
+
+env:
+  HUSKY: 0
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build, lint, and test on Node.js ${{ matrix.node }}
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22.x, 24.x]
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build packages
+        run: npm run build
+
+
+      - name: Run tests
+        run: npm run test -- --ci --coverage --maxWorkers=2
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096" # Increase heap size for jest
