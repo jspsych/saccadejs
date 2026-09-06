@@ -1,0 +1,321 @@
+.demo {
+  margin: 1.5rem 0 3rem;
+}
+
+/* ------------------------------------------------------------------ notices --------- */
+
+.notice {
+  border-left: 4px solid var(--ifm-color-emphasis-400);
+  border-radius: var(--ifm-alert-border-radius, 6px);
+  background: var(--ifm-color-emphasis-100);
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.noticeWarn {
+  border-left-color: var(--ifm-color-warning);
+  background: var(--ifm-color-warning-contrast-background);
+  color: var(--ifm-color-warning-contrast-foreground);
+}
+
+.noticeBad {
+  border-left-color: var(--ifm-color-danger);
+  background: var(--ifm-color-danger-contrast-background);
+  color: var(--ifm-color-danger-contrast-foreground);
+}
+
+/* ------------------------------------------------------------------ stepper --------- */
+
+.stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+}
+
+.stepperItem {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 999px;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.2rem 0.85rem;
+}
+
+.stepperDone {
+  background: var(--ifm-color-emphasis-200);
+  border-color: var(--ifm-color-emphasis-200);
+}
+
+.stepperCurrent {
+  background: var(--ifm-color-primary);
+  border-color: var(--ifm-color-primary);
+  color: var(--ifm-color-white, #fff);
+}
+
+/* ------------------------------------------------------------------ cards ----------- */
+
+.card {
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 10px;
+  margin-bottom: 1.25rem;
+  padding: 1.25rem 1.4rem;
+}
+
+.cardTitle {
+  font-size: 1.1rem;
+  letter-spacing: 0.01em;
+  margin: 0 0 0.6rem;
+}
+
+.resultCard {
+  background: var(--ifm-color-emphasis-100);
+  border-radius: 8px;
+  margin: 1rem 0;
+  padding: 0.9rem 1.1rem;
+}
+
+.explain {
+  color: var(--ifm-color-emphasis-800);
+  font-size: 0.92rem;
+  margin: 0.75rem 0 0;
+}
+
+.busy {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+/* ------------------------------------------------------------------ preview --------- */
+
+.previewRow {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+
+.videoWrap {
+  background: #000;
+  border-radius: 8px;
+  line-height: 0;
+  overflow: hidden;
+  width: 320px;
+}
+
+/* The tracker crops the unmirrored frame; only the preview is flipped, because a mirrored
+   preview is what people can actually position themselves with. */
+.video {
+  display: block;
+  transform: scaleX(-1);
+  width: 100%;
+}
+
+.cropWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.crop {
+  background: #111;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+  height: 72px;
+  image-rendering: pixelated;
+  width: 288px;
+}
+
+.cropCaption {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.8rem;
+}
+
+/* ------------------------------------------------------------------ stats ----------- */
+
+.statGrid {
+  display: grid;
+  gap: 0.5rem 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.statLabel {
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.statValue {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.good {
+  color: var(--ifm-color-success-dark);
+}
+
+.warn {
+  color: var(--ifm-color-warning-dark);
+}
+
+.bad {
+  color: var(--ifm-color-danger-dark);
+}
+
+/* ------------------------------------------------------------------ progress -------- */
+
+.progressWrap {
+  margin: 1rem 0;
+}
+
+.progressTrack {
+  background: var(--ifm-color-emphasis-200);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.progressBar {
+  background: var(--ifm-color-primary);
+  height: 100%;
+  transition: width 120ms linear;
+}
+
+.progressLabel {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.8rem;
+}
+
+/* ------------------------------------------------------------------ buttons --------- */
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.primary,
+.secondary {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.5rem 1.1rem;
+}
+
+.primary {
+  background: var(--ifm-color-primary);
+  color: var(--ifm-color-white, #fff);
+}
+
+.secondary {
+  background: transparent;
+  border-color: var(--ifm-color-emphasis-400);
+  color: var(--ifm-font-color-base);
+}
+
+.primary:disabled,
+.secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.readout {
+  margin: 0.75rem 0;
+}
+
+/* ------------------------------------------------------------------ overlays -------- */
+
+/* Calibration and validation targets are placed in viewport fractions, so the overlay must
+   be the viewport — not the article column. */
+.overlay {
+  background: var(--ifm-background-color, #fff);
+  inset: 0;
+  position: fixed;
+  z-index: 9000;
+}
+
+.overlayCaption {
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.85rem;
+  left: 50%;
+  position: absolute;
+  text-align: center;
+  top: 0.75rem;
+  transform: translateX(-50%);
+}
+
+.targetPoint {
+  height: 0;
+  position: absolute;
+  width: 0;
+}
+
+.targetRing {
+  border: 2px solid var(--ifm-color-primary);
+  border-radius: 50%;
+  height: 64px;
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, -50%) scale(1);
+  transition-property: transform, border-color, opacity;
+  transition-timing-function: linear;
+  width: 64px;
+}
+
+.targetDot {
+  background: var(--ifm-color-primary);
+  border-radius: 50%;
+  height: 20px;
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, -50%);
+  transition: background-color 120ms linear;
+  width: 20px;
+}
+
+.targetCapture .targetRing {
+  border-color: var(--ifm-color-success);
+  opacity: 0.6;
+  transform: translate(-50%, -50%) scale(0.35);
+}
+
+.targetCapture .targetDot {
+  background: var(--ifm-color-success);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .targetRing {
+    transition-duration: 1ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------ gaze dot -------- */
+
+.gazeDot {
+  background: var(--ifm-color-danger);
+  border: 2px solid var(--ifm-color-white, #fff);
+  border-radius: 50%;
+  height: 22px;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  transition: opacity 150ms linear;
+  width: 22px;
+  z-index: 9500;
+}

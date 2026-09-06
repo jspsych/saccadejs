@@ -143,7 +143,7 @@ export const version: string;
 ```
 
 Behavioural requirements carried over from the reference implementation (do not lose):
-- Preprocessing must stay **bit-exact** with `crop.ts` (OpenCV gray, INTER_LINEAR resize, CLAHE 5×18 tiles clip 1); port `crop.test.ts` fixtures (`web/demo/fixtures/preproc/*`) with the tests.
+- Preprocessing must stay **bit-exact** with `crop.ts` (OpenCV gray, INTER_LINEAR resize, CLAHE clipLimit 2.0 with 8×8 tiles — which OpenCV realises as 5×18 padded tiles with an effective clip of 1); port `crop.test.ts` fixtures (`web/demo/fixtures/preproc/*`) with the tests.
 - Never mirror the frame that is cropped; the preview may be CSS-mirrored.
 - `FrameTime.capture` from rVFC `captureTime`; ring-buffer mean stamped with `meanCapture`.
 - Pipelined step (CPU capture of N+1 overlaps GPU embed of N); one `session.run` in flight.
@@ -238,3 +238,21 @@ the built `saccadejs` package via a workspace dependency and the model served fr
 `docs/static/models/` copied by a `predev`/`prebuild` script), Getting started, Guides
 (timing & synchrony — the loopback, what `t` means, the bounded uncertainty; migrating from
 WebGazer; hosting assets), Reference (core API, extension, each plugin, data fields).
+
+## Amendments from the core build (2026-09-05)
+
+The core landed with these additive deviations; the extension, plugins and docs must follow them:
+- `LoopbackResult.verdict` is the enum (`"OK" | "INCONCLUSIVE" | "UNRELIABLE"`) with a separate `reason` (`null` only when OK).
+- `runValidation` reports `percentInRoi` on a **0–100** scale (per point and aggregate), matching WebGazer's `percent_in_roi`; points with no gaze are kept with `NaN` errors. `ValidationSample.time` is `meanCapture ?? capture`.
+- The browser global `Saccade` is a namespace of named exports (`Saccade.SaccadeTracker`, `Saccade.runLoopback`, …), not a default export.
+- Extra optional inputs: `SaccadeAssets.ortModuleUrl` / `mediapipeModuleUrl`; `SaccadeTrackerOptions.stream` (an existing `MediaStream`) and `.model`. Extra members: `tracker.nextGaze()`, `getTta()`, `getKernel()`, `initialized`. Extra exports: `Pipeline`, `Landmarker`, `OrtEmbeddingModel`, `StubEmbeddingModel`, `fitRidge`, `CENTER`, `CAL_HEAD`, `mSequence`, `stimulusAt`, `refineLag`, `modelUrl`, `loadOrt`, `loadVision`, `DEFAULT_*_URL`.
+
+## Decisions on ambiguities raised by the docs build (2026-09-05)
+
+1. **`t` in `saccade_data` uses the smoothed sample's own time**: `t = (time.meanCapture ?? time.capture) − trialStart − (offset ?? 0)`. With the default TTA of 5 that is the mean capture time of the ring buffer — the instant the reported gaze actually refers to. `saccade_timing` also records `tta`.
+2. **`saccade-calibrate` data**: the pixel list is `calibration_points_px` (not `calibration_points`, which stays the parameter in percent). `n_points` = number of distinct targets; data also records `repetitions_per_point`.
+3. **`saccade-validate` data**: `raw_gaze` is `{x, y, dx, dy, t}[][]` (one array per validation point, in presentation order); add `samples_per_sec` (mean over points) as WebGazer does.
+4. **`saccade-time-sync`** runs the loopback on a full-viewport overlay appended to `document.body` (the core default), not the jsPsych display element — the whole screen must light the face. It hides the jsPsych content underneath for the duration and restores it.
+5. **`saccade-preview`** gains `face_timeout` (ms, default `null`): when set, the Continue button enables after that long even if no face has been found, and the data records `face_detected: false`. `fps` is a number, `backend` is `"webgpu" | "wasm"`.
+6. Directory names are `packages/plugin-saccadejs-<name>` and `packages/extension-saccadejs`; npm names are `@saccadejs/plugin-<name>` and `@saccadejs/extension`. Intentional.
+7. `publish-docs.yml` must trigger on `packages/saccadejs/**` as well as `docs/**`, since the demo ships the core.

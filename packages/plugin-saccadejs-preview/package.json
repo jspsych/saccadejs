@@ -45,9 +45,12 @@
   "homepage": "https://github.com/jspsych/saccadejs/blob/main/packages/plugin-saccadejs-preview/README.md",
   "devDependencies": {
     "@jspsych/config": "^3.3.3",
+    "@jspsych/test-utils": "^1.2.0",
+    "@saccadejs/extension": "^0.1.0",
     "jspsych": "^8.0.0"
   },
   "peerDependencies": {
-    "jspsych": ">=8.0.0"
+    "jspsych": ">=8.0.0",
+    "@saccadejs/extension": ">=0.1.0"
   }
 }

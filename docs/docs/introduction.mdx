@@ -1,0 +1,103 @@
+---
+slug: /
+id: introduction
+title: Introduction
+sidebar_label: Introduction
+description: Webcam eye tracking in the browser, with a timing offset validated against a photodiode-and-LED rig.
+---
+
+import Link from "@docusaurus/Link";
+
+# saccade.js
+
+**saccade.js** estimates where a participant is looking from an ordinary webcam, in the
+browser, with no plugin to install and nothing sent to a server. It is built for
+[jsPsych](https://www.jspsych.org), but the core library has no jsPsych dependency and can be
+dropped into any web experiment.
+
+Two things make it different from what came before: a **learned eye-embedding model** in place
+of hand-tuned geometric features, and a **measured timing offset** so that a gaze sample and a
+stimulus onset can be placed on the same clock — and so that you can say how far off that
+alignment might be.
+
+<p>
+  <Link className="button button--primary button--lg" to="/demo">Try the live demo</Link>{" "}
+  <Link className="button button--secondary button--lg" to="/getting-started">Getting started</Link>
+</p>
+
+## The pipeline, in one paragraph
+
+Each camera frame is delivered by `requestVideoFrameCallback` carrying a `captureTime`
+timestamp. MediaPipe's Face Landmarker finds one face and returns 478 landmarks; from the eye
+landmarks the frame is cropped to a single 144 × 36 grayscale strip containing both eyes,
+converted to gray, resized with bilinear interpolation and contrast-equalised with CLAHE —
+bit-for-bit the same preprocessing the model was trained under. That strip goes through a small
+ONNX convolutional model (about 20 MB, opset 17) on WebGPU, which returns a 128-dimensional
+embedding; the last few embeddings are averaged as test-time augmentation. A per-participant
+**ridge regression** maps that averaged embedding to a point on the screen, fitted from a short
+calibration in which the participant looks at a grid of targets. The embedding model is
+frozen and shared; only the ridge weights are per-person, which is why calibration takes
+about twenty seconds rather than several minutes.
+
+## Timing you can defend
+
+Webcam gaze has always had a timing problem that nobody measured: a frame's timestamp is not
+when the light left the screen. Between the two sit the display's own latency and the camera's
+pipeline, and neither is knowable from JavaScript.
+
+saccade.js measures the sum of them directly. A **15-second loopback** steps the page between
+black and white at random intervals longer than half a second — sparse enough that it never
+looks like flicker and is safe for photosensitive participants — while the camera watches the
+screen. The lag between each flip and the frame that first sees it, estimated as the plateau of
+an edge-difference statistic, is the whole screen-to-camera delay in a single number.
+
+That number was checked against external hardware: a photodiode taped to the screen and an LED
+in the camera's view, both timestamped by an RP2040 microcontroller on its own clock. Judged on
+the same statistic, the browser-only loopback and the hardware clock agreed to within
+**0.3 ms** on the best run (LED plateau 77.8 ms vs loopback 78.0 ms, 51 of 54 pulses
+consistent), and to within a few milliseconds across runs.
+
+What is left over is bounded and stated rather than hidden: **half an exposure plus one refresh
+of display jitter**. The loopback's convention is the *start* of the camera's exposure window
+on the *fastest* display path; a room's lighting sets the exposure, and a panel's refresh sets
+the jitter. On the development hardware that came to roughly ±15 ms of residual, on top of a
+correction of 75–95 ms that would otherwise be entirely unaccounted for.
+
+Run the loopback once per session, subtract its lag, and **do not also subtract a guessed
+display latency** — the loopback already contains it. See
+[Timing and synchrony](guides/timing-and-synchrony) for the full story.
+
+## The packages
+
+| Package | What it is |
+| --- | --- |
+| [`saccadejs`](reference/core-api) | The core: tracker, calibration, validation, timing loopback. No jsPsych dependency. Browser global `Saccade`. |
+| [`@saccadejs/extension`](reference/extension) | jsPsych extension. Records `{x, y, t}` per camera frame during any trial, plus the on-screen rectangle of every element you name. |
+| [`@saccadejs/plugin-preview`](reference/plugin-preview) | Starts the camera and lets the participant position themselves. Replaces `webgazer-init-camera`. |
+| [`@saccadejs/plugin-time-sync`](reference/plugin-time-sync) | Runs the loopback and applies the offset. No WebGazer equivalent. |
+| [`@saccadejs/plugin-calibrate`](reference/plugin-calibrate) | Calibration trial. Replaces `webgazer-calibrate`. |
+| [`@saccadejs/plugin-validate`](reference/plugin-validate) | Validation trial, with WebGazer-compatible data. Replaces `webgazer-validate`. |
+
+Coming from WebGazer? The extension and plugin parameter names deliberately match, so the
+migration is close to search-and-replace: see
+[Migrating from WebGazer](guides/migrating-from-webgazer).
+
+## What it is not
+
+- **Not a substitute for an eye tracker.** Expect an error of roughly a tenth of the screen
+  after a good calibration, in good light, from a participant who holds still. Design regions of
+  interest larger than the error you actually measure, and report your validation numbers.
+- **Not a fixation or saccade detector.** It emits a gaze estimate per camera frame — typically
+  30 per second. Event detection, drift correction, and area-of-interest scoring are yours to do.
+- **Not a way to run without a calibration.** The embedding model is participant-independent;
+  the mapping from embedding to screen is not.
+- **Not a cloud service.** Every frame is processed and discarded in the participant's browser.
+  Nothing is uploaded, which is also why the model has to be downloaded once.
+
+## Where to go next
+
+- [**Live demo**](demo) — the whole pipeline in this browser: camera, time sync, calibration,
+  validation, and a gaze dot you can download samples from.
+- [**Getting started**](getting-started) — install, and a complete minimal experiment.
+- [**How it works**](guides/how-it-works) — landmarks, crop, embedding, ridge.
+- [**Reference**](reference/core-api) — every parameter and every data field.
