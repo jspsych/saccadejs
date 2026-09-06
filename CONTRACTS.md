@@ -10,7 +10,7 @@ reference docs in `docs/` are derived from it. **Do not drift from it without up
 |---|---|
 | product | **saccade.js** |
 | repo | `jspsych/saccadejs` |
-| core npm package | `saccadejs` (jsPsych-agnostic) — global `Saccade` in the browser bundle |
+| core npm package | `@saccadejs/core` (jsPsych-agnostic), directory `packages/core` — global `Saccade` in the browser bundle |
 | extension | `@saccadejs/extension` — global `jsPsychExtensionSaccade`, `info.name = "saccade"` |
 | plugins | `@saccadejs/plugin-preview` (`jsPsychSaccadePreview`, type `saccade-preview`), `@saccadejs/plugin-calibrate` (`jsPsychSaccadeCalibrate`, `saccade-calibrate`), `@saccadejs/plugin-validate` (`jsPsychSaccadeValidate`, `saccade-validate`), `@saccadejs/plugin-time-sync` (`jsPsychSaccadeTimeSync`, `saccade-time-sync`) |
 | docs site | `docs/` (Docusaurus, `@jspsych/docusaurus-preset`), deployed by `.github/workflows/publish-docs.yml` to GitHub Pages at `https://jspsych.github.io/saccadejs/` (`baseUrl: "/saccadejs/"`; no CNAME until DNS exists) |
@@ -26,11 +26,11 @@ tsconfig), same as `jspsych/jspsych-multiplayer`. Every package: `src/index.ts`,
 The core is a port of `web/demo/src/` in the `eye-tracking` repo at commit `a6609ab`
 (`~/Documents/GitHub/eye-tracking`). That code is the reference implementation and its tests
 (`web/demo/test/*.test.ts`, vitest) are the reference tests; port them to jest. The model is
-`packages/saccadejs/models/eye_embedding.onnx` (opset 17, input `eye_image` float32
+`packages/core/models/eye_embedding.onnx` (opset 17, input `eye_image` float32
 `[1,36,144,1]` 0–255, output `embedding` float32 `[1,128]`), with
 `src/generated/cal_weights.json` (`{kernel: number[128], bias}`) and `export_manifest.json`.
 
-## Core: `saccadejs`
+## Core: `@saccadejs/core`
 
 All times are `performance.now()` milliseconds unless stated. Coordinates are viewport
 fractions 0–1 (origin top-left) inside the core; pixel conversion is the caller's job.
@@ -39,7 +39,7 @@ fractions 0–1 (origin top-left) inside the core; pixel conversion is the calle
 // ---- assets ------------------------------------------------------------------
 export interface SaccadeAssets {
   /** URL of eye_embedding.onnx. Default: resolved relative to the package (bundlers) or
-   *  "https://cdn.jsdelivr.net/npm/saccadejs@<version>/models/eye_embedding.onnx". */
+   *  "https://cdn.jsdelivr.net/npm/@saccadejs/core@<version>/models/eye_embedding.onnx". */
   modelUrl?: string;
   /** Directory URL for onnxruntime-web's .wasm/.mjs. Default: jsdelivr onnxruntime-web@<pinned>/dist/. */
   ortWasmUrl?: string;
@@ -234,7 +234,7 @@ Docusaurus in `docs/` cloned from `jspsych/jspsych-multiplayer/docs` (same prese
 scripts, `typecheck`), `title: "saccade.js"`, `url: "https://jspsych.github.io"`, `baseUrl:
 "/saccadejs/"`, `projectName: "saccadejs"`. Sections: Introduction (landing), **Live demo**
 (central: preview → time sync → calibrate → validate → free gaze with dot, in the page, using
-the built `saccadejs` package via a workspace dependency and the model served from
+the built `@saccadejs/core` package via a workspace dependency and the model served from
 `docs/static/models/` copied by a `predev`/`prebuild` script), Getting started, Guides
 (timing & synchrony — the loopback, what `t` means, the bounded uncertainty; migrating from
 WebGazer; hosting assets), Reference (core API, extension, each plugin, data fields).
@@ -255,4 +255,5 @@ The core landed with these additive deviations; the extension, plugins and docs 
 4. **`saccade-time-sync`** runs the loopback on a full-viewport overlay appended to `document.body` (the core default), not the jsPsych display element — the whole screen must light the face. It hides the jsPsych content underneath for the duration and restores it.
 5. **`saccade-preview`** gains `face_timeout` (ms, default `null`): when set, the Continue button enables after that long even if no face has been found, and the data records `face_detected: false`. `fps` is a number, `backend` is `"webgpu" | "wasm"`.
 6. Directory names are `packages/plugin-saccadejs-<name>` and `packages/extension-saccadejs`; npm names are `@saccadejs/plugin-<name>` and `@saccadejs/extension`. Intentional.
-7. `publish-docs.yml` must trigger on `packages/saccadejs/**` as well as `docs/**`, since the demo ships the core.
+7. `publish-docs.yml` must trigger on `packages/core/**` as well as `docs/**`, since the demo ships the core.
+8. **The core npm package was renamed `saccadejs` → `@saccadejs/core`, and its directory `packages/saccadejs` → `packages/core` (2026-09-06)**, to bring it under the same `@saccadejs/*` scope as the extension and plugins. The browser global stays `Saccade`; the repo name (`jspsych/saccadejs`), the docs site's `baseUrl`/`projectName` (`saccadejs`), and the `packages/plugin-saccadejs-<name>` / `packages/extension-saccadejs` directory names are unaffected.

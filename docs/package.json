@@ -22,7 +22,7 @@
     "prism-react-renderer": "^2.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "saccadejs": "file:../packages/saccadejs"
+    "@saccadejs/core": "file:../packages/core"
   },
   "devDependencies": {
     "@docusaurus/faster": "3.9.2",

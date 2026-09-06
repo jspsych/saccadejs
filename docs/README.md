@@ -19,12 +19,12 @@ npm run typecheck
 
 ## The core package is a build dependency
 
-`docs/package.json` depends on `saccadejs` as `file:../packages/saccadejs`, which npm installs
+`docs/package.json` depends on `@saccadejs/core` as `file:../packages/core`, which npm installs
 as a symlink into `docs/node_modules/`. The [live demo page](docs/demo.mdx) imports it, so
 **the site cannot build until the core package has been built**:
 
 ```sh
-cd .. && npm install && npm run build --workspace=saccadejs
+cd .. && npm install && npm run build --workspace=@saccadejs/core
 ```
 
 `dist/` is gitignored, so this applies to a fresh clone and to CI as well — see the build step
@@ -35,7 +35,7 @@ import at build time whether or not you visit the demo page.
 ## The model asset
 
 The demo needs `eye_embedding.onnx` (about 20 MB). It is committed once, in
-`packages/saccadejs/models/`, and `scripts/copy-model.mjs` copies it into `static/models/`
+`packages/core/models/`, and `scripts/copy-model.mjs` copies it into `static/models/`
 from the `predev`/`prebuild` scripts. The copy is gitignored (`docs/static/models/*.onnx` at the
 repo root) so the file is never committed twice. The component references it with
 `useBaseUrl("/models/eye_embedding.onnx")`, which resolves through `baseUrl`.
@@ -46,7 +46,7 @@ jsDelivr, which is what an experiment gets out of the box too. See
 
 ## Deployment
 
-Pushing to `main` with changes under `docs/` **or `packages/saccadejs/`** triggers
+Pushing to `main` with changes under `docs/` **or `packages/core/`** triggers
 `.github/workflows/publish-docs.yml`, which builds the core package, then typechecks and builds
 the site, and publishes it to GitHub Pages. Pull requests touching either path build without
 deploying, so a broken site is caught in review.
@@ -105,7 +105,7 @@ and `LiveDemo` (the demo itself).
 
 - **The reference pages are derived from `CONTRACTS.md`.** If an interface changes, change the
   contract and the reference page together, or they drift apart silently.
-- **`LiveDemo` is client-only.** It is wrapped in `<BrowserOnly>` and pulls `saccadejs` in with
+- **`LiveDemo` is client-only.** It is wrapped in `<BrowserOnly>` and pulls `@saccadejs/core` in with
   a dynamic `import()` inside an effect. Nothing in it may run during the static prerender —
   no module-scope reference to `window`, `navigator` or `HTMLVideoElement`.
 - **`overrides.webpack` is pinned** in `package.json`. webpack ≥ 5.102 tightened the

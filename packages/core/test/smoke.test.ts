@@ -56,9 +56,9 @@ describe("public API", () => {
       `tasks-vision@${Saccade.MEDIAPIPE_VERSION}`,
     );
     expect(Saccade.DEFAULT_FACE_LANDMARKER_URL).toMatch(/face_landmarker\.task$/);
-    // Outside a served saccadejs/dist, the model falls back to this package's CDN copy.
+    // Outside a served @saccadejs/core/dist, the model falls back to this package's CDN copy.
     expect(Saccade.modelUrl()).toBe(
-      `https://cdn.jsdelivr.net/npm/saccadejs@${packageVersion}/models/eye_embedding.onnx`,
+      `https://cdn.jsdelivr.net/npm/@saccadejs/core@${packageVersion}/models/eye_embedding.onnx`,
     );
     expect(Saccade.modelUrl({ modelUrl: "/m.onnx" })).toBe("/m.onnx");
   });

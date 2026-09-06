@@ -17,14 +17,14 @@ Requires the [`@saccadejs/extension`](../extension-saccadejs) extension to be re
 ## Installation
 
 ```
-npm install saccadejs @saccadejs/extension @saccadejs/plugin-calibrate
+npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-calibrate
 ```
 
 ## Usage
 
 ```html
 <script src="https://unpkg.com/jspsych@8"></script>
-<script src="https://unpkg.com/saccadejs"></script>
+<script src="https://unpkg.com/@saccadejs/core"></script>
 <script src="https://unpkg.com/@saccadejs/extension"></script>
 <script src="https://unpkg.com/@saccadejs/plugin-preview"></script>
 <script src="https://unpkg.com/@saccadejs/plugin-calibrate"></script>

@@ -12,14 +12,14 @@ closely enough that porting an existing eye-tracking experiment is mostly search
 ## Installation
 
 ```
-npm install saccadejs @saccadejs/extension
+npm install @saccadejs/core @saccadejs/extension
 ```
 
 or from a CDN:
 
 ```html
 <script src="https://unpkg.com/jspsych@8"></script>
-<script src="https://unpkg.com/saccadejs"></script>
+<script src="https://unpkg.com/@saccadejs/core"></script>
 <script src="https://unpkg.com/@saccadejs/extension"></script>
 ```
 

@@ -1,5 +1,5 @@
 {
-  "name": "saccadejs",
+  "name": "@saccadejs/core",
   "version": "0.1.0",
   "description": "saccade.js core: webcam eye tracking in the browser (MediaPipe face landmarks \u2192 ONNX eye embedding \u2192 ridge calibration), with a hardware-validated timing loopback",
   "type": "module",
@@ -26,7 +26,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/jspsych/saccadejs.git",
-    "directory": "packages/saccadejs"
+    "directory": "packages/core"
   },
   "keywords": [
     "jsPsych",
@@ -43,7 +43,7 @@
   "bugs": {
     "url": "https://github.com/jspsych/saccadejs/issues"
   },
-  "homepage": "https://github.com/jspsych/saccadejs/blob/main/packages/saccadejs/README.md",
+  "homepage": "https://github.com/jspsych/saccadejs/blob/main/packages/core/README.md",
   "devDependencies": {
     "@jspsych/config": "^3.3.3"
   },

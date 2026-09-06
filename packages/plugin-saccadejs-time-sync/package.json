@@ -48,11 +48,11 @@
     "@jspsych/test-utils": "^1.2.0",
     "@saccadejs/extension": "^0.1.0",
     "jspsych": "^8.0.0",
-    "saccadejs": "^0.1.0"
+    "@saccadejs/core": "^0.1.0"
   },
   "peerDependencies": {
     "jspsych": ">=8.0.0",
     "@saccadejs/extension": ">=0.1.0",
-    "saccadejs": "*"
+    "@saccadejs/core": "*"
   }
 }

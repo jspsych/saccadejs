@@ -1,14 +1,18 @@
 import type * as OrtNS from "onnxruntime-web";
 
 import type { SaccadeAssets } from "./assets";
-import { loadOrt, modelUrl } from "./assets";
+import { fetchModelBytes, loadOrt, modelUrl } from "./assets";
 import manifest from "./generated/export_manifest.json";
+import type { SaccadeProgressCallback } from "./progress";
+import { reportProgress } from "./progress";
 import type { EmbeddingModel } from "./types";
 import { EMB_DIM, EYE_H, EYE_W } from "./types";
 
 export interface OrtModelOptions {
   assets?: SaccadeAssets;
   executionProviders?: ("webgpu" | "wasm")[];
+  /** Load progress: the `ort`, `model` (with byte counts) and `session` stages. */
+  onProgress?: SaccadeProgressCallback;
 }
 
 const CROP_LEN = EYE_H * EYE_W;
@@ -33,11 +37,13 @@ export class OrtEmbeddingModel implements EmbeddingModel {
   private inputName = INPUT_NAME;
   private outputName = OUTPUT_NAME;
   private ep: "webgpu" | "wasm" = "wasm";
+  private onProgress?: SaccadeProgressCallback;
 
   constructor(opts: OrtModelOptions = {}) {
     this.assets = opts.assets ?? {};
     this.modelPath = modelUrl(this.assets);
     this.eps = opts.executionProviders ?? ["webgpu", "wasm"];
+    this.onProgress = opts.onProgress;
   }
 
   /** True when the WebGPU session was created with (and survived) graph capture. */
@@ -51,11 +57,19 @@ export class OrtEmbeddingModel implements EmbeddingModel {
   }
 
   async init(): Promise<{ ep: "webgpu" | "wasm" }> {
+    reportProgress(this.onProgress, { stage: "ort" });
     const ort = await loadOrt(this.assets);
 
     this.inputData = new Float32Array(CROP_LEN);
     this.input = new ort.Tensor("float32", this.inputData, [1, EYE_H, EYE_W, 1]);
 
+    // Fetched once, up front, and reused for every provider attempt below.
+    reportProgress(this.onProgress, { stage: "model", loaded: 0 });
+    const bytes = await fetchModelBytes(this.modelPath, (loaded, total) =>
+      reportProgress(this.onProgress, { stage: "model", loaded, total }),
+    );
+
+    reportProgress(this.onProgress, { stage: "session" });
     let lastErr: unknown = null;
     for (const ep of this.eps) {
       // Graph capture in ORT-web requires every input/output to be a pre-allocated
@@ -63,7 +77,7 @@ export class OrtEmbeddingModel implements EmbeddingModel {
       // what decides whether it stays on.
       for (const capture of ep === "webgpu" ? [true, false] : [false]) {
         try {
-          this.session = await ort.InferenceSession.create(this.modelPath, {
+          this.session = await ort.InferenceSession.create(bytes, {
             executionProviders: [ep],
             graphOptimizationLevel: "all",
             ...(capture ? { enableGraphCapture: true } : {}),

@@ -39,7 +39,7 @@ export const DEFAULT_FACE_LANDMARKER_URL =
 export interface SaccadeAssets {
   /**
    * URL of `eye_embedding.onnx`. Default: resolved relative to this package when it is being
-   * served from a `saccadejs` `dist/`, else the jsdelivr copy of this exact version.
+   * served from a `@saccadejs/core` `dist/`, else the jsdelivr copy of this exact version.
    */
   modelUrl?: string;
   /** Directory URL for onnxruntime-web's .wasm/.mjs. Default: jsdelivr `onnxruntime-web@<pinned>/dist/`. */
@@ -75,20 +75,71 @@ export function faceLandmarkerUrl(assets: SaccadeAssets = {}): string {
 }
 
 /**
- * The .onnx that sits next to the running build, when there is one: `.../saccadejs/dist/x.js`
- * (or `.../saccadejs@1.2.3/dist/x.js` on a CDN) puts the model at `../models/`. Returns null
- * everywhere else — inside someone's app bundle the module URL says nothing about us.
+ * The .onnx that sits next to the running build, when there is one:
+ * `.../@saccadejs/core/dist/x.js` (or `.../@saccadejs/core@1.2.3/dist/x.js` on a CDN) puts the
+ * model at `../models/`. Returns null everywhere else — inside someone's app bundle the module
+ * URL says nothing about us.
  */
 export function packageModelUrl(): string | null {
   const here = moduleUrl();
   if (!here) return null;
-  const m = /^(.*\/saccadejs(?:@[^/]*)?)\/dist\/[^/]*$/.exec(here);
+  const m = /^(.*\/@saccadejs\/core(?:@[^/]*)?)\/dist\/[^/]*$/.exec(here);
   return m ? `${m[1]}/models/eye_embedding.onnx` : null;
 }
 
 export function modelUrl(assets: SaccadeAssets = {}): string {
   if (assets.modelUrl) return assets.modelUrl;
-  return packageModelUrl() ?? `${JSDELIVR}/saccadejs@${version}/models/eye_embedding.onnx`;
+  return packageModelUrl() ?? `${JSDELIVR}/@saccadejs/core@${version}/models/eye_embedding.onnx`;
+}
+
+/**
+ * Fetch the .onnx ourselves rather than handing `InferenceSession.create` a URL, for two
+ * reasons: a URL gives no download progress at all, and the session is created once per
+ * execution-provider attempt (webgpu with graph capture, webgpu without, wasm), which would
+ * mean up to three requests for the same 20 MB.
+ *
+ * `onBytes` is called per chunk with the running byte count, and with `total` only when the
+ * response carried a usable `Content-Length`.
+ */
+export async function fetchModelBytes(
+  url: string,
+  onBytes?: (loaded: number, total?: number) => void,
+): Promise<Uint8Array> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`failed to fetch ${url}: ${res.status} ${res.statusText}`);
+
+  const header = res.headers?.get?.("content-length");
+  const parsed = header == null ? NaN : Number(header);
+  const total = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+
+  const reader = res.body?.getReader?.();
+  if (!reader) {
+    // No streaming body (an older browser, or a test double): one shot, one report.
+    const buf = new Uint8Array(await res.arrayBuffer());
+    onBytes?.(buf.byteLength, total ?? buf.byteLength);
+    return buf;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onBytes?.(loaded, total);
+  }
+
+  // One contiguous buffer: chunks are views into arbitrary pooled buffers, and ORT is happier
+  // with a plain array it can hand straight to the wasm heap.
+  const out = new Uint8Array(loaded);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return out;
 }
 
 let ortPromise: Promise<typeof OrtNS> | null = null;

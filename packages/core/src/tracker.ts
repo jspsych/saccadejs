@@ -4,6 +4,8 @@ import { Landmarker } from "./landmarker";
 import { OrtEmbeddingModel } from "./model";
 import type { FrameTime, TrackerFrame } from "./pipeline";
 import { Pipeline } from "./pipeline";
+import type { SaccadeProgressCallback } from "./progress";
+import { reportProgress } from "./progress";
 import type { CalPoint, EmbeddingModel, Gaze } from "./types";
 
 export interface SaccadeTrackerOptions {
@@ -15,6 +17,12 @@ export interface SaccadeTrackerOptions {
   /** ONNX Runtime execution providers, tried in order. Default ["webgpu", "wasm"]. */
   executionProviders?: ("webgpu" | "wasm")[];
   onFrame?: (f: TrackerFrame) => void;
+  /**
+   * Called as `init()` walks its load stages, so a page can show a setup screen instead of a
+   * blank wait. The `model` stage carries byte counts for the ~20 MB `.onnx`. Optional: with
+   * no callback nothing about init changes. See `SaccadeProgress`.
+   */
+  onProgress?: SaccadeProgressCallback;
   /**
    * Extension to the published contract: use this camera stream instead of calling
    * getUserMedia. Useful when the page already owns the camera.
@@ -90,12 +98,14 @@ export class SaccadeTracker {
 
   private async doInit(): Promise<InitResult> {
     if (this.disposed) throw new Error("tracker disposed");
+    const onProgress = this.opts.onProgress;
     const width = this.opts.video?.width ?? 640;
     const height = this.opts.video?.height ?? 480;
     if (this.opts.stream) {
       this.stream = this.opts.stream;
       this.ownsStream = false;
     } else {
+      reportProgress(onProgress, { stage: "camera" });
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: width }, height: { ideal: height }, facingMode: "user" },
         audio: false,
@@ -118,7 +128,7 @@ export class SaccadeTracker {
       });
     }
 
-    this.landmarker = await Landmarker.create({ assets: this.assets });
+    this.landmarker = await Landmarker.create({ assets: this.assets, onProgress });
     let ep: "webgpu" | "wasm" = "wasm";
     if (this.opts.model) {
       this.model = this.opts.model;
@@ -127,6 +137,7 @@ export class SaccadeTracker {
       const model = new OrtEmbeddingModel({
         assets: this.assets,
         executionProviders: this.opts.executionProviders,
+        onProgress,
       });
       ep = (await model.init()).ep;
       this.model = model;
@@ -145,6 +156,7 @@ export class SaccadeTracker {
       videoHeight: this.video.videoHeight,
     };
     if (this.wantRunning) this.pipeline.start();
+    reportProgress(onProgress, { stage: "ready" });
     return this.initResult;
   }
 

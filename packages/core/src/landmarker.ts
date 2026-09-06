@@ -2,10 +2,15 @@ import type { FaceLandmarker } from "@mediapipe/tasks-vision";
 
 import type { SaccadeAssets } from "./assets";
 import { faceLandmarkerUrl, loadVision, mediapipeWasmUrl } from "./assets";
+import type { SaccadeProgressCallback } from "./progress";
+import { reportProgress } from "./progress";
 import type { Landmark } from "./types";
 
 export interface LandmarkerOptions {
   assets?: SaccadeAssets;
+  /** Load progress: the `mediapipe` and `landmarker` stages. No byte counts — MediaPipe
+   *  fetches its own wasm and `.task` file. */
+  onProgress?: SaccadeProgressCallback;
 }
 
 /**
@@ -24,8 +29,10 @@ export class Landmarker {
 
   static async create(opts: LandmarkerOptions = {}): Promise<Landmarker> {
     const assets = opts.assets ?? {};
+    reportProgress(opts.onProgress, { stage: "mediapipe" });
     const vision = await loadVision(assets);
     const fileset = await vision.FilesetResolver.forVisionTasks(mediapipeWasmUrl(assets));
+    reportProgress(opts.onProgress, { stage: "landmarker" });
     const build = (delegate: "GPU" | "CPU") =>
       vision.FaceLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: faceLandmarkerUrl(assets), delegate },

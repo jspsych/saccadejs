@@ -1,7 +1,7 @@
 import type SaccadeExtension from "@saccadejs/extension";
 import { JsPsych, JsPsychPlugin, ParameterType, TrialType } from "jspsych";
-import { runLoopback } from "saccadejs";
-import type { LoopbackResult } from "saccadejs";
+import { runLoopback } from "@saccadejs/core";
+import type { LoopbackResult } from "@saccadejs/core";
 
 import { version } from "../package.json";
 

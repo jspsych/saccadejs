@@ -2,7 +2,7 @@ import { makeRollupConfig } from "@jspsych/config/rollup";
 
 /**
  * The shared jsPsych config assumes a package with a single default export (a plugin class);
- * `saccadejs` is a library with named exports, and it must never bundle onnxruntime-web or
+ * `@saccadejs/core` is a library with named exports, and it must never bundle onnxruntime-web or
  * @mediapipe/tasks-vision.
  *
  * Two adjustments:

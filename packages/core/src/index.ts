@@ -28,6 +28,9 @@ export type {
 } from "./types";
 export { EMB_DIM, EYE_H, EYE_W } from "./types";
 
+// ---- load progress -----------------------------------------------------------
+export type { SaccadeProgress, SaccadeProgressCallback, SaccadeProgressStage } from "./progress";
+
 // ---- tracker -----------------------------------------------------------------
 export type { FrameTime, TrackerFrame, TrackerTimings } from "./pipeline";
 export { Pipeline } from "./pipeline";

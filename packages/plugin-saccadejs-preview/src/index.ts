@@ -1,6 +1,6 @@
 import type SaccadeExtension from "@saccadejs/extension";
 import { JsPsych, JsPsychPlugin, ParameterType, TrialType } from "jspsych";
-import type { TrackerFrame } from "saccadejs";
+import type { TrackerFrame } from "@saccadejs/core";
 
 import { version } from "../package.json";
 

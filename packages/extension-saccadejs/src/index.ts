@@ -1,6 +1,6 @@
 import { JsPsych, JsPsychExtension, JsPsychExtensionInfo, ParameterType } from "jspsych";
-import { SaccadeTracker } from "saccadejs";
-import type { CalPoint, FrameTime, LoopbackResult, SaccadeAssets, TrackerFrame } from "saccadejs";
+import { SaccadeTracker } from "@saccadejs/core";
+import type { CalPoint, FrameTime, LoopbackResult, SaccadeAssets, TrackerFrame } from "@saccadejs/core";
 
 import { version } from "../package.json";
 

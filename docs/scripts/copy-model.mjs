@@ -2,7 +2,7 @@
  * Copy the ONNX eye-embedding model into `static/models/` so the live demo can fetch it
  * from the site's own origin.
  *
- * The model is ~20 MB and is committed once, in `packages/saccadejs/models/`. Copying it
+ * The model is ~20 MB and is committed once, in `packages/core/models/`. Copying it
  * (rather than committing a second copy, or symlinking — Docusaurus's static-file copy does
  * not follow symlinks on every platform) keeps a single source of truth; the destination is
  * gitignored at the repo root (`docs/static/models/*.onnx`).
@@ -16,7 +16,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = resolve(here, "../../packages/saccadejs/models/eye_embedding.onnx");
+const src = resolve(here, "../../packages/core/models/eye_embedding.onnx");
 const destDir = resolve(here, "../static/models");
 const dest = resolve(destDir, "eye_embedding.onnx");
 
