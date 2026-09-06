@@ -8,48 +8,4 @@ hide_table_of_contents: true
 
 import LiveDemo from "@site/src/components/LiveDemo";
 
-# Live demo
-
-This is the real library, not a video. The page loads the `saccadejs` package, opens your
-camera, downloads the eye-embedding model, and runs the same five steps a jsPsych experiment
-would: **preview → time sync → calibrate → validate → free viewing**.
-
-:::info Nothing leaves your computer
-Frames are drawn to a canvas, cropped, run through the model and discarded. No image, no
-embedding and no gaze sample is uploaded anywhere. The only network request the demo makes is
-for the model and the WebAssembly runtime, and the camera stops when you leave the page.
-:::
-
-:::tip Get a usable result
-Use **Chrome** or **Edge** on a laptop or desktop. Sit an arm's length from the screen with
-light on your face rather than behind you, put the browser window in the middle of the screen,
-and hold your head still during calibration — move your eyes, not your head. The whole run
-takes about a minute.
-:::
-
 <LiveDemo />
-
-## What you just saw
-
-- **The eye crop** beside the preview is the model's entire input: one 144 × 36 grayscale
-  strip spanning both eyes, contrast-equalised. Everything else in the frame is thrown away.
-- **The time-sync card** reports a lag in milliseconds and a verdict. That lag is the delay
-  from a change on screen to the camera frame that sees it — display latency and camera
-  pipeline together. Subtracting it puts gaze samples on the experiment's clock. See
-  [Timing and synchrony](guides/timing-and-synchrony).
-- **Calibration** fits a ridge regression from the 128-dimensional embedding to screen
-  coordinates using thirteen points. It is per-participant and takes about twenty seconds.
-- **Validation** uses nine points the calibration never saw, so the median error it reports is
-  held out rather than a fit statistic.
-- **The downloaded JSON** has the same shape as `saccade_data` in a jsPsych trial: `x` and `y`
-  in pixels, `t` in milliseconds on `performance.now()`.
-
-## If it did not work
-
-| Symptom | Cause and fix |
-| --- | --- |
-| "Backend: wasm" and a low frame rate | WebGPU is unavailable — Safari, Firefox, or a browser flag. The library falls back to the WebAssembly execution provider automatically. Everything works, just slower. |
-| "Frame clock: callback" | The browser has no `requestVideoFrameCallback`, so frames carry no `captureTime` and the timing measurement is not meaningful. Chrome and Edge have it; Firefox and Safari support varies by version. |
-| Face never found | Too little light on the face, or the face is out of frame. Backlighting (a window behind you) is the usual culprit. |
-| Camera prompt never appeared | The page must be served over `https://` or from `localhost`. Check the padlock in the address bar for a previously-denied permission. |
-| Validation error above 15% of the viewport | Head movement between calibration and validation, glasses reflecting a light source, or a very wide screen. Recalibrate without moving. |

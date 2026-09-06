@@ -2,37 +2,145 @@
 id: getting-started
 title: Getting started
 sidebar_label: Getting started
-description: Install saccade.js and run a complete minimal jsPsych experiment that records gaze.
+description: A complete jsPsych experiment that calibrates a webcam eye tracker and records gaze.
 ---
 
 import { Steps, Step } from "@site/src/components/Steps";
 
 # Getting started
 
-By the end of this page you will have a jsPsych experiment that opens the camera, measures its
-own timing offset, calibrates, validates, and records a gaze sample for every camera frame of a
-trial.
+Serve this file over `https://` or from `localhost` and open it in Chrome or Edge.
 
-:::note Requirements
-A **secure context** (`https://` or `localhost`) — browsers will not open a camera otherwise —
-and a Chromium browser for the best results. See
-[Hosting the assets](guides/hosting-the-assets) for what has to be reachable from the
-participant's browser.
-:::
+```html
+<!doctype html>
+<html>
+  <head>
+    <script src="https://unpkg.com/jspsych@8"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2"></script>
+    <script src="https://unpkg.com/@saccadejs/core@0.1.0"></script>
+    <script src="https://unpkg.com/@saccadejs/extension@0.1.0"></script>
+    <script src="https://unpkg.com/@saccadejs/plugin-preview@0.1.0"></script>
+    <script src="https://unpkg.com/@saccadejs/plugin-time-sync@0.1.0"></script>
+    <script src="https://unpkg.com/@saccadejs/plugin-calibrate@0.1.0"></script>
+    <script src="https://unpkg.com/@saccadejs/plugin-validate@0.1.0"></script>
+    <link rel="stylesheet" href="https://unpkg.com/jspsych@8/css/jspsych.css" />
+  </head>
+  <body></body>
+  <script>
+    const jsPsych = initJsPsych({
+      extensions: [{ type: jsPsychExtensionSaccade }],
+      on_finish: () => jsPsych.data.displayData(),
+    });
 
-## Install
+    const timeline = [
+      // Camera permission, model download, and head positioning.
+      { type: jsPsychSaccadePreview },
+      // Measure this participant's screen-to-camera lag and apply it to every later `t`.
+      { type: jsPsychSaccadeTimeSync },
+      // Fit the gaze model on 13 points, then check it on 9 held-out points.
+      { type: jsPsychSaccadeCalibrate },
+      { type: jsPsychSaccadeValidate },
+      // A trial that records gaze. `extensions` is what turns recording on.
+      {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `
+          <div style="display:flex; gap:20vw; justify-content:center">
+            <img id="left" src="left.png" width="300" />
+            <img id="right" src="right.png" width="300" />
+          </div>
+          <p>Look at whichever picture you prefer, then press any key.</p>`,
+        extensions: [
+          { type: jsPsychExtensionSaccade, params: { targets: ["#left", "#right"] } },
+        ],
+      },
+    ];
 
-<Steps>
-<Step title="With npm, for a bundled experiment">
-
-```sh
-npm install jspsych saccadejs @saccadejs/extension \
-  @saccadejs/plugin-preview @saccadejs/plugin-time-sync \
-  @saccadejs/plugin-calibrate @saccadejs/plugin-validate
+    jsPsych.run(timeline);
+  </script>
+</html>
 ```
 
-`saccadejs` is a dependency of the jsPsych packages, so it arrives either way; install it
-explicitly only if you also use the core API directly.
+Load `@saccadejs/core` before the other packages, and pin every version.
+
+## The setup trials
+
+<Steps>
+<Step title="Register the extension">
+
+Add it to `initJsPsych` once. This does not touch the camera.
+
+</Step>
+<Step title="saccade-preview">
+
+Asks for camera permission, downloads the model, and shows the participant the eye crop the
+model sees so they can position themselves. Put it early: this is where the download happens.
+
+</Step>
+<Step title="saccade-time-sync">
+
+Fifteen seconds of the screen stepping between black and white while the camera watches. This
+measures how far behind the camera clock is, and subtracts it from every later gaze timestamp.
+See [Timing and synchrony](guides/timing-and-synchrony).
+
+</Step>
+<Step title="saccade-calibrate">
+
+Thirteen points, about twenty seconds. Nothing predicts gaze until this finishes.
+
+</Step>
+<Step title="saccade-validate">
+
+Nine points the calibration never saw. Read `median_error_viewport` from its data and report it.
+
+</Step>
+</Steps>
+
+Then attach the extension to any trial you want gaze recorded on.
+
+## What the data looks like
+
+The extension adds three fields to every trial it is attached to.
+
+```jsonc
+{
+  "rt": 3184,
+  "saccade_data": [
+    { "x": 412, "y": 388, "t": 51 },
+    { "x": 418, "y": 381, "t": 85 },
+    { "x": 903, "y": 402, "t": 118 }
+    // one row per camera frame in which a face was found
+  ],
+  "saccade_targets": {
+    "#left":  { "x": 260, "y": 300, "width": 300, "height": 200,
+                "top": 300, "bottom": 500, "left": 260, "right": 560 },
+    "#right": { "x": 900, "y": 300, "width": 300, "height": 200,
+                "top": 300, "bottom": 500, "left": 900, "right": 1200 }
+  },
+  "saccade_timing": {
+    "offset_ms": 78, "corrected": true, "clock": "captureTime",
+    "dropped_frames": 1, "fps": 29.6, "tta": 5
+  }
+}
+```
+
+`x` and `y` are viewport pixels in the participant's own window, so they hit-test directly
+against `saccade_targets`. `t` is milliseconds since the trial started, on the same clock as
+`rt`, with the measured timing offset already subtracted.
+
+```js
+const data = jsPsych.data.get().filter({ trial_type: "html-keyboard-response" }).values()[0];
+const inBox = (s, r) => s.x >= r.left && s.x <= r.right && s.y >= r.top && s.y <= r.bottom;
+
+const left = data.saccade_data.filter((s) => inBox(s, data.saccade_targets["#left"])).length;
+const right = data.saccade_data.filter((s) => inBox(s, data.saccade_targets["#right"])).length;
+```
+
+## With npm and a bundler
+
+```sh
+npm install jspsych @saccadejs/extension @saccadejs/plugin-preview \
+  @saccadejs/plugin-time-sync @saccadejs/plugin-calibrate @saccadejs/plugin-validate
+```
 
 ```js
 import { initJsPsych } from "jspsych";
@@ -43,161 +151,16 @@ import jsPsychSaccadeCalibrate from "@saccadejs/plugin-calibrate";
 import jsPsychSaccadeValidate from "@saccadejs/plugin-validate";
 ```
 
-</Step>
-<Step title="Or with script tags, for a single HTML file">
-
-Each package ships a browser bundle that defines one global. Load `saccadejs` first: the
-others expect the `Saccade` global to already exist.
-
-```html
-<script src="https://unpkg.com/jspsych@8"></script>
-<script src="https://unpkg.com/saccadejs@0.1.0"></script>
-<script src="https://unpkg.com/@saccadejs/extension@0.1.0"></script>
-<script src="https://unpkg.com/@saccadejs/plugin-preview@0.1.0"></script>
-<script src="https://unpkg.com/@saccadejs/plugin-time-sync@0.1.0"></script>
-<script src="https://unpkg.com/@saccadejs/plugin-calibrate@0.1.0"></script>
-<script src="https://unpkg.com/@saccadejs/plugin-validate@0.1.0"></script>
-<link rel="stylesheet" href="https://unpkg.com/jspsych@8/css/jspsych.css" />
-```
-
-| Package | Global |
-| --- | --- |
-| `saccadejs` | `Saccade` — a **namespace**, so `new Saccade.SaccadeTracker(…)`, `Saccade.runLoopback(…)` |
-| `@saccadejs/extension` | `jsPsychExtensionSaccade` |
-| `@saccadejs/plugin-preview` | `jsPsychSaccadePreview` |
-| `@saccadejs/plugin-time-sync` | `jsPsychSaccadeTimeSync` |
-| `@saccadejs/plugin-calibrate` | `jsPsychSaccadeCalibrate` |
-| `@saccadejs/plugin-validate` | `jsPsychSaccadeValidate` |
-
-Pin the versions. `unpkg.com/@saccadejs/extension` without a version serves whatever is latest
-at the moment each participant loads your page, which is not what you want mid-collection.
-
-</Step>
-</Steps>
-
-## A complete minimal experiment
-
-Four setup trials and then a real one. Copy this into a file, serve it over `http://localhost`,
-and open it.
-
-```html
-<!doctype html>
-<html>
-  <head>
-    <script src="https://unpkg.com/jspsych@8"></script>
-    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2"></script>
-    <script src="https://unpkg.com/saccadejs@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/extension@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-preview@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-time-sync@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-calibrate@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-validate@0.1.0"></script>
-    <link rel="stylesheet" href="https://unpkg.com/jspsych@8/css/jspsych.css" />
-  </head>
-  <body></body>
-  <script>
-    // 1. Register the extension. Nothing happens yet — the camera is not touched until
-    //    the preview trial runs, which is what `auto_initialize: false` (the default) means.
-    const jsPsych = initJsPsych({
-      extensions: [{ type: jsPsychExtensionSaccade, params: { round_predictions: true } }],
-      on_finish: () => jsPsych.data.displayData(),
-    });
-
-    const timeline = [];
-
-    // 2. Camera preview: asks for permission, loads the model, shows the eye crop, and
-    //    only enables Continue once a face is found.
-    timeline.push({ type: jsPsychSaccadePreview });
-
-    // 3. Measure the screen-to-camera lag and apply it to every later `t`.
-    timeline.push({ type: jsPsychSaccadeTimeSync });
-
-    // 4. Calibrate (13 points) and validate (9 held-out points).
-    timeline.push({ type: jsPsychSaccadeCalibrate });
-    timeline.push({ type: jsPsychSaccadeValidate });
-
-    // 5. A real trial. `extensions` is what turns gaze recording on; the extension records
-    //    one sample per camera frame and the rectangle of every selector in `targets`.
-    timeline.push({
-      type: jsPsychHtmlKeyboardResponse,
-      stimulus: `
-        <div style="display:flex; gap:20vw; justify-content:center">
-          <img id="left"  src="left.png"  width="300" />
-          <img id="right" src="right.png" width="300" />
-        </div>
-        <p>Look at whichever picture you prefer, then press any key.</p>`,
-      extensions: [{ type: jsPsychExtensionSaccade, params: { targets: ["#left", "#right"] } }],
-    });
-
-    jsPsych.run(timeline);
-  </script>
-</html>
-```
-
-## What the data looks like
-
-The extension adds three fields to any trial it is attached to.
-
-```jsonc
-{
-  "rt": 3184,
-  "saccade_data": [
-    { "x": 412, "y": 388, "t": 51.2 },
-    { "x": 418, "y": 381, "t": 84.5 },
-    { "x": 903, "y": 402, "t": 117.8 }
-    // ... one row per camera frame in which a face was found
-  ],
-  "saccade_targets": {
-    "#left":  { "x": 260, "y": 300, "width": 300, "height": 200,
-                "top": 300, "bottom": 500, "left": 260, "right": 560 },
-    "#right": { "x": 900, "y": 300, "width": 300, "height": 200,
-                "top": 300, "bottom": 500, "left": 900, "right": 1200 }
-  },
-  "saccade_timing": {
-    "offset_ms": 78.0,
-    "corrected": true,
-    "clock": "captureTime",
-    "dropped_frames": 1,
-    "fps": 29.6,
-    "tta": 5
-  }
-}
-```
-
-Three things to notice:
-
-- **`x` and `y` are pixels relative to the viewport**, in the participant's own window. They
-  are directly comparable to the rectangles in `saccade_targets`, which is the point:
-  `x > target.left && x < target.right` is a hit test and needs no unit conversion. Compare
-  across participants only after normalising by their screen size.
-- **`t` is milliseconds since the trial started**, on `performance.now()` — the same clock as
-  `rt`. It is the camera's own capture stamp, averaged over the `tta` frames the estimate came
-  from, and because `saccade-time-sync` ran it has already had the measured lag subtracted;
-  `saccade_timing.corrected` says so. Do not subtract a display latency again on top of it.
-- **`saccade_timing` travels with every trial**, so an analysis can tell corrected trials from
-  uncorrected ones, and can drop a participant whose camera dropped frames or whose browser
-  fell back to the animation-frame clock (`"clock": "callback"`).
-
-A tiny bit of analysis, to make it concrete:
-
-```js
-const data = jsPsych.data.get().filter({ trial_type: "html-keyboard-response" }).values()[0];
-const inBox = (s, r) => s.x >= r.left && s.x <= r.right && s.y >= r.top && s.y <= r.bottom;
-
-const left = data.saccade_data.filter((s) => inBox(s, data.saccade_targets["#left"])).length;
-const right = data.saccade_data.filter((s) => inBox(s, data.saccade_targets["#right"])).length;
-console.log(`looked left on ${left} frames, right on ${right}`);
-```
+The timeline is identical. `@saccadejs/core` arrives as a dependency of the others; install it
+explicitly only if you use the [core API](reference/core-api) directly.
 
 ## Without jsPsych
 
-The core is a plain library. Everything the plugins do is available directly:
-
 ```js
-import { SaccadeTracker, runCalibration, defaultGrid13, runLoopback } from "saccadejs";
+import { SaccadeTracker, runCalibration, defaultGrid13, runLoopback } from "@saccadejs/core";
 
-const tracker = new SaccadeTracker({ tta: 5 });
-const { ep } = await tracker.init(); // camera prompt, model load; ep is "webgpu" or "wasm"
+const tracker = new SaccadeTracker();
+await tracker.init();              // camera prompt and model load
 document.body.appendChild(tracker.video);
 tracker.start();
 
@@ -210,18 +173,13 @@ tracker.fitCalibration();
 
 tracker.onFrame((frame) => {
   if (!frame.gaze) return;
-  // viewport fractions, 0–1, origin top-left
   const t = (frame.time.meanCapture ?? frame.time.capture) - (verdict === "OK" ? lagMs : 0);
-  console.log(frame.gaze.x, frame.gaze.y, t);
+  console.log(frame.gaze.x, frame.gaze.y, t);   // gaze is viewport fractions, 0-1
 });
 ```
 
-See the [core API reference](reference/core-api) for the rest.
-
 ## Next steps
 
-- [**Timing and synchrony**](guides/timing-and-synchrony) — what `t` means and how far you can
-  trust it.
-- [**Migrating from WebGazer**](guides/migrating-from-webgazer) — the mapping, parameter by
-  parameter.
-- [**Hosting the assets**](guides/hosting-the-assets) — before you collect data from strangers.
+- [**Hosting the assets**](guides/hosting-the-assets). Read this before collecting real data.
+- [**Timing and synchrony**](guides/timing-and-synchrony). What `t` means.
+- [**Reference**](reference/extension). Every parameter and data field.
