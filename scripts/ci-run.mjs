@@ -12,7 +12,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const [, , kind, ...rest] = process.argv;
@@ -29,14 +29,54 @@ if (!hasPackages) {
   process.exit(0);
 }
 
-const command =
-  kind === "build"
-    ? ["npm", "run", "build", "--workspaces", "--if-present", ...rest]
-    : ["jest", ...rest];
+/**
+ * Build order matters: `npm run build --workspaces` runs packages alphabetically, and the
+ * extension and plugins import the core's built `dist/` types. Sort the workspace packages
+ * topologically by their in-repo dependencies (dependencies, devDependencies,
+ * peerDependencies) and build them one at a time in that order.
+ */
+function buildOrder() {
+  const pkgs = readdirSync(packagesDir)
+    .map((dir) => {
+      const file = fileURLToPath(new URL(`../packages/${dir}/package.json`, import.meta.url));
+      return existsSync(file) ? { dir, ...JSON.parse(readFileSync(file, "utf8")) } : null;
+    })
+    .filter(Boolean);
+  const names = new Set(pkgs.map((p) => p.name));
+  const deps = (p) =>
+    Object.keys({ ...p.dependencies, ...p.devDependencies, ...p.peerDependencies }).filter((n) =>
+      names.has(n),
+    );
+  const order = [];
+  const seen = new Set();
+  const visit = (p, stack = new Set()) => {
+    if (seen.has(p.name)) return;
+    if (stack.has(p.name)) throw new Error(`workspace dependency cycle at ${p.name}`);
+    stack.add(p.name);
+    for (const d of deps(p))
+      visit(
+        pkgs.find((q) => q.name === d),
+        stack,
+      );
+    seen.add(p.name);
+    order.push(p.name);
+  };
+  for (const p of pkgs) visit(p);
+  return order;
+}
 
-const result = spawnSync(command[0], command.slice(1), {
-  stdio: "inherit",
-  shell: process.platform === "win32",
-});
+let result = { status: 0 };
+if (kind === "build") {
+  for (const name of buildOrder()) {
+    console.log(`\n▶ build ${name}`);
+    result = spawnSync("npm", ["run", "build", "--if-present", "-w", name, ...rest], {
+      stdio: "inherit",
+      shell: process.platform === "win32",
+    });
+    if (result.status !== 0) break;
+  }
+} else {
+  result = spawnSync("jest", rest, { stdio: "inherit", shell: process.platform === "win32" });
+}
 
 process.exit(result.status ?? 1);
