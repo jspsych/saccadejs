@@ -3,17 +3,17 @@ import { defineJspsychConfig } from "@jspsych/docusaurus-preset";
 
 const editUrl = "https://github.com/jspsych/saccadejs/tree/main/docs/";
 
-// The site is published to a project page, so every absolute link needs this prefix.
-// MDX links go through `useBaseUrl`, but raw-HTML strings (e.g. an announcement bar) and
-// the config's own `to:` fields do not — interpolate this rather than hardcoding "/".
-const baseUrl = "/saccadejs/";
+// The site is served at the root of its own domain, so this is just "/". Kept as a constant
+// because raw-HTML strings (e.g. an announcement bar) and the config's own `to:` fields do not
+// go through `useBaseUrl` the way MDX links do — interpolate this rather than hardcoding "/",
+// so a future move back under a path prefix stays a one-line change.
+const baseUrl = "/";
 
 const config: Config = defineJspsychConfig({
   title: "saccade.js",
   tagline: "Webcam eye tracking in the browser, with timing you can defend",
-  // No CNAME yet: the site lives on the GitHub Pages project domain. See docs/README.md
-  // for what to change when a custom domain is set up.
-  url: "https://jspsych.github.io",
+  // Custom domain, set by docs/static/CNAME and the repository's Pages settings.
+  url: "https://saccade.jspsych.org",
   baseUrl,
   organizationName: "jspsych",
   projectName: "saccadejs",
@@ -30,7 +30,7 @@ const config: Config = defineJspsychConfig({
   navbar: {
     title: "saccade.js",
     items: [
-      { to: "/", label: "Introduction", position: "left", activeBaseRegex: "^/saccadejs/$" },
+      { to: "/", label: "Introduction", position: "left", activeBaseRegex: "^/$" },
       { to: "/demo", label: "Live demo", position: "left" },
       {
         type: "docSidebar",

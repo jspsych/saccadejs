@@ -1,6 +1,6 @@
 # saccade.js documentation site
 
-The user-facing docs at <https://jspsych.github.io/saccadejs/>. Built with
+The user-facing docs at <https://saccade.jspsych.org>. Built with
 [Docusaurus](https://docusaurus.io/) on `@jspsych/docusaurus-preset`, the shared config factory
 used by the other jsPsych-family satellite sites ([multiplayer](https://multiplayer.jspsych.org),
 [metadata](https://metadata.jspsych.org)).
@@ -17,28 +17,35 @@ npm run serve  # preview the production build
 npm run typecheck
 ```
 
-## The core package is a build dependency
+## The packages are build dependencies
 
-`docs/package.json` depends on `@saccadejs/core` as `file:../packages/core`, which npm installs
-as a symlink into `docs/node_modules/`. The [live demo page](docs/demo.mdx) imports it, so
-**the site cannot build until the core package has been built**:
+`docs/package.json` depends on the core, the extension and all four plugins as
+`file:../packages/<name>`, which npm installs as symlinks into `docs/node_modules/`. The
+[live demo page](docs/demo.mdx) is a real jsPsych experiment that imports every one of them, so
+**the site cannot build until the packages have been built**:
 
 ```sh
-cd .. && npm install && npm run build --workspace=@saccadejs/core
+cd .. && npm install && npm run build
 ```
 
-`dist/` is gitignored, so this applies to a fresh clone and to CI as well — see the build step
-in `.github/workflows/publish-docs.yml`, which does exactly the above before installing the
-docs. If you only want to edit prose, this is still required, because webpack resolves the
-import at build time whether or not you visit the demo page.
+Every `dist/` is gitignored, so this applies to a fresh clone and to CI as well — see the build
+step in `.github/workflows/publish-docs.yml`, which does exactly the above before installing
+the docs. If you only want to edit prose, this is still required, because webpack resolves the
+imports at build time whether or not you visit the demo page.
 
-## The model asset
+The demo also depends on `jspsych` and `@jspsych/plugin-html-keyboard-response` from npm: it
+runs the same timeline as [Getting started](docs/getting-started.mdx), so what the demo
+exercises is exactly what an experimenter installs.
 
-The demo needs `eye_embedding.onnx` (about 20 MB). It is committed once, in
-`packages/core/models/`, and `scripts/copy-model.mjs` copies it into `static/models/`
-from the `predev`/`prebuild` scripts. The copy is gitignored (`docs/static/models/*.onnx` at the
-repo root) so the file is never committed twice. The component references it with
-`useBaseUrl("/models/eye_embedding.onnx")`, which resolves through `baseUrl`.
+## The static assets
+
+Two files are copied into `static/` by the `predev`/`prebuild` scripts, and both copies are
+gitignored so nothing is committed twice:
+
+| Script | Copies | Why |
+| --- | --- | --- |
+| `scripts/copy-model.mjs` | `packages/core/models/eye_embedding.onnx` → `static/models/` | The demo fetches the ~20 MB model from the site's own origin, via `useBaseUrl("/models/eye_embedding.onnx")`, passed to the extension as `assets.modelUrl`. |
+| `scripts/copy-jspsych-css.mjs` | `node_modules/jspsych/css/jspsych.css` → `static/css/` | The demo needs the real jsPsych stylesheet. *Importing* it would be simpler, but Docusaurus emits one stylesheet for the whole site and `jspsych.css` embeds Open Sans as base64 — ~460 kB on every page. `LiveDemo` links it from the demo page's `<Head>` instead. |
 
 ONNX Runtime and MediaPipe assets are **not** copied: the core's defaults fetch them from
 jsDelivr, which is what an experiment gets out of the box too. See
@@ -46,39 +53,39 @@ jsDelivr, which is what an experiment gets out of the box too. See
 
 ## Deployment
 
-Pushing to `main` with changes under `docs/` **or `packages/core/`** triggers
-`.github/workflows/publish-docs.yml`, which builds the core package, then typechecks and builds
+Pushing to `main` with changes under `docs/` **or `packages/`** triggers
+`.github/workflows/publish-docs.yml`, which builds every package, then typechecks and builds
 the site, and publishes it to GitHub Pages. Pull requests touching either path build without
 deploying, so a broken site is caught in review.
 
-The core is in the trigger because the live demo bundles it: a core change makes the published
-site stale even when nothing here moved.
+`packages/` is in the trigger because the live demo runs them: a change to the extension or any
+plugin makes the published site stale even when nothing here moved.
 
-The site is served from the project page, so `baseUrl` is `/saccadejs/` and `url` is
-`https://jspsych.github.io`.
+### The custom domain
 
-### Adding a custom domain later
+The site is served at <https://saccade.jspsych.org>, so `baseUrl` is `/` and `url` is
+`https://saccade.jspsych.org`. Four things hold that together, and changing any one alone
+breaks it:
 
-There is **no `CNAME` file** yet, because there is no DNS record to point at. When there is
-(`saccade.jspsych.org`, say):
+1. **DNS.** `saccade.jspsych.org` is a `CNAME` record pointing at `jspsych.github.io`. (An apex
+   domain would need `A`/`AAAA` records to GitHub's Pages IPs instead.)
+2. **The repository's Pages settings.** The custom domain must be registered on GitHub's side —
+   DNS alone is not enough, because Pages routes by `Host` header and has to know which
+   repository owns the name. Without it GitHub answers on the right IPs but returns a 404 and
+   serves the wildcard `*.github.io` certificate.
+3. **`docs/static/CNAME`.** Contains exactly the hostname and nothing else. Docusaurus copies
+   `static/` verbatim into `build/`, and this deploys from an uploaded artifact rather than a
+   branch, so without this file GitHub drops the custom domain on the next deploy.
+4. **`docs/docusaurus.config.ts`.** `url` feeds canonical links, sitemaps and Open Graph tags;
+   `baseUrl` prefixes every asset path. The Introduction navbar item's `activeBaseRegex` is
+   written against the base path, so it is `^/$` here and would become `^/<prefix>/$` if the
+   site ever moved back under one.
 
-1. **DNS.** Add a `CNAME` record for the subdomain pointing at `jspsych.github.io`. (For an
-   apex domain, `A`/`AAAA` records to GitHub's Pages IPs instead.)
-2. **`docs/static/CNAME`.** Create it containing exactly the hostname and nothing else:
-   ```
-   saccade.jspsych.org
-   ```
-   Docusaurus copies `static/` verbatim into `build/`, which is how GitHub Pages picks it up.
-   Without this file, GitHub resets the custom domain on the next deploy.
-3. **`docs/docusaurus.config.ts`.** Set `url: "https://saccade.jspsych.org"` and
-   `baseUrl: "/"`. Both are wrong otherwise: `url` is used for canonical links, sitemaps and
-   Open Graph tags, and `baseUrl` prefixes every asset path.
-4. **Check the navbar.** `activeBaseRegex` on the Introduction item is written against the
-   current base path (`^/saccadejs/$`); with `baseUrl: "/"` it becomes `^/$`.
-5. Wait for GitHub to issue the certificate, then turn on **Enforce HTTPS** in the repository's
-   Pages settings.
+`organizationName` and `projectName` are unrelated to the domain — they identify the
+repository, and stay as they are.
 
-Leave `organizationName` and `projectName` alone — they identify the repository, not the domain.
+After a domain change, wait for GitHub to issue the certificate before turning on **Enforce
+HTTPS** in the repository's Pages settings.
 
 ## What goes here
 
@@ -105,9 +112,15 @@ and `LiveDemo` (the demo itself).
 
 - **The reference pages are derived from `CONTRACTS.md`.** If an interface changes, change the
   contract and the reference page together, or they drift apart silently.
-- **`LiveDemo` is client-only.** It is wrapped in `<BrowserOnly>` and pulls `@saccadejs/core` in with
-  a dynamic `import()` inside an effect. Nothing in it may run during the static prerender —
-  no module-scope reference to `window`, `navigator` or `HTMLVideoElement`.
+- **`LiveDemo` is a real jsPsych experiment, and client-only.** It runs the published extension
+  and plugins on the same timeline as Getting started, rendered into a `<div>` by
+  `initJsPsych({ display_element })`; React only supplies the intro screen, the annotation
+  banner (driven from `on_trial_start`) and the summary. It is wrapped in `<BrowserOnly>` and
+  pulls `jspsych` and every saccade.js package in with dynamic `import()`s inside a callback.
+  Nothing in it may run during the static prerender — no module-scope reference to `window`,
+  `navigator` or `HTMLVideoElement`, and no module-scope import of a package that touches them.
+  Because the tracker holds an open camera, the component ends the experiment and calls the
+  extension's `dispose()` on unmount and before a re-run.
 - **`overrides.webpack` is pinned** in `package.json`. webpack ≥ 5.102 tightened the
   `ProgressPlugin` options schema, which Docusaurus 3.9's `webpackbar` fails validation
   against. Drop the override once that is fixed upstream. Docusaurus versions are pinned to

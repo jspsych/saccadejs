@@ -13,7 +13,7 @@ reference docs in `docs/` are derived from it. **Do not drift from it without up
 | core npm package | `@saccadejs/core` (jsPsych-agnostic), directory `packages/core` — global `Saccade` in the browser bundle |
 | extension | `@saccadejs/extension` — global `jsPsychExtensionSaccade`, `info.name = "saccade"` |
 | plugins | `@saccadejs/plugin-preview` (`jsPsychSaccadePreview`, type `saccade-preview`), `@saccadejs/plugin-calibrate` (`jsPsychSaccadeCalibrate`, `saccade-calibrate`), `@saccadejs/plugin-validate` (`jsPsychSaccadeValidate`, `saccade-validate`), `@saccadejs/plugin-time-sync` (`jsPsychSaccadeTimeSync`, `saccade-time-sync`) |
-| docs site | `docs/` (Docusaurus, `@jspsych/docusaurus-preset`), deployed by `.github/workflows/publish-docs.yml` to GitHub Pages at `https://jspsych.github.io/saccadejs/` (`baseUrl: "/saccadejs/"`; no CNAME until DNS exists) |
+| docs site | `docs/` (Docusaurus, `@jspsych/docusaurus-preset`), deployed by `.github/workflows/publish-docs.yml` to GitHub Pages at `https://saccade.jspsych.org` (`baseUrl: "/"`; custom domain set by `docs/static/CNAME` and the repository Pages settings) |
 
 Monorepo: npm workspaces under `packages/*`, built with `@jspsych/config` (rollup + jest +
 tsconfig), same as `jspsych/jspsych-multiplayer`. Every package: `src/index.ts`, `README.md`,
@@ -101,7 +101,9 @@ export function defaultGrid13(): Gaze[]; export function trainingGrid20(): Gaze[
 export function lambdaFor(nPoints: number): number;   // 3 when <= 9 points else 1
 
 // ---- calibration / validation helpers (pure, DOM-free) -----------------------
-export interface CollectOptions { settleMs: number; captureMs: number }
+export interface CollectOptions { settleMs: number; captureMs: number;
+  /** Reject with `no camera frames for <ms> ms` if one frame takes longer. 0 = wait forever. Default 5000. */
+  timeoutMs?: number }
 /** Drives a point sequence: for each target, calls showTarget(target,"settle"), waits settleMs,
  *  showTarget(target,"capture"), collects embeddings for captureMs via nextEmbedding, then
  *  addCalibrationPoint. Resolves with the points. */
@@ -231,8 +233,8 @@ Data: `lag_ms`, `plateau_width_ms`, `peak_d`, `halves_ms` ([a,b]), `camera_perio
 ## Docs site
 
 Docusaurus in `docs/` cloned from `jspsych/jspsych-multiplayer/docs` (same preset, theme,
-scripts, `typecheck`), `title: "saccade.js"`, `url: "https://jspsych.github.io"`, `baseUrl:
-"/saccadejs/"`, `projectName: "saccadejs"`. Sections: Introduction (landing), **Live demo**
+scripts, `typecheck`), `title: "saccade.js"`, `url: "https://saccade.jspsych.org"`, `baseUrl:
+"/"`, `projectName: "saccadejs"`. Sections: Introduction (landing), **Live demo**
 (central: preview → time sync → calibrate → validate → free gaze with dot, in the page, using
 the built `@saccadejs/core` package via a workspace dependency and the model served from
 `docs/static/models/` copied by a `predev`/`prebuild` script), Getting started, Guides
