@@ -5,16 +5,17 @@ on:
     branches: [main]
     paths:
       - "docs/**"
-      # The live demo bundles the core package, so a core change makes the published
-      # site stale even when nothing under docs/ moved.
-      - "packages/core/**"
+      # The live demo is a real jsPsych experiment running the extension and every plugin,
+      # so any package change makes the published site stale even when nothing under docs/
+      # moved.
+      - "packages/**"
       - ".github/workflows/publish-docs.yml"
   # Build (but do not deploy) on PRs touching the site, so a broken docs build is
   # caught in review rather than after merge.
   pull_request:
     paths:
       - "docs/**"
-      - "packages/core/**"
+      - "packages/**"
       - ".github/workflows/publish-docs.yml"
   workflow_dispatch:
 
@@ -49,14 +50,15 @@ jobs:
             package-lock.json
             docs/package-lock.json
 
-      # The live demo imports `@saccadejs/core`, which docs/package.json depends on as
-      # `file:../packages/core`. Its `dist/` is gitignored, so webpack cannot resolve
-      # the import until the core package is built from source here.
-      - name: Build the core package
+      # The live demo imports the extension and all four plugins as well as the core, each
+      # of which docs/package.json depends on as `file:../packages/<name>`. Every `dist/` is
+      # gitignored, so webpack cannot resolve those imports until the packages are built from
+      # source here. `npm run build` builds them in dependency order.
+      - name: Build the packages
         working-directory: ${{ github.workspace }}
         run: |
           npm ci
-          npm run build --workspace=@saccadejs/core
+          npm run build
 
       - name: Install dependencies
         run: npm ci
@@ -75,7 +77,7 @@ jobs:
 
   # The ref guard matters for `workflow_dispatch`, which is not branch-restricted:
   # without it, dispatching this workflow from any branch would publish that branch
-  # to jspsych.github.io/saccadejs. Manual redeploys of `main` still work.
+  # to saccade.jspsych.org. Manual redeploys of `main` still work.
   deploy:
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

@@ -1,138 +1,166 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import BrowserOnly from "@docusaurus/BrowserOnly";
+import Head from "@docusaurus/Head";
 import useBaseUrl from "@docusaurus/useBaseUrl";
 import clsx from "clsx";
-import type {
-  Gaze,
-  LoopbackResult,
-  SaccadeProgress,
-  SaccadeProgressStage,
-  SaccadeTracker,
-  TrackerFrame,
-  ValidationResult,
-} from "@saccadejs/core";
+import type { JsPsych } from "jspsych";
+import type SaccadeExtension from "@saccadejs/extension";
 import styles from "./styles.module.css";
 
 /**
  * The live demo on `/demo`.
  *
- * It is deliberately shaped like a short experiment rather than a control panel: one screen at
- * a time, a thin banner at the top saying what is happening and why, and no diagnostics in the
- * participant's way (they live in one collapsed disclosure at the very end).
+ * It is a **real jsPsych experiment**: the published extension and the four published plugins,
+ * on the timeline from `docs/getting-started.mdx`, rendered into a container on this page with
+ * `initJsPsych({ display_element })`. Nothing about the eye tracking is reimplemented here —
+ * whatever an experimenter installs is exactly what runs, so the demo cannot quietly drift away
+ * from the documentation.
  *
- * Everything here touches `navigator.mediaDevices`, WebGPU/WebAssembly and a `<video>` element,
- * none of which exist while Docusaurus prerenders the page to static HTML — so the whole thing
- * is wrapped in `<BrowserOnly>` and `@saccadejs/core` is pulled in with a dynamic `import()`
- * from inside a callback, never at module scope.
+ * React contributes three things and no more: the intro screen, the annotation banner above the
+ * experiment (driven from jsPsych's `on_trial_start`), and the plain-language summary after
+ * `jsPsych.run()` resolves.
+ *
+ * Everything the experiment touches — `navigator.mediaDevices`, WebGPU/WebAssembly, a `<video>`
+ * element — is absent while Docusaurus prerenders this page to static HTML, so the component is
+ * wrapped in `<BrowserOnly>` and every saccade.js/jsPsych module is pulled in with a dynamic
+ * `import()` from inside a callback, never at module scope.
  */
 
 // ---------------------------------------------------------------------------------------
-// constants
+// the annotation banner
 
-const SETTLE_MS = 1000;
-const CAPTURE_MS = 500;
-const ROI_RADIUS_PX = 200;
-const LOOPBACK_MS = 15000;
-/** How much free-viewing gaze to keep for the (developer-only) download button. */
-const BUFFER_MS = 10000;
-/** The model's eye crop, in pixels: 144 wide by 36 tall, grayscale. */
-const CROP_W = 144;
-const CROP_H = 36;
+interface Annotation {
+  title: string;
+  step: number | null;
+  text: string;
+}
 
-/** One screen of the flow. `phase` distinguishes "explain it" from "run it" from "show it". */
-type Step = "intro" | "setup" | "check" | "timesync" | "calibrate" | "validate" | "free";
-type Phase = "prompt" | "running" | "done";
+const TOTAL_STEPS = 6;
 
-const ANNOTATION: Record<Step, { title: string; count: string | null; text: string }> = {
-  intro: {
-    title: "Before you start",
-    count: null,
-    text: "This page runs a real eye tracker in your browser. Nothing is uploaded — every camera frame is used and then thrown away on your own computer.",
+/**
+ * What to say above each trial, keyed by the plugin's `info.name` — the same string that lands
+ * in the data as `trial_type`. `on_trial_start` looks the running trial up in here, so adding a
+ * trial to the timeline means adding a line here and nothing else.
+ */
+const ANNOTATIONS: Record<string, Annotation> = {
+  "saccade-preview": {
+    title: "Camera setup",
+    step: 1,
+    text: "Your browser is asking for the camera and downloading the eye model, about 20 MB. Sit an arm's length away, with light on your face rather than behind you.",
   },
-  setup: {
-    title: "Setting up",
-    count: "Step 1 of 6",
-    text: "Your browser is asking for the camera and downloading the eye-tracking model, about 20 MB. This happens once; after that it is cached.",
-  },
-  check: {
-    title: "Camera check",
-    count: "Step 2 of 6",
-    text: "Sit about an arm's length away with light on your face. The small strip is the picture of your eyes the model actually sees.",
-  },
-  timesync: {
+  "saccade-time-sync": {
     title: "Timing check",
-    count: "Step 3 of 6",
-    text: "Screens and cameras both add a small delay. Measuring it lets a gaze sample be lined up with whatever was on screen at the time.",
+    step: 2,
+    text: "Screens and cameras both add a small delay. Measuring it is what lets a gaze sample be lined up with whatever was on the screen at the time.",
   },
-  calibrate: {
+  "saccade-calibrate": {
     title: "Calibration",
-    count: "Step 4 of 6",
-    text: "The tracker learns what your eyes look like when you look at known places on the screen.",
+    step: 3,
+    text: "Thirteen dots, one at a time. Look straight at each one and hold still — this is where the tracker learns what your eyes look like when you look at a known place.",
   },
-  validate: {
+  "saccade-validate": {
     title: "Accuracy check",
-    count: "Step 5 of 6",
-    text: "Nine new dots that the calibration never saw, so the number at the end is an honest measure of how far off the tracker is.",
+    step: 4,
+    text: "Nine dots the calibration never saw, so the number at the end is an honest measure of how far off the tracker is.",
   },
-  free: {
+  "html-keyboard-response": {
     title: "Free look",
-    count: "Step 6 of 6",
-    text: "The red dot is where the tracker thinks you are looking. Look around the page and move your eyes, not your head.",
+    step: 5,
+    text: "An ordinary jsPsych trial with the extension attached. The red dot is where the tracker thinks you are looking; every frame of it is being recorded.",
   },
 };
 
+const INTRO: Annotation = {
+  title: "Before you start",
+  step: null,
+  text: "This page runs a real eye tracker in your browser. Nothing is uploaded — every camera frame is used and then thrown away on your own computer.",
+};
+
+const RESULTS: Annotation = {
+  title: "Results",
+  step: TOTAL_STEPS,
+  text: "What the experiment measured, in the units an experiment would report.",
+};
+
+// ---------------------------------------------------------------------------------------
+// the free-viewing trial
+
 /**
- * The load stages `SaccadeTracker.init()` reports, in the order it walks them, with the rough
- * share of the wait each one takes. Only the model download reports bytes, and it is most of
- * the wait, so it gets most of the bar.
+ * Two coloured squares with ids the extension records the position of. Written as a plain HTML
+ * string with inline styles because it is rendered by jsPsych inside its own display element,
+ * where this component's CSS module class names do not reach.
  */
-const SETUP_STAGES: { stage: SaccadeProgressStage; label: string; weight: number }[] = [
-  { stage: "camera", label: "Waiting for camera permission", weight: 1 },
-  { stage: "mediapipe", label: "Loading the face tracker", weight: 2 },
-  { stage: "landmarker", label: "Loading the face model", weight: 3 },
-  { stage: "ort", label: "Starting the model runtime", weight: 2 },
-  { stage: "model", label: "Downloading eye model", weight: 10 },
-  { stage: "session", label: "Warming up the model", weight: 2 },
-];
-const SETUP_TOTAL_WEIGHT = SETUP_STAGES.reduce((a, s) => a + s.weight, 0);
+const LOOK_STIMULUS = `
+  <div style="display:flex; gap:12vw; justify-content:center; align-items:center; margin-bottom:1.5rem;">
+    <div id="left" style="width:26vw; max-width:280px; aspect-ratio:4/3; border-radius:12px;
+      background:#2563eb;"></div>
+    <div id="right" style="width:26vw; max-width:280px; aspect-ratio:4/3; border-radius:12px;
+      background:#f97316;"></div>
+  </div>
+  <p style="max-width:36rem; margin:0 auto;">Look at whichever square you prefer, for as long as
+  you like. The red dot follows your gaze. Press any key when you are done.</p>`;
 
-interface Stats {
-  fps: number;
-  faceFound: boolean;
-  clock: string;
+// ---------------------------------------------------------------------------------------
+// summarising the data
+
+interface Summary {
+  lagMs: number | null;
+  lagVerdict: string | null;
+  errorPercent: number | null;
+  leftSamples: number;
+  rightSamples: number;
+  totalSamples: number;
+  backend: string | null;
+  fps: number | null;
+  clock: string | null;
+  json: string;
 }
 
-interface Sample {
-  x: number;
-  y: number;
-  t: number;
+interface Rect {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
 }
 
-const mb = (n: number): string => (n / 1e6).toFixed(1);
-
-/** Fraction of the whole setup that `p` represents, 0..1. */
-function setupFraction(p: SaccadeProgress | null): number {
-  if (!p) return 0;
-  if (p.stage === "ready") return 1;
-  let before = 0;
-  for (const s of SETUP_STAGES) {
-    if (s.stage === p.stage) {
-      const inner = p.total && p.loaded != null ? Math.min(1, p.loaded / p.total) : 0;
-      return (before + s.weight * inner) / SETUP_TOTAL_WEIGHT;
-    }
-    before += s.weight;
-  }
-  return before / SETUP_TOTAL_WEIGHT;
+function countInRect(samples: Array<{ x: number; y: number }>, rect: Rect | undefined): number {
+  if (!rect) return 0;
+  return samples.filter(
+    (s) => s.x >= rect.left && s.x <= rect.right && s.y >= rect.top && s.y <= rect.bottom,
+  ).length;
 }
 
-function setupLabel(p: SaccadeProgress | null): string {
-  if (!p) return "Starting…";
-  if (p.stage === "ready") return "Ready";
-  const base = SETUP_STAGES.find((s) => s.stage === p.stage)?.label ?? "Loading";
-  if (p.stage !== "model" || p.loaded == null) return `${base}…`;
-  return p.total ? `${base} ${mb(p.loaded)} / ${mb(p.total)} MB` : `${base} ${mb(p.loaded)} MB`;
+/** Pull the handful of numbers a participant can actually read out of the trial data. */
+function summarise(jsPsych: JsPsych): Summary {
+  const data = jsPsych.data.get();
+  const first = (trial_type: string): any => data.filter({ trial_type }).values()[0] ?? {};
+
+  const preview = first("saccade-preview");
+  const sync = first("saccade-time-sync");
+  const validation = first("saccade-validate");
+  const look = first("html-keyboard-response");
+
+  const samples: Array<{ x: number; y: number }> = look.saccade_data ?? [];
+  const targets: Record<string, Rect> = look.saccade_targets ?? {};
+
+  return {
+    lagMs: Number.isFinite(sync.lag_ms) ? sync.lag_ms : null,
+    lagVerdict: sync.verdict ?? null,
+    errorPercent: Number.isFinite(validation.median_error_viewport)
+      ? validation.median_error_viewport * 100
+      : null,
+    leftSamples: countInRect(samples, targets["#left"]),
+    rightSamples: countInRect(samples, targets["#right"]),
+    totalSamples: samples.length,
+    backend: preview.backend ?? null,
+    fps: Number.isFinite(preview.fps) ? preview.fps : null,
+    clock: look.saccade_timing?.clock ?? null,
+    json: data.json(),
+  };
 }
+
+// ---------------------------------------------------------------------------------------
+// errors
 
 /** Turn whatever went wrong into one sentence a participant can act on. */
 function explain(err: unknown): string {
@@ -143,694 +171,351 @@ function explain(err: unknown): string {
   if (/NotFound|NotReadable|Device|Overconstrained/i.test(message)) {
     return "No usable camera was found. Connect a webcam, close any other program that might be using it, and try again.";
   }
+  if (/no camera frames/i.test(message)) {
+    return "The camera stopped sending frames part way through. Close anything else that might be using it, then try again.";
+  }
   if (/eye_embedding|onnx|fetch|network|404|Failed to load/i.test(message)) {
     return "The eye-tracking model could not be downloaded. Check your internet connection and try again.";
-  }
-  if (/enough usable/i.test(message)) {
-    return message;
   }
   return `Something went wrong: ${message}`;
 }
 
 // ---------------------------------------------------------------------------------------
-// small presentational pieces
-
-function Banner({ step }: { step: Step }) {
-  const a = ANNOTATION[step];
-  return (
-    <div className={styles.banner}>
-      <div className={styles.bannerHead}>
-        <span className={styles.bannerTitle}>{a.title}</span>
-        {a.count ? <span className={styles.bannerCount}>{a.count}</span> : null}
-      </div>
-      <p className={styles.bannerText}>{a.text}</p>
-    </div>
-  );
-}
-
-function ProgressBar({ fraction, label }: { fraction: number; label: string }) {
-  const pct = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
-  return (
-    <div className={styles.progressWrap}>
-      <div
-        className={styles.progressTrack}
-        role="progressbar"
-        aria-valuenow={pct}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={label}
-      >
-        <div className={styles.progressBar} style={{ width: `${pct}%` }} />
-      </div>
-      <span className={styles.progressLabel}>{label}</span>
-    </div>
-  );
-}
-
-/**
- * The full-viewport target overlay used by calibration and validation. Coordinates are
- * viewport fractions, which is exactly what the core hands to `showTarget`, so no conversion
- * is needed beyond turning them into percentages.
- */
-function TargetOverlay({
-  target,
-  phase,
-  caption,
-}: {
-  target: Gaze | null;
-  phase: "settle" | "capture";
-  caption: string;
-}) {
-  if (!target) return null;
-  // Portalled to <body>: the targets are placed in viewport fractions, and a `position: fixed`
-  // element is trapped by any ancestor with a transform or a filter — which the theme is free
-  // to add to the article column at any point.
-  return createPortal(
-    <div className={styles.overlay} role="presentation">
-      <p className={styles.overlayCaption}>{caption}</p>
-      <div
-        className={clsx(styles.targetPoint, phase === "capture" && styles.targetCapture)}
-        style={{ left: `${target.x * 100}%`, top: `${target.y * 100}%` }}
-      >
-        <span
-          className={styles.targetRing}
-          style={{ transitionDuration: phase === "settle" ? `${SETTLE_MS}ms` : "120ms" }}
-        />
-        <span className={styles.targetDot} />
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-// ---------------------------------------------------------------------------------------
 // the demo itself
+
+type Phase = "intro" | "running" | "done" | "error";
 
 function Demo() {
   const modelUrl = useBaseUrl("/models/eye_embedding.onnx");
 
-  const trackerRef = useRef<SaccadeTracker | null>(null);
-  const videoSlotRef = useRef<HTMLDivElement | null>(null);
-  const cropCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const gazeDotRef = useRef<HTMLDivElement | null>(null);
-  const bufferRef = useRef<Sample[]>([]);
-  const statsRef = useRef<Stats>({ fps: 0, faceFound: false, clock: "—" });
-  const showGazeRef = useRef(false);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
-  /** Guards every `setState` that follows an await: the visitor may have navigated away. */
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const jsPsychRef = useRef<JsPsych | null>(null);
+  /** Guards every `setState` after an await: the visitor may have navigated away mid-run. */
   const mountedRef = useRef(true);
 
   const [supported] = useState(
     () => window.isSecureContext && !!navigator.mediaDevices?.getUserMedia,
   );
-  const [step, setStep] = useState<Step>("intro");
-  const [phase, setPhase] = useState<Phase>("prompt");
+  const [phase, setPhase] = useState<Phase>("intro");
+  const [annotation, setAnnotation] = useState<Annotation>(INTRO);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [setupProgress, setSetupProgress] = useState<SaccadeProgress | null>(null);
-  const [runFraction, setRunFraction] = useState(0);
-  const [stats, setStats] = useState<Stats>(statsRef.current);
-  const [backend, setBackend] = useState<"webgpu" | "wasm" | null>(null);
-  const [loopback, setLoopback] = useState<LoopbackResult | null>(null);
-  const [calibration, setCalibration] = useState<{ nPoints: number; lambda: number } | null>(null);
-  const [validation, setValidation] = useState<ValidationResult | null>(null);
-  const [target, setTarget] = useState<Gaze | null>(null);
-  const [targetPhase, setTargetPhase] = useState<"settle" | "capture">("settle");
 
-  // -- per-frame work, done imperatively so 30 fps never becomes 30 React renders/second --
-  const handleFrame = useCallback((frame: TrackerFrame) => {
-    statsRef.current = {
-      fps: frame.fps,
-      faceFound: frame.faceFound,
-      clock: frame.time.source,
-    };
-
-    const canvas = cropCanvasRef.current;
-    if (canvas && frame.crop) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        const image = ctx.createImageData(CROP_W, CROP_H);
-        for (let i = 0; i < CROP_W * CROP_H; i++) {
-          const v = frame.crop[i];
-          image.data[i * 4] = v;
-          image.data[i * 4 + 1] = v;
-          image.data[i * 4 + 2] = v;
-          image.data[i * 4 + 3] = 255;
-        }
-        ctx.putImageData(image, 0, 0);
+  /**
+   * End the experiment and give the camera back.
+   *
+   * jsPsych has no teardown hook of its own, and the extension holds a `SaccadeTracker` with an
+   * open `MediaStream`, so both have to be ended by hand: `abortExperiment` unwinds the
+   * timeline (a no-op once it has finished) and the extension's `dispose()` stops the tracker,
+   * releases the camera and removes the gaze dot and the camera preview from the page.
+   */
+  const teardown = useCallback(() => {
+    const jsPsych = jsPsychRef.current;
+    jsPsychRef.current = null;
+    if (jsPsych) {
+      const extension = jsPsych.extensions?.saccade as unknown as SaccadeExtension | undefined;
+      try {
+        jsPsych.abortExperiment();
+      } catch {
+        // Already finished, or never started: nothing to unwind.
+      }
+      try {
+        extension?.dispose?.();
+      } catch {
+        // Nothing here is worth failing an unmount over.
       }
     }
-
-    if (frame.gaze && showGazeRef.current) {
-      const px = frame.gaze.x * window.innerWidth;
-      const py = frame.gaze.y * window.innerHeight;
-      const dot = gazeDotRef.current;
-      if (dot) {
-        dot.style.transform = `translate3d(${px}px, ${py}px, 0) translate(-50%, -50%)`;
-        dot.style.opacity = "1";
-      }
-      const t = frame.time.meanCapture ?? frame.time.capture;
-      const buffer = bufferRef.current;
-      buffer.push({ x: Math.round(px), y: Math.round(py), t: Math.round(t * 100) / 100 });
-      const cutoff = t - BUFFER_MS;
-      while (buffer.length > 1 && buffer[0].t < cutoff) buffer.shift();
-    }
+    if (containerRef.current) containerRef.current.innerHTML = "";
   }, []);
 
-  // Flush the frame stats into React at a human rate, and only on the two screens that read
-  // them (the camera check needs "is there a face", the details panel needs the rest).
-  useEffect(() => {
-    if (step !== "check" && step !== "free") return;
-    const id = window.setInterval(() => setStats({ ...statsRef.current }), 300);
-    return () => window.clearInterval(id);
-  }, [step]);
-
-  // Hand the tracker's <video> to whichever slot is currently on screen.
-  useEffect(() => {
-    const slot = videoSlotRef.current;
-    const tracker = trackerRef.current;
-    if (!slot || !tracker) return;
-    tracker.video.classList.add(styles.video);
-    tracker.video.setAttribute("aria-label", "Live camera preview, mirrored");
-    slot.appendChild(tracker.video);
-    return () => {
-      if (tracker.video.parentNode === slot) slot.removeChild(tracker.video);
-    };
-  }, [step]);
-
-  // Stop the camera and the frame loop when the visitor navigates away mid-run. (Set on the
-  // way in as well as the way out, so a StrictMode double-mount does not leave the component
-  // permanently marked as gone.)
+  // Set on the way in as well as the way out, so a StrictMode double-mount does not leave the
+  // component permanently marked as gone.
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      showGazeRef.current = false;
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = null;
-      trackerRef.current?.dispose();
-      trackerRef.current = null;
+      teardown();
     };
-  }, []);
+  }, [teardown]);
 
-  const fail = useCallback((err: unknown) => {
-    if (!mountedRef.current) return;
-    setError(explain(err));
-    setPhase("prompt");
-    setTarget(null);
-  }, []);
-
-  // -- 1. setup: camera permission + the model downloads ---------------------------------
-  const beginSetup = useCallback(async () => {
+  const run = useCallback(async () => {
+    teardown();
     setError(null);
-    setSetupProgress({ stage: "camera" });
-    setStep("setup");
+    setSummary(null);
+    setAnnotation(ANNOTATIONS["saccade-preview"]);
     setPhase("running");
-    try {
-      const { SaccadeTracker: Tracker } = await import("@saccadejs/core");
-      const tracker =
-        trackerRef.current ??
-        new Tracker({
-          assets: { modelUrl },
-          tta: 5,
-          onProgress: (p) => {
-            if (mountedRef.current) setSetupProgress(p);
-          },
-        });
-      trackerRef.current = tracker;
-      const info = await tracker.init();
-      if (!mountedRef.current) return;
-      setBackend(info.ep);
-      unsubscribeRef.current ??= tracker.onFrame(handleFrame);
-      tracker.start();
-      setStep("check");
-      setPhase("prompt");
-    } catch (err) {
-      fail(err);
-    }
-  }, [fail, handleFrame, modelUrl]);
 
-  // The target UI shared by calibration and validation. `setTarget`/`setTargetPhase` are
-  // stable, so this is safe to build fresh inside each run.
-  const targetUi = useCallback(
-    () => ({
-      showTarget: (t: Gaze | null, p: "settle" | "capture") => {
-        setTarget(t);
-        setTargetPhase(p);
-      },
-    }),
-    [],
-  );
-
-  // -- 3. time sync ------------------------------------------------------------------------
-  const runTimeSync = useCallback(async () => {
-    const tracker = trackerRef.current;
-    if (!tracker) return;
-    setError(null);
-    setRunFraction(0);
-    setPhase("running");
     try {
-      const { runLoopback } = await import("@saccadejs/core");
-      const result = await runLoopback(tracker, {
-        durationMs: LOOPBACK_MS,
-        onProgress: (f) => {
-          if (mountedRef.current) setRunFraction(f);
+      // Everything below reaches for the camera, WebGPU or the DOM at import time, so none of
+      // it may be pulled in at module scope — this page is prerendered in Node.
+      const [
+        { initJsPsych },
+        { default: jsPsychExtensionSaccade },
+        { default: jsPsychSaccadePreview },
+        { default: jsPsychSaccadeTimeSync },
+        { default: jsPsychSaccadeCalibrate },
+        { default: jsPsychSaccadeValidate },
+        { default: jsPsychHtmlKeyboardResponse },
+      ] = await Promise.all([
+        import("jspsych"),
+        import("@saccadejs/extension"),
+        import("@saccadejs/plugin-preview"),
+        import("@saccadejs/plugin-time-sync"),
+        import("@saccadejs/plugin-calibrate"),
+        import("@saccadejs/plugin-validate"),
+        import("@jspsych/plugin-html-keyboard-response"),
+      ]);
+
+      const display = containerRef.current;
+      if (!mountedRef.current || !display) return;
+
+      const jsPsych = initJsPsych({
+        display_element: display,
+        extensions: [
+          // The model is served from this site rather than the CDN; everything else (the
+          // MediaPipe wasm, onnxruntime-web) comes from the defaults, as it would in an
+          // experiment that has not been through `Hosting the assets`.
+          { type: jsPsychExtensionSaccade, params: { assets: { modelUrl } } },
+        ],
+        on_trial_start: (trial: any) => {
+          const name: string | undefined = trial?.type?.info?.name;
+          if (name && ANNOTATIONS[name]) setAnnotation(ANNOTATIONS[name]);
         },
       });
-      if (!mountedRef.current) return;
-      setLoopback(result);
-      setPhase("done");
-    } catch (err) {
-      fail(err);
-    }
-  }, [fail]);
+      jsPsychRef.current = jsPsych;
+      const extension = jsPsych.extensions.saccade as unknown as SaccadeExtension;
 
-  // -- 4. calibration ----------------------------------------------------------------------
-  const runCalibrate = useCallback(async () => {
-    const tracker = trackerRef.current;
-    if (!tracker) return;
-    setError(null);
-    setPhase("running");
-    try {
-      const { runCalibration, defaultGrid13 } = await import("@saccadejs/core");
-      tracker.clearCalibration();
-      setCalibration(null);
-      setValidation(null);
-      await runCalibration(
-        tracker,
-        defaultGrid13(),
-        { settleMs: SETTLE_MS, captureMs: CAPTURE_MS },
-        targetUi(),
-      );
-      const fit = tracker.fitCalibration();
-      if (!fit) {
-        throw new Error(
-          "Calibration did not collect enough usable samples. Make sure your face stays in the camera's view, then try again.",
-        );
-      }
-      if (!mountedRef.current) return;
-      setCalibration(fit);
-      setTarget(null);
-      setStep("validate");
-      setPhase("prompt");
-    } catch (err) {
-      fail(err);
-    }
-  }, [fail, targetUi]);
-
-  // -- 5. validation -----------------------------------------------------------------------
-  const runValidate = useCallback(async () => {
-    const tracker = trackerRef.current;
-    if (!tracker) return;
-    setError(null);
-    setPhase("running");
-    try {
-      const { runValidation, validationGrid9 } = await import("@saccadejs/core");
-      const result = await runValidation(
-        tracker,
-        validationGrid9(),
+      const timeline = [
+        // Camera permission, the model download with its progress bar, and head positioning.
+        { type: jsPsychSaccadePreview },
+        // Measure this participant's screen-to-camera lag and apply it to every later `t`.
+        { type: jsPsychSaccadeTimeSync },
+        // Fit the gaze model on 13 points, then check it on 9 held-out points.
+        { type: jsPsychSaccadeCalibrate },
+        { type: jsPsychSaccadeValidate },
+        // An ordinary trial that records gaze. `extensions` is what turns recording on.
         {
-          settleMs: SETTLE_MS,
-          captureMs: CAPTURE_MS * 4,
-          roiRadiusPx: ROI_RADIUS_PX,
-          viewport: { width: window.innerWidth, height: window.innerHeight },
+          type: jsPsychHtmlKeyboardResponse,
+          stimulus: LOOK_STIMULUS,
+          on_load: () => extension.showPredictions(),
+          on_finish: () => extension.hidePredictions(),
+          extensions: [{ type: jsPsychExtensionSaccade, params: { targets: ["#left", "#right"] } }],
         },
-        targetUi(),
-      );
-      if (!mountedRef.current) return;
-      setValidation(result);
-      setTarget(null);
+      ];
+
+      await jsPsych.run(timeline);
+      if (!mountedRef.current || jsPsychRef.current !== jsPsych) return;
+
+      setSummary(summarise(jsPsych));
+      setAnnotation(RESULTS);
       setPhase("done");
+      // The experiment is over: give the camera back, but leave the data in `jsPsych`.
+      extension.dispose?.();
     } catch (err) {
-      fail(err);
+      if (!mountedRef.current) return;
+      setError(explain(err));
+      setPhase("error");
+      teardown();
     }
-  }, [fail, targetUi]);
+  }, [modelUrl, teardown]);
 
-  // -- 6. free look ------------------------------------------------------------------------
-  const startFreeLook = useCallback(() => {
-    bufferRef.current = [];
-    showGazeRef.current = true;
-    setStep("free");
-    setPhase("done");
-  }, []);
-
-  const hideGaze = useCallback(() => {
-    showGazeRef.current = false;
-    if (gazeDotRef.current) gazeDotRef.current.style.opacity = "0";
-  }, []);
-
-  const recalibrate = useCallback(() => {
-    hideGaze();
-    setValidation(null);
-    setStep("calibrate");
-    setPhase("prompt");
-  }, [hideGaze]);
-
-  const restart = useCallback(() => {
-    hideGaze();
-    trackerRef.current?.clearCalibration();
-    setLoopback(null);
-    setCalibration(null);
-    setValidation(null);
+  /** Abandon a run that cannot continue, and go back to the intro screen. */
+  const abandon = useCallback(() => {
+    teardown();
+    setSummary(null);
     setError(null);
-    setStep("check");
-    setPhase("prompt");
-  }, [hideGaze]);
-
-  const retry = useCallback(() => {
-    setError(null);
-    if (step === "setup") void beginSetup();
-    else if (step === "timesync") void runTimeSync();
-    else if (step === "calibrate") void runCalibrate();
-    else if (step === "validate") void runValidate();
-    else setPhase("prompt");
-  }, [beginSetup, runCalibrate, runTimeSync, runValidate, step]);
-
-  const downloadSamples = useCallback(() => {
-    const payload = {
-      generated: new Date().toISOString(),
-      note: "x and y are pixels in this browser window; t is performance.now() at the camera's capture time, averaged over the test-time-augmentation window.",
-      backend,
-      timing: loopback
-        ? { lag_ms: loopback.lagMs, verdict: loopback.verdict, clock: loopback.clockSource }
-        : null,
-      validation: validation ? { median_error_viewport: validation.medianErrorViewport } : null,
-      samples: bufferRef.current,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "saccadejs-demo-gaze.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [backend, loopback, validation]);
-
-  // -- render -------------------------------------------------------------------------------
-
-  function body(): React.ReactNode {
-    if (error) {
-      return (
-        <div className={styles.error} role="alert">
-          <p className={styles.errorText}>{error}</p>
-          <div className={styles.buttonRow}>
-            <button className={styles.primary} onClick={retry}>
-              Try again
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    switch (step) {
-      case "intro":
-        return (
-          <div className={clsx(styles.panel, styles.panelCentered)}>
-            <p className={styles.lead}>
-              Over the next minute your camera will watch your eyes while you look at a handful of
-              dots. From that, the page learns to guess where on the screen you are looking, and
-              then shows you a dot that follows your gaze. It all happens in this tab.
-            </p>
-            <ul className={styles.requirements}>
-              <li>Chrome or Edge on a laptop or desktop</li>
-              <li>A webcam, and permission to use it when the browser asks</li>
-              <li>Sit about an arm's length from the screen</li>
-              <li>Light on your face, not behind you — avoid sitting with a window at your back</li>
-              <li>Keep your head still once calibration starts; move your eyes, not your head</li>
-            </ul>
-            {supported ? (
-              <button className={styles.primary} onClick={beginSetup}>
-                Start
-              </button>
-            ) : (
-              <p className={styles.status}>
-                This browser cannot open a camera on this page. Cameras need a secure connection —
-                open the page over <code>https://</code> or on <code>localhost</code>.
-              </p>
-            )}
-          </div>
-        );
-
-      case "setup":
-        return (
-          <div className={clsx(styles.panel, styles.panelCentered)}>
-            <ProgressBar
-              fraction={setupFraction(setupProgress)}
-              label={setupLabel(setupProgress)}
-            />
-            <p className={styles.status}>
-              Please wait — you can carry on once everything has loaded.
-            </p>
-          </div>
-        );
-
-      case "check":
-        return (
-          <div className={clsx(styles.panel, styles.panelCentered)}>
-            <div className={styles.previewRow}>
-              <div className={styles.videoWrap} ref={videoSlotRef} />
-              <div className={styles.cropWrap}>
-                <canvas
-                  ref={cropCanvasRef}
-                  width={CROP_W}
-                  height={CROP_H}
-                  className={styles.crop}
-                  aria-label="The picture of your eyes that is fed to the model"
-                />
-                <span className={styles.caption}>what the model sees</span>
-              </div>
-            </div>
-            <p
-              className={clsx(
-                styles.faceState,
-                stats.faceFound ? styles.faceFound : styles.faceMissing,
-              )}
-            >
-              {stats.faceFound
-                ? "Your face is being tracked."
-                : "Looking for your face — move into the middle of the picture."}
-            </p>
-            <button
-              className={styles.primary}
-              onClick={() => {
-                setPhase("prompt");
-                setStep("timesync");
-              }}
-              disabled={!stats.faceFound}
-            >
-              Continue
-            </button>
-          </div>
-        );
-
-      case "timesync":
-        if (phase === "done" && loopback) {
-          const usable = Number.isFinite(loopback.lagMs) && loopback.verdict !== "INCONCLUSIVE";
-          return (
-            <div className={clsx(styles.panel, styles.panelCentered)}>
-              <p className={styles.result}>
-                {usable
-                  ? `Display and camera lag: ${loopback.lagMs.toFixed(0)} ms`
-                  : "The lag could not be measured on this computer."}
-              </p>
-              <p className={styles.resultNote}>
-                {usable
-                  ? "That is how long it takes for something on screen to reach the camera. It does not affect the demo — it is what an experiment would subtract to line gaze up with its stimuli."
-                  : "That is fine for the demo; it only matters for experiments that need gaze lined up with stimulus timing."}
-              </p>
-              <div className={styles.buttonRow}>
-                <button
-                  className={styles.primary}
-                  onClick={() => {
-                    setPhase("prompt");
-                    setStep("calibrate");
-                  }}
-                >
-                  Continue
-                </button>
-                <button className={styles.secondary} onClick={runTimeSync}>
-                  Measure again
-                </button>
-              </div>
-            </div>
-          );
-        }
-        if (phase === "running") {
-          return (
-            <div className={clsx(styles.panel, styles.panelCentered)}>
-              <ProgressBar fraction={runFraction} label="Measuring…" />
-              <p className={styles.status}>
-                The screen is changing brightness while the camera watches. This takes 15 seconds.
-              </p>
-            </div>
-          );
-        }
-        return (
-          <div className={clsx(styles.panel, styles.panelCentered)}>
-            <p className={styles.lead}>
-              The screen will slowly change between black and white for fifteen seconds while the
-              camera watches it. Just sit still and look at the screen; press <kbd>Esc</kbd> if you
-              want to stop early.
-            </p>
-            <button className={styles.primary} onClick={runTimeSync}>
-              Start the timing check
-            </button>
-          </div>
-        );
-
-      case "calibrate":
-        if (phase === "running") {
-          return (
-            <div className={clsx(styles.panel, styles.panelCentered)}>
-              <p className={styles.status}>Calibrating…</p>
-            </div>
-          );
-        }
-        return (
-          <div className={clsx(styles.panel, styles.panelCentered)}>
-            <p className={styles.lead}>
-              Thirteen dots will appear one at a time. Look straight at each one and hold still — it
-              turns green while your eyes are being measured. This takes about twenty seconds.
-            </p>
-            <button className={styles.primary} onClick={runCalibrate}>
-              Start calibration
-            </button>
-          </div>
-        );
-
-      case "validate":
-        if (phase === "done" && validation) {
-          const pct = validation.medianErrorViewport * 100;
-          const good = Number.isFinite(pct) && pct < 10;
-          return (
-            <div className={clsx(styles.panel, styles.panelCentered)}>
-              <p className={styles.result}>
-                {Number.isFinite(pct)
-                  ? `Median error: ${pct.toFixed(1)}% of the screen`
-                  : "No usable gaze was collected."}
-              </p>
-              <p className={styles.resultNote}>
-                {good
-                  ? "That is a normal result for a webcam — good enough to tell which quarter of the screen you are looking at, not which word."
-                  : "That is on the high side. Recalibrating without moving your head, with more light on your face, usually helps."}
-              </p>
-              <div className={styles.buttonRow}>
-                <button className={styles.primary} onClick={startFreeLook}>
-                  Continue
-                </button>
-                <button className={styles.secondary} onClick={recalibrate}>
-                  Recalibrate
-                </button>
-              </div>
-            </div>
-          );
-        }
-        if (phase === "running") {
-          return (
-            <div className={clsx(styles.panel, styles.panelCentered)}>
-              <p className={styles.status}>Checking accuracy…</p>
-            </div>
-          );
-        }
-        return (
-          <div className={clsx(styles.panel, styles.panelCentered)}>
-            <p className={styles.lead}>
-              Nine more dots, the same way: look at each one and hold still. This time the tracker
-              is being graded rather than trained.
-            </p>
-            <button className={styles.primary} onClick={runValidate}>
-              Start the accuracy check
-            </button>
-          </div>
-        );
-
-      case "free":
-        return (
-          <div className={clsx(styles.panel, styles.panelCentered)}>
-            <p className={styles.lead}>
-              You are done. Look around — the red dot follows your gaze. It drifts if you move your
-              head, which is why real experiments recalibrate now and then.
-            </p>
-            <div className={styles.buttonRow}>
-              <button className={styles.secondary} onClick={recalibrate}>
-                Recalibrate
-              </button>
-              <button className={styles.secondary} onClick={restart}>
-                Start over
-              </button>
-            </div>
-          </div>
-        );
-    }
-  }
+    setAnnotation(INTRO);
+    setPhase("intro");
+  }, [teardown]);
 
   return (
     <div className={styles.demo}>
-      <Banner step={step} />
-      {body()}
+      <div className={styles.banner}>
+        <div className={styles.bannerHead}>
+          <span className={styles.bannerTitle}>{annotation.title}</span>
+          {annotation.step !== null ? (
+            <span className={styles.bannerCount}>
+              Step {annotation.step} of {TOTAL_STEPS}
+            </span>
+          ) : null}
+        </div>
+        <p className={styles.bannerText}>{annotation.text}</p>
+      </div>
 
-      {step === "free" && !error ? (
-        <details className={styles.details}>
-          <summary className={styles.detailsSummary}>Details for developers</summary>
-          <dl className={styles.detailsBody}>
-            <div>
-              <dt className={styles.detailsKey}>Backend</dt>
-              <dd className={styles.detailsValue}>{backend ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className={styles.detailsKey}>Frame rate</dt>
-              <dd className={styles.detailsValue}>{stats.fps.toFixed(0)} fps</dd>
-            </div>
-            <div>
-              <dt className={styles.detailsKey}>Frame clock</dt>
-              <dd className={styles.detailsValue}>{stats.clock}</dd>
-            </div>
-            <div>
-              <dt className={styles.detailsKey}>Loopback lag</dt>
-              <dd className={styles.detailsValue}>
-                {loopback ? `${loopback.lagMs.toFixed(1)} ms (${loopback.verdict})` : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className={styles.detailsKey}>Calibration</dt>
-              <dd className={styles.detailsValue}>
-                {calibration ? `${calibration.nPoints} pts, λ=${calibration.lambda}` : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className={styles.detailsKey}>Validation</dt>
-              <dd className={styles.detailsValue}>
-                {validation
-                  ? `${(validation.medianErrorViewport * 100).toFixed(1)}% · ${validation.meanErrorPx.toFixed(0)} px · ${validation.percentInRoi.toFixed(0)}% in ${ROI_RADIUS_PX} px`
-                  : "—"}
-              </dd>
-            </div>
-          </dl>
-          <div className={styles.buttonRow} style={{ justifyContent: "flex-start" }}>
-            <button className={styles.secondary} onClick={downloadSamples}>
-              Download the last 10 s as JSON
+      {phase === "intro" ? (
+        <div className={clsx(styles.panel, styles.panelCentered)}>
+          <p className={styles.lead}>
+            Over the next few minutes your camera will watch your eyes while you look at a handful
+            of dots. From that, the page learns to guess where on the screen you are looking, and
+            then shows you a dot that follows your gaze. It is an ordinary jsPsych experiment,
+            running the same plugins you would install yourself, in this tab.
+          </p>
+          <ul className={styles.requirements}>
+            <li>Chrome or Edge on a laptop or desktop</li>
+            <li>A webcam, and permission to use it when the browser asks</li>
+            <li>Sit about an arm's length from the screen</li>
+            <li>Light on your face, not behind you — avoid sitting with a window at your back</li>
+            <li>Keep your head still once calibration starts; move your eyes, not your head</li>
+          </ul>
+          {supported ? (
+            <button className={styles.primary} onClick={run}>
+              Start
             </button>
-          </div>
-        </details>
+          ) : (
+            <p className={styles.status}>
+              This browser cannot open a camera on this page. Cameras need a secure connection —
+              open the page over <code>https://</code> or on <code>localhost</code>.
+            </p>
+          )}
+        </div>
       ) : null}
 
-      {createPortal(
-        <div
-          ref={gazeDotRef}
-          className={styles.gazeDot}
-          style={{ opacity: 0 }}
-          aria-hidden="true"
-        />,
-        document.body,
-      )}
-      <TargetOverlay
-        target={target}
-        phase={targetPhase}
-        caption="Look at the dot and hold still."
+      {phase === "error" && error ? (
+        <div className={styles.error} role="alert">
+          <p className={styles.errorText}>{error}</p>
+          <div className={styles.buttonRow}>
+            <button className={styles.primary} onClick={run}>
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/*
+        jsPsych renders into this element for the whole run. It stays mounted in every phase so
+        that nothing React does can pull the experiment (or the tracker's <video>, which Chrome
+        only delivers frames to while it is rendered) out from under the trial that is running.
+      */}
+      <div
+        ref={containerRef}
+        className={clsx(styles.stage, phase !== "running" && styles.stageIdle)}
       />
+
+      {/*
+        The way out of a trial that cannot continue. A plugin handles its own failures — the
+        preview trial prints "the eye tracker failed to start" and stops there, exactly as it
+        would in a real experiment — so React cannot see them; this is the escape hatch for
+        that, and for anyone who simply wants to stop half way through calibration.
+      */}
+      {phase === "running" ? (
+        <p className={styles.abandonRow}>
+          <button className={styles.abandon} onClick={abandon}>
+            Stop and start over
+          </button>
+        </p>
+      ) : null}
+
+      {phase === "done" && summary ? <Results summary={summary} onRerun={run} /> : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------
+// the results screen
+
+function Results({ summary, onRerun }: { summary: Summary; onRerun: () => void }) {
+  const preferred =
+    summary.leftSamples === summary.rightSamples
+      ? null
+      : summary.leftSamples > summary.rightSamples
+        ? "blue"
+        : "orange";
+
+  return (
+    <div className={styles.panel}>
+      <h3 className={styles.resultsHeading}>What just happened</h3>
+      <ul className={styles.resultsList}>
+        <li>
+          {summary.lagMs === null ? (
+            <>
+              The delay between your screen and your camera could not be measured on this computer.
+              That only matters for experiments that line gaze up with stimulus timing.
+            </>
+          ) : (
+            <>
+              Your screen and camera together run{" "}
+              <strong>{summary.lagMs.toFixed(0)} ms behind</strong>. Every gaze timestamp above has
+              had that subtracted, so it is on the same clock as the trial's own timings.
+              {summary.lagVerdict && summary.lagVerdict !== "OK"
+                ? ` (The measurement came back ${summary.lagVerdict.toLowerCase()}.)`
+                : null}
+            </>
+          )}
+        </li>
+        <li>
+          {summary.errorPercent === null ? (
+            <>No usable gaze was collected during the accuracy check.</>
+          ) : (
+            <>
+              On the nine points it had never seen, the tracker was off by{" "}
+              <strong>{summary.errorPercent.toFixed(1)}% of the screen</strong> on average.
+              {summary.errorPercent < 10
+                ? " That is a normal webcam result — good enough to tell which part of the screen you were looking at, not which word."
+                : " That is on the high side. Recalibrating with more light on your face, and without moving your head, usually helps."}
+            </>
+          )}
+        </li>
+        <li>
+          While the two squares were on screen, the tracker recorded{" "}
+          <strong>{summary.totalSamples}</strong> gaze samples:{" "}
+          <strong>{summary.leftSamples}</strong> landed on the blue square and{" "}
+          <strong>{summary.rightSamples}</strong> on the orange one
+          {preferred ? `, so you spent more of the trial looking at the ${preferred} one` : null}.
+          The rest fell somewhere else on the page.
+        </li>
+      </ul>
+
+      <details className={styles.details}>
+        <summary className={styles.detailsSummary}>Details for developers</summary>
+        <dl className={styles.detailsBody}>
+          <div>
+            <dt className={styles.detailsKey}>Backend</dt>
+            <dd className={styles.detailsValue}>{summary.backend ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className={styles.detailsKey}>Frame rate</dt>
+            <dd className={styles.detailsValue}>
+              {summary.fps === null ? "—" : `${summary.fps.toFixed(0)} fps`}
+            </dd>
+          </div>
+          <div>
+            <dt className={styles.detailsKey}>Frame clock</dt>
+            <dd className={styles.detailsValue}>{summary.clock ?? "—"}</dd>
+          </div>
+        </dl>
+        <p className={styles.detailsNote}>
+          Every trial's data, exactly as <code>jsPsych.data.get().json()</code> returns it.
+        </p>
+        <pre className={styles.json}>{summary.json}</pre>
+      </details>
+
+      <div className={styles.buttonRow}>
+        <button className={styles.primary} onClick={onRerun}>
+          Run again
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function LiveDemo(): React.ReactNode {
-  return <BrowserOnly fallback={<p>Loading the demo…</p>}>{() => <Demo />}</BrowserOnly>;
+  // The stylesheet link is outside `BrowserOnly` so it is in the prerendered HTML of this page
+  // and downloads alongside it, rather than being appended after hydration.
+  const jspsychCssUrl = useBaseUrl("/css/jspsych.css");
+  return (
+    <>
+      {/*
+        jsPsych's own stylesheet, linked rather than imported. Every selector in it is scoped
+        under a `.jspsych-*` class, so it does not fight the theme — but it carries Open Sans as
+        base64 `@font-face` data, and Docusaurus emits a single stylesheet for the whole site,
+        so importing it would put ~460 kB of fonts on every page of the docs.
+        `scripts/copy-jspsych-css.mjs` copies it out of `node_modules` into `static/css/`, and
+        this link keeps the cost on the one page that needs it.
+      */}
+      <Head>
+        <link rel="stylesheet" href={jspsychCssUrl} />
+      </Head>
+      <BrowserOnly fallback={<p>Loading the demo…</p>}>{() => <Demo />}</BrowserOnly>
+    </>
+  );
 }

@@ -8,3 +8,4 @@ coverage/
 docs/build/
 docs/.docusaurus/
 docs/static/models/*.onnx
+docs/static/css/jspsych.css

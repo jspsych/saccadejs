@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "docusaurus": "docusaurus",
-    "predev": "node scripts/copy-model.mjs",
+    "predev": "node scripts/copy-model.mjs && node scripts/copy-jspsych-css.mjs",
     "start": "npm run predev && docusaurus start",
-    "prebuild": "node scripts/copy-model.mjs",
+    "prebuild": "node scripts/copy-model.mjs && node scripts/copy-jspsych-css.mjs",
     "build": "docusaurus build",
     "serve": "docusaurus serve",
     "clear": "docusaurus clear",
@@ -22,7 +22,14 @@
     "prism-react-renderer": "^2.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@saccadejs/core": "file:../packages/core"
+    "jspsych": "^8.0.0",
+    "@jspsych/plugin-html-keyboard-response": "^2.0.0",
+    "@saccadejs/core": "file:../packages/core",
+    "@saccadejs/extension": "file:../packages/extension-saccadejs",
+    "@saccadejs/plugin-preview": "file:../packages/plugin-saccadejs-preview",
+    "@saccadejs/plugin-time-sync": "file:../packages/plugin-saccadejs-time-sync",
+    "@saccadejs/plugin-calibrate": "file:../packages/plugin-saccadejs-calibrate",
+    "@saccadejs/plugin-validate": "file:../packages/plugin-saccadejs-validate"
   },
   "devDependencies": {
     "@docusaurus/faster": "3.9.2",

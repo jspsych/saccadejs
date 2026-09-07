@@ -192,7 +192,7 @@ type Info = typeof info;
  * The `saccade` extension must be registered in `initJsPsych`.
  *
  * @author Josh de Leeuw
- * @see {@link https://jspsych.github.io/saccadejs/ saccade.js documentation}
+ * @see {@link https://saccade.jspsych.org/reference/plugin-time-sync/ saccade.js: the saccade-time-sync plugin}
  */
 class SaccadeTimeSyncPlugin implements JsPsychPlugin<Info> {
   static info = info;

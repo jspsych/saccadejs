@@ -44,7 +44,7 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | --- | --- | --- |
 | `init` | `(): Promise<InitResult>` | Requests the camera, loads MediaPipe and ONNX, warms them up. Idempotent. Rejects if the camera is denied. |
 | `initialized` | `boolean` (getter) | |
-| `video` | `HTMLVideoElement` (readonly) | The live camera element, unmirrored. Mirror it with CSS if you show it; never mirror the pixels the model sees. |
+| `video` | `HTMLVideoElement` (readonly) | The live camera element, unmirrored. Mirror it with CSS if you show it; never mirror the pixels the model sees. **Keep it in the document:** Chrome delivers camera frames only for a rendered video, so hide it with `opacity: 0` / a 2×2 px size, never `display: none` or by unmounting it. The tracker re-attaches it to an invisible holder on `document.body` if it is detached. |
 | `start` | `(): void` | Starts the frame loop. Safe before `init()`. |
 | `stop` | `(): void` | Stops the loop. The camera stays open. |
 | `dispose` | `(): void` | Stops everything and releases the camera. Not reversible. |
@@ -114,12 +114,17 @@ What `capture` cannot see is display lag plus camera lag, which is what
 Both walk a list of targets and call back into your UI. They contain no DOM of their own.
 
 ```ts
-interface CollectOptions { settleMs: number; captureMs: number }
+interface CollectOptions { settleMs: number; captureMs: number; timeoutMs?: number }
 interface TargetUi { showTarget: (t: Gaze | null, phase: "settle" | "capture") => void }
 ```
 
 For each target: `showTarget(target, "settle")`, wait `settleMs`, `showTarget(target,
 "capture")`, collect for `captureMs`, then `showTarget(null, …)` at the end.
+
+`timeoutMs` (default `5000`, `0` to wait indefinitely) is the stall guard: if one camera frame
+takes longer than that — a `<video>` the page stopped rendering, a camera another program took,
+a track that ended — the run rejects with `no camera frames for 5000 ms` instead of waiting
+forever on a target that never moves. The plugins put that message on screen.
 
 ```ts
 runCalibration(tracker, targets: Gaze[], opts: CollectOptions, ui: TargetUi): Promise<CalPoint[]>

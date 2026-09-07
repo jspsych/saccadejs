@@ -16,7 +16,7 @@ dependency.
 | `@saccadejs/plugin-validate` | validation trial |
 | `@saccadejs/plugin-time-sync` | display + camera lag measurement (no flicker) |
 
-Docs and live demo: https://jspsych.github.io/saccadejs/
+Docs and live demo: https://saccade.jspsych.org/
 
 Development: `npm install`, `npm run build`, `npm test`. Interface contracts for the first
 release are in `CONTRACTS.md`.

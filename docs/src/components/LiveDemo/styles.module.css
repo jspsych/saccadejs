@@ -1,5 +1,7 @@
-/* The live demo is meant to read like a short experiment: one thing on screen at a time,
-   a thin annotation banner in a fixed place, and nothing else competing for attention. */
+/* The live demo is a real jsPsych experiment embedded in the page, so almost everything on
+   screen is styled by the plugins and by jspsych.css. What is left here is the frame around
+   it: the annotation banner, the intro screen, the results, and the stage jsPsych renders
+   into. */
 
 .demo {
   margin: 1.5rem 0 3rem;
@@ -41,7 +43,27 @@
   max-width: 46rem;
 }
 
-/* ------------------------------------------------------------------ panel ----------- */
+/* ------------------------------------------------------------------ stage ----------- */
+
+/* jsPsych's display element. `.jspsych-display-element` is `display: flex` with no height of
+   its own, so give it one: a trial that renders a short line of text should not make the page
+   jump. It stays mounted between runs — see the comment at its JSX. */
+.stage {
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 12px;
+  min-height: 26rem;
+  padding: 0.5rem;
+}
+
+/* Between runs there is nothing in it, and an empty bordered box is just clutter. Collapsed
+   rather than unmounted, and never `display: none`: a hidden <video> gets no camera frames. */
+.stageIdle {
+  border: 0;
+  min-height: 0;
+  padding: 0;
+}
+
+/* ------------------------------------------------------------------ panels ---------- */
 
 .panel {
   border: 1px solid var(--ifm-color-emphasis-200);
@@ -73,113 +95,27 @@
   text-align: left;
 }
 
-.result {
-  font-size: 1.15rem;
-  font-weight: 700;
-  margin: 0;
-}
-
-.resultNote {
-  color: var(--ifm-color-emphasis-700);
-  font-size: 0.9rem;
-  margin: 0;
-  max-width: 36rem;
-}
-
 .status {
   color: var(--ifm-color-emphasis-700);
   font-size: 0.95rem;
   margin: 0;
 }
 
-/* ------------------------------------------------------------------ progress -------- */
+/* ------------------------------------------------------------------ results --------- */
 
-.progressWrap {
+.resultsHeading {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+
+.resultsList {
+  line-height: 1.65;
   margin: 0;
-  width: min(100%, 26rem);
+  padding-left: 1.2rem;
 }
 
-.progressTrack {
-  background: var(--ifm-color-emphasis-200);
-  border-radius: 999px;
-  height: 10px;
-  overflow: hidden;
-}
-
-.progressBar {
-  background: var(--ifm-color-primary);
-  height: 100%;
-  transition: width 150ms linear;
-}
-
-.progressLabel {
-  color: var(--ifm-color-emphasis-700);
-  display: block;
-  font-size: 0.85rem;
-  margin-top: 0.5rem;
-  text-align: center;
-}
-
-/* ------------------------------------------------------------------ camera check ---- */
-
-.previewRow {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-  width: 100%;
-}
-
-.videoWrap {
-  background: #000;
-  border-radius: 10px;
-  line-height: 0;
-  overflow: hidden;
-  width: min(100%, 22rem);
-}
-
-/* The tracker crops the unmirrored frame; only the preview is flipped, because a mirrored
-   preview is what people can actually position themselves with. */
-.video {
-  display: block;
-  transform: scaleX(-1);
-  width: 100%;
-}
-
-.cropWrap {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.crop {
-  background: #111;
-  border: 1px solid var(--ifm-color-emphasis-300);
-  border-radius: 4px;
-  height: 54px;
-  image-rendering: pixelated;
-  max-width: 100%;
-  width: 216px;
-}
-
-.caption {
-  color: var(--ifm-color-emphasis-600);
-  font-size: 0.8rem;
-  text-align: center;
-}
-
-.faceState {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.faceFound {
-  color: var(--ifm-color-success-dark);
-}
-
-.faceMissing {
-  color: var(--ifm-color-warning-dark);
+.resultsList li + li {
+  margin-top: 0.6rem;
 }
 
 /* ------------------------------------------------------------------ buttons --------- */
@@ -189,39 +125,25 @@
   flex-wrap: wrap;
   gap: 0.6rem;
   justify-content: center;
+  margin-top: 1.25rem;
 }
 
-.primary,
-.secondary {
+.primary {
+  background: var(--ifm-color-primary);
   border: 1px solid transparent;
   border-radius: 8px;
+  color: #fff;
   cursor: pointer;
   font-size: 1rem;
   font-weight: 600;
   padding: 0.6rem 1.4rem;
 }
 
-.primary {
-  background: var(--ifm-color-primary);
-  color: #fff;
-}
-
 .primary:hover:not(:disabled) {
   background: var(--ifm-color-primary-dark);
 }
 
-.secondary {
-  background: transparent;
-  border-color: var(--ifm-color-emphasis-400);
-  color: var(--ifm-font-color-base);
-}
-
-.secondary:hover:not(:disabled) {
-  background: var(--ifm-color-emphasis-100);
-}
-
-.primary:disabled,
-.secondary:disabled {
+.primary:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
@@ -232,12 +154,13 @@
   border: 1px solid var(--ifm-color-danger);
   border-left-width: 4px;
   border-radius: 10px;
+  margin-bottom: 1.25rem;
   padding: 1.2rem 1.4rem;
 }
 
 .errorText {
   line-height: 1.6;
-  margin: 0 0 1rem;
+  margin: 0;
   max-width: 42rem;
 }
 
@@ -277,87 +200,34 @@
   font-family: var(--ifm-font-family-monospace);
 }
 
-/* ------------------------------------------------------------------ overlays -------- */
-
-/* Calibration and validation targets are placed in viewport fractions, so the overlay must
-   be the viewport — not the article column. */
-.overlay {
-  background: var(--ifm-background-color, #fff);
-  inset: 0;
-  position: fixed;
-  z-index: 9000;
+.detailsNote {
+  margin: 0.9rem 0 0.4rem;
 }
 
-.overlayCaption {
-  color: var(--ifm-color-emphasis-600);
-  font-size: 0.85rem;
-  left: 50%;
-  position: absolute;
+.json {
+  font-size: 0.75rem;
+  margin: 0;
+  max-height: 22rem;
+  overflow: auto;
+}
+
+/* ------------------------------------------------------------------ abandon --------- */
+
+.abandonRow {
+  margin: 0.75rem 0 0;
   text-align: center;
-  top: 0.75rem;
-  transform: translateX(-50%);
 }
 
-.targetPoint {
-  height: 0;
-  position: absolute;
-  width: 0;
+.abandon {
+  background: none;
+  border: 0;
+  color: var(--ifm-color-emphasis-600);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  text-decoration: underline;
 }
 
-.targetRing {
-  border: 2px solid var(--ifm-color-primary);
-  border-radius: 50%;
-  height: 64px;
-  left: 0;
-  position: absolute;
-  top: 0;
-  transform: translate(-50%, -50%) scale(1);
-  transition-property: transform, border-color, opacity;
-  transition-timing-function: linear;
-  width: 64px;
-}
-
-.targetDot {
-  background: var(--ifm-color-primary);
-  border-radius: 50%;
-  height: 20px;
-  left: 0;
-  position: absolute;
-  top: 0;
-  transform: translate(-50%, -50%);
-  transition: background-color 120ms linear;
-  width: 20px;
-}
-
-.targetCapture .targetRing {
-  border-color: var(--ifm-color-success);
-  opacity: 0.6;
-  transform: translate(-50%, -50%) scale(0.35);
-}
-
-.targetCapture .targetDot {
-  background: var(--ifm-color-success);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .targetRing {
-    transition-duration: 1ms !important;
-  }
-}
-
-/* ------------------------------------------------------------------ gaze dot -------- */
-
-.gazeDot {
-  background: var(--ifm-color-danger);
-  border: 2px solid #fff;
-  border-radius: 50%;
-  height: 22px;
-  left: 0;
-  opacity: 0;
-  pointer-events: none;
-  position: fixed;
-  top: 0;
-  transition: opacity 150ms linear;
-  width: 22px;
-  z-index: 9500;
+.abandon:hover {
+  color: var(--ifm-font-color-base);
 }

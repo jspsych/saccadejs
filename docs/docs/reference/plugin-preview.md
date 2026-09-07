@@ -9,7 +9,8 @@ description: Start the camera, load the model, and let the participant position 
 
 Prompts for the camera, downloads the model, and shows the participant the mirrored camera
 image, the eye crop the model sees, a face-found indicator and the current frame rate. Put it
-early in the timeline: this is where the download happens.
+early in the timeline: this is where the download happens, behind a progress bar that names
+each stage.
 
 | | |
 | --- | --- |
@@ -32,6 +33,7 @@ timeline.push({ type: jsPsychSaccadePreview });
 | `require_face` | `boolean` | `true` | Enable the continue button only while a face is being found. |
 | `face_timeout` | `number \| null` | `null` | Milliseconds after which the button enables even if no face has been found. `null` waits indefinitely. |
 | `preview_width` | `number` | `320` | Width of the camera preview, in pixels. |
+| `show_progress` | `boolean` | `true` | Show a progress bar and stage label while the camera, MediaPipe, the landmarker, onnxruntime-web and the eye model load. `false` shows "Starting the camera…" instead. |
 
 ## Data
 
@@ -58,6 +60,17 @@ timeline.push({
   preview_width: 400,
 });
 ```
+
+## The loading screen
+
+Until the tracker is running the trial shows a progress bar fed by the extension's
+`onSetupProgress`, which reports the stages of `SaccadeTracker.init()` in order: camera
+permission, MediaPipe, the face landmarker, onnxruntime-web, the eye model, warm-up. Only the
+eye model download reports bytes, so it is the only stage with a moving bar —
+`Downloading eye model 12.3 / 20.6 MB` — and the rest step the bar on as they complete.
+
+The continue button appears only once the tracker is initialised, and (with `require_face`)
+enables only while a face is being found.
 
 `backend: "wasm"` on a machine that should have WebGPU usually means an asset URL is wrong. See
 [Hosting the assets](../guides/hosting-the-assets).

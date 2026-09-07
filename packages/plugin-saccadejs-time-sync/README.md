@@ -121,7 +121,7 @@ checked against an external hardware clock — a photodiode taped to the screen 
 webcam's view on an RP2040, relaying screen edges to the camera after a known delay — so the
 residual after applying the correction is zero-mean, with a spread set by the camera's exposure
 window (up to half a frame). See the
-[timing guide](https://jspsych.github.io/saccadejs/) for the details.
+[timing guide](https://saccade.jspsych.org/guides/timing-and-synchrony/) for the details.
 
 ## License
 

@@ -58,10 +58,10 @@ Reached as `jsPsych.extensions.saccade`.
 | `faceDetected()` | `boolean` | Whether the most recent frame contained a face. |
 | `getBackend()` | `"webgpu" \| "wasm" \| null` | The execution provider the model is running on. |
 | `getTracker()` | `SaccadeTracker` | The underlying [tracker](core-api). |
-| `showVideo()` / `hideVideo()` | `void` | A small mirrored camera preview, bottom left. |
+| `showVideo()` / `hideVideo()` | `void` | A small mirrored camera preview, bottom left. `hideVideo()` keeps the `<video>` in the document, invisible at 2×2 px, and takes it back from any plugin that borrowed it — Chrome delivers camera frames only to a rendered video, so hiding it with `display: none` would stop the tracker. |
 | `showPredictions()` / `hidePredictions()` | `void` | A dot at the current gaze estimate. |
 | `resetCalibration()` | `void` | Discard all points and the fitted map. |
-| `calibratePoint(x, y, embeddings?, captureMs?)` | `Promise<number>` | Add one point at a viewport pixel location, collecting embeddings for `captureMs` (default `500`) when none are supplied. Returns how many were recorded. |
+| `calibratePoint(x, y, embeddings?, captureMs?, timeoutMs?)` | `Promise<number>` | Add one point at a viewport pixel location, collecting embeddings for `captureMs` (default `500`) when none are supplied. Rejects with `no camera frames for <ms> ms` if a single frame takes longer than `timeoutMs` (default `5000`). Returns how many were recorded. |
 | `fitCalibration(lambda?)` | `{lambda, nPoints} \| null` | Fit the ridge map. Required after manual `calibratePoint` calls. |
 | `getCalibrationPoints()` | `CalPoint[]` | Targets in viewport fractions, with their embeddings. |
 | `getCurrentPrediction()` | `{x, y, t} \| null` | The latest estimate, in viewport pixels. |
@@ -69,6 +69,9 @@ Reached as `jsPsych.extensions.saccade`.
 | `getTimingOffset()` | `number \| null` | The offset currently subtracted from `t`. |
 | `setTimingOffset(ms \| null)` | `void` | Set it manually. `null` turns the correction off. |
 | `getLastLoopback()` | `LoopbackResult \| null` | The full result of the last time-sync run. |
+| `onSetupProgress(cb)` | `() => void` | Subscribe to `start()`'s load progress — see [`SaccadeProgress`](core-api). The most recent report is replayed on subscribe; the returned function unsubscribes. Nothing is reported for a tracker supplied through the `tracker` parameter. |
+| `getSetupProgress()` | `SaccadeProgress \| null` | The most recent progress report. |
+| `dispose()` | `void` | End the frame subscriptions, remove the camera preview and gaze dot, and dispose the tracker (releasing the camera) unless it was supplied through the `tracker` parameter. jsPsych has no extension teardown hook, so a page that runs more than one experiment has to call this between them. |
 
 ## Example
 
