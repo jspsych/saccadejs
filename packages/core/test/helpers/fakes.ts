@@ -34,15 +34,31 @@ export interface FakeVideo {
   el: HTMLVideoElement;
   /** Number of frames delivered so far. */
   count: number;
+  /** Number of rVFC callbacks that were requested (and, when `silent`, never answered). */
+  requested: number;
+  /** Number of rVFC handles the pipeline cancelled. */
+  cancelled: number;
   stop: () => void;
 }
 
 /**
  * A real (jsdom) video element that hands out frames through requestVideoFrameCallback on a
  * timer, with the metadata a Chromium camera would supply.
+ *
+ * `rvfc: false` omits requestVideoFrameCallback entirely (the rAF path). `silent: true` keeps
+ * it but never calls back — a video Chrome refuses to deliver frames for because it is not
+ * rendered. `ready: true` gives the element the readyState/paused of a playing camera, which is
+ * what the pipeline's watchdog checks before ticking without rVFC.
  */
 export function fakeVideo(
-  opts: { width?: number; height?: number; period?: number; rvfc?: boolean } = {},
+  opts: {
+    width?: number;
+    height?: number;
+    period?: number;
+    rvfc?: boolean;
+    silent?: boolean;
+    ready?: boolean;
+  } = {},
 ): FakeVideo {
   const width = opts.width ?? 64;
   const height = opts.height ?? 48;
@@ -50,12 +66,18 @@ export function fakeVideo(
   const el = document.createElement("video");
   Object.defineProperty(el, "videoWidth", { value: width, configurable: true });
   Object.defineProperty(el, "videoHeight", { value: height, configurable: true });
-  const state: FakeVideo = { el, count: 0, stop: () => undefined };
+  if (opts.ready) {
+    Object.defineProperty(el, "readyState", { value: 4, configurable: true });
+    Object.defineProperty(el, "paused", { value: false, configurable: true });
+  }
+  const state: FakeVideo = { el, count: 0, requested: 0, cancelled: 0, stop: () => undefined };
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let handle = 0;
   if (opts.rvfc !== false) {
     (el as any).requestVideoFrameCallback = (cb: (now: number, meta: FrameMeta) => void) => {
       const id = ++handle;
+      state.requested++;
+      if (opts.silent) return id;
       const t = setTimeout(() => {
         timers.delete(t);
         const n = state.count++;
@@ -65,7 +87,9 @@ export function fakeVideo(
       timers.add(t);
       return id;
     };
-    (el as any).cancelVideoFrameCallback = () => undefined;
+    (el as any).cancelVideoFrameCallback = () => {
+      state.cancelled++;
+    };
   }
   state.stop = () => {
     for (const t of timers) clearTimeout(t);

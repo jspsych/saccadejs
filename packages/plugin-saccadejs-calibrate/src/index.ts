@@ -123,7 +123,7 @@ type Info = typeof info;
  * running (use the `saccade-preview` plugin first).
  *
  * @author Josh de Leeuw
- * @see {@link https://jspsych.github.io/saccadejs/ saccade.js documentation}
+ * @see {@link https://saccade.jspsych.org/reference/plugin-calibrate/ saccade.js: the saccade-calibrate plugin}
  */
 class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
   static info = info;
@@ -211,8 +211,14 @@ class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
     };
 
     run().then(end_trial, (error) => {
+      // Usually the core's stall guard ("no camera frames for 5000 ms"), which used to be an
+      // indefinite wait on a target that never moved. Say what happened instead of freezing.
       console.error(error);
-      end_trial(null);
+      ui.hide();
+      ui.showFailure(
+        `Calibration could not finish: ${String(error?.message ?? error)}. ` +
+          "Check that nothing else is using your camera, then continue.",
+      ).then(() => end_trial(null));
     });
   }
 }

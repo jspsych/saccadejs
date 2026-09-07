@@ -1,4 +1,4 @@
-import { clickTarget, startTimeline } from "@jspsych/test-utils";
+import { clickTarget, flushPromises, startTimeline } from "@jspsych/test-utils";
 import { ParameterType, initJsPsych } from "jspsych";
 
 import SaccadeCalibratePlugin from ".";
@@ -169,6 +169,33 @@ describe("saccade-calibrate trial", () => {
     await clickTarget(target);
     await finished;
     expect(extension.calibratePoint).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the failure on screen instead of hanging when the frames stop", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const jsPsych = setup();
+    const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
+    extension.calibratePoint.mockRejectedValue(new Error("no camera frames for 5000 ms"));
+
+    const { getData, displayElement, finished } = await startTimeline(
+      [{ type: SaccadeCalibratePlugin, ...FAST, calibration_points: [[50, 50]] }],
+      jsPsych,
+    );
+
+    // The settle sleep is 1 ms; give it a tick, then let the rejection propagate.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await flushPromises();
+
+    const message = displayElement.querySelector(".saccade-target-message");
+    expect(message).not.toBeNull();
+    expect(message.textContent).toMatch(/no camera frames for 5000 ms/);
+
+    await clickTarget(displayElement.querySelector("#saccade-target-continue"));
+    await finished;
+
+    expect(getData().values()[0].lambda).toBeNull();
+    expect(document.querySelector(".saccade-target-overlay")).toBeNull();
+    errorSpy.mockRestore();
   });
 
   it("cleans up the overlay when the trial ends", async () => {

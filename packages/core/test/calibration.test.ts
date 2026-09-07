@@ -1,4 +1,9 @@
-import { runCalibration, runValidation } from "../src/calibration";
+import {
+  DEFAULT_FRAME_TIMEOUT_MS,
+  runCalibration,
+  runValidation,
+  withFrameTimeout,
+} from "../src/calibration";
 import type { TrackerFrame } from "../src/pipeline";
 import { SaccadeTracker } from "../src/tracker";
 import type { Gaze } from "../src/types";
@@ -154,5 +159,68 @@ describe("runValidation", () => {
     expect(res.points[0].samples).toHaveLength(0);
     expect(Number.isNaN(res.points[0].errorViewport)).toBe(true);
     expect(Number.isNaN(res.medianErrorViewport)).toBe(true);
+  });
+});
+
+/** A tracker whose frame source has died: `nextFrame` is returned but never settles. */
+function stalledTracker(): SaccadeTracker {
+  const never = () => new Promise<never>(() => undefined);
+  return {
+    nextFrame: never,
+    nextEmbedding: never,
+    addCalibrationPoint: () => undefined,
+    getCalibrationPoints: () => [],
+  } as unknown as SaccadeTracker;
+}
+
+describe("the stall guard", () => {
+  it("defaults to five seconds", () => {
+    expect(DEFAULT_FRAME_TIMEOUT_MS).toBe(5000);
+  });
+
+  it("passes a promise that settles in time straight through", async () => {
+    await expect(withFrameTimeout(Promise.resolve(7), 1000)).resolves.toBe(7);
+  });
+
+  it("names the timeout in the message", async () => {
+    await expect(withFrameTimeout(new Promise(() => undefined), 20)).rejects.toThrow(
+      "no camera frames for 20 ms",
+    );
+  });
+
+  it("waits indefinitely when the timeout is 0", async () => {
+    const raced = await Promise.race([
+      withFrameTimeout(new Promise(() => undefined), 0).then(() => "settled"),
+      new Promise((r) => setTimeout(() => r("still waiting"), 30)),
+    ]);
+    expect(raced).toBe("still waiting");
+  });
+
+  it("makes runCalibration reject instead of hanging on a dead frame source", async () => {
+    await expect(
+      runCalibration(
+        stalledTracker(),
+        [targets[0]],
+        { settleMs: 0, captureMs: 1000, timeoutMs: 20 },
+        { showTarget: () => undefined },
+      ),
+    ).rejects.toThrow(/no camera frames for 20 ms/);
+  });
+
+  it("makes runValidation reject instead of hanging on a dead frame source", async () => {
+    await expect(
+      runValidation(
+        stalledTracker(),
+        [targets[0]],
+        {
+          settleMs: 0,
+          captureMs: 1000,
+          timeoutMs: 20,
+          roiRadiusPx: 50,
+          viewport: { width: 800, height: 600 },
+        },
+        { showTarget: () => undefined },
+      ),
+    ).rejects.toThrow(/no camera frames for 20 ms/);
   });
 });

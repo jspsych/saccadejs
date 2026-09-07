@@ -6,7 +6,7 @@ your own calibration points. Plus a screen-to-webcam timing loopback that measur
 JavaScript cannot see.
 
 This is the jsPsych-agnostic core. For jsPsych experiments use
-[`@saccadejs/extension`](https://jspsych.github.io/saccadejs/) and the `saccade-*` plugins,
+[`@saccadejs/extension`](https://saccade.jspsych.org/reference/extension/) and the `saccade-*` plugins,
 which wrap everything here.
 
 ## Install
@@ -97,7 +97,7 @@ Register the extension and use the plugins; you never touch this API directly.
 const jsPsych = initJsPsych({ extensions: [{ type: jsPsychExtensionSaccade }] });
 ```
 
-See the [documentation site](https://jspsych.github.io/saccadejs/) for the extension, the
+See the [documentation site](https://saccade.jspsych.org/) for the extension, the
 `saccade-preview` / `saccade-calibrate` / `saccade-validate` / `saccade-time-sync` plugins,
 and the migration guide from WebGazer.
 
@@ -120,6 +120,26 @@ and the migration guide from WebGazer.
 | `extractEyeCrop`, `clahe`, `resizeBilinearCv`, `rgbaToGray`, `cropBBox` | the preprocessing, exported for testing |
 | `solveRidge`, `predict`, `calWeight`, `fitRidge` | the ridge fit |
 | `estimateLagEdges`, `estimateLag`, `sparseSchedule`, `seededRandom`, `splitHalves`, `intervalStats` | pure loopback analysis |
+
+### Keep `tracker.video` in the document
+
+Chrome only delivers camera frames (`requestVideoFrameCallback`) for a video element that is
+actually **rendered** — in the document and not `display: none`. A hidden or detached element
+stops the tracker silently: no error, no frames, and every `nextFrame()` waiter (a calibration
+capture, the timing loopback) hangs forever. Move the element wherever you like, but hide it
+with `opacity: 0` and/or a 2×2 px size — never with `display: none`, `visibility: hidden`, or by
+unmounting it.
+
+The tracker defends itself on both sides: if the element is not in the document it re-attaches
+it to a tiny invisible holder of its own on `document.body`, and if rVFC stops arriving anyway
+the frame loop falls back to a ~300 ms timer tick (frames then carry
+`time.source === "callback"`) until it starts again.
+
+As a last line of defence, `runCalibration` and `runValidation` take a `timeoutMs` in their
+`CollectOptions` (default `5000`, `0` to wait indefinitely). If one camera frame takes longer
+than that, the run rejects with `no camera frames for 5000 ms` rather than hanging, so a caller
+has something to put on screen. `withFrameTimeout(promise, ms)` is exported for callers that run
+their own capture loop.
 
 The preprocessing is **bit-exact** with the Python pipeline the model was trained on (OpenCV
 BT.601 gray, `INTER_LINEAR` resize, CLAHE with clip 2 and 8×8 tiles); `test/crop.test.ts`

@@ -138,6 +138,26 @@ export class SaccadeTracker {
   }
 }
 
+export const DEFAULT_FRAME_TIMEOUT_MS = 5000;
+
+/** The real implementation, restated here because the whole core module is stubbed out. */
+export function withFrameTimeout<T>(p: Promise<T>, ms = DEFAULT_FRAME_TIMEOUT_MS): Promise<T> {
+  if (!Number.isFinite(ms) || ms <= 0) return p;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`no camera frames for ${ms} ms`)), ms);
+    p.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 export const runLoopback = jest.fn();
 export const defaultGrid13 = () => [];
 export const trainingGrid20 = () => [];

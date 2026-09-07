@@ -131,9 +131,38 @@ export class TargetUi {
     this.overlay.innerHTML = `<div class="saccade-target-message">${html}</div>`;
   }
 
+  /**
+   * Show a failure message with a button, and resolve when it is clicked.
+   *
+   * A run that rejects — most often the core's stall guard, `no camera frames for 5000 ms` —
+   * would otherwise leave the participant staring at a target that never moves. Say what
+   * happened and give them a way out of the trial.
+   */
+  showFailure(message: string, buttonText = "Continue"): Promise<void> {
+    this.showMessage(
+      `<p>${escapeHtml(message)}</p>` +
+        `<p><button id="saccade-target-continue" class="jspsych-btn">${escapeHtml(
+          buttonText,
+        )}</button></p>`,
+    );
+    return new Promise((resolve) => {
+      this.overlay
+        .querySelector("#saccade-target-continue")
+        .addEventListener("click", () => resolve());
+    });
+  }
+
   destroy(): void {
     this.overlay.remove();
   }
+}
+
+/** The message comes from a thrown error, so it is text, not markup. */
+function escapeHtml(text: string): string {
+  return text.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
+  );
 }
 
 function injectTargetStyle(): void {

@@ -1,8 +1,9 @@
 import type SaccadeExtension from "@saccadejs/extension";
 import { JsPsych, JsPsychPlugin, ParameterType, TrialType } from "jspsych";
-import type { TrackerFrame } from "@saccadejs/core";
+import type { SaccadeProgress, TrackerFrame } from "@saccadejs/core";
 
 import { version } from "../package.json";
+import { setupFraction, setupLabel } from "./setup-progress";
 
 /** Dimensions of the eye crop the model sees. */
 const EYE_W = 144;
@@ -47,6 +48,35 @@ const CSS = `
 #saccade-preview-status .saccade-face-yes { color: #15803d; font-weight: 600; }
 #saccade-preview-status .saccade-face-no { color: #b91c1c; font-weight: 600; }
 #saccade-preview-instructions { max-width: 640px; }
+#saccade-preview-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 16px;
+  font-family: inherit;
+}
+#saccade-preview-progress-track {
+  width: min(420px, 80vw);
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.3);
+  overflow: hidden;
+}
+#saccade-preview-progress-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 4px;
+  background: #38bdf8;
+  transition: width 150ms linear;
+}
+#saccade-preview-progress-label { font-size: 14px; }
+#saccade-preview-loading-note { font-size: 13px; opacity: 0.75; max-width: 420px; text-align: center; }
+.saccade-preview-detail {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  opacity: 0.75;
+}
 `;
 
 const info = <const>{
@@ -91,6 +121,14 @@ const info = <const>{
       type: ParameterType.INT,
       default: 320,
     },
+    /** Whether to show a progress bar and a stage label while the camera, MediaPipe, the
+     * face-landmarker, onnxruntime-web and the ~20 MB eye model load. The eye model is the only
+     * stage that can report bytes, so it is the only one with a moving bar; the rest step the
+     * bar on as they complete. Set `false` for a plain "Starting the camera…" message. */
+    show_progress: {
+      type: ParameterType.BOOL,
+      default: true,
+    },
   },
   data: {
     /** How long it took (ms) to get the camera and the models running and produce the first frame.
@@ -129,7 +167,7 @@ type Info = typeof info;
  * The `saccade` extension must be registered in `initJsPsych`.
  *
  * @author Josh de Leeuw
- * @see {@link https://jspsych.github.io/saccadejs/ saccade.js documentation}
+ * @see {@link https://saccade.jspsych.org/reference/plugin-preview/ saccade.js: the saccade-preview plugin}
  */
 class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
   static info = info;
@@ -151,6 +189,7 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
     let load_time: number = null;
     let rt_start: number = null;
     let unsubscribe: (() => void) | null = null;
+    let unsubscribeProgress: (() => void) | null = null;
     let faceFound = false;
     let fps: number = null;
     // once the face_timeout has elapsed, later face-less frames must not re-disable the button
@@ -158,11 +197,60 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
 
     injectStyle();
 
-    display_element.innerHTML = `<p id="saccade-preview-loading">Starting the camera…</p>`;
+    const showLoading = () => {
+      if (!trial.show_progress) {
+        display_element.innerHTML = `<p id="saccade-preview-loading">Starting the camera…</p>`;
+        return;
+      }
+      display_element.innerHTML = `
+        <div id="saccade-preview-loading">
+          <div id="saccade-preview-progress-track" role="progressbar" aria-valuemin="0"
+            aria-valuemax="100" aria-valuenow="0">
+            <div id="saccade-preview-progress-bar"></div>
+          </div>
+          <p id="saccade-preview-progress-label">Starting…</p>
+          <p id="saccade-preview-loading-note">The eye model is about 20 MB. It is downloaded
+          once and then cached by the browser.</p>
+        </div>`;
+
+      const track = display_element.querySelector("#saccade-preview-progress-track") as HTMLElement;
+      const bar = display_element.querySelector("#saccade-preview-progress-bar") as HTMLElement;
+      const label = display_element.querySelector("#saccade-preview-progress-label") as HTMLElement;
+
+      const render = (p: SaccadeProgress | null) => {
+        // The screen is swapped out as soon as init resolves; a late report must not write to
+        // elements that are no longer in the display.
+        if (!bar.isConnected) return;
+        const pct = Math.round(Math.min(1, Math.max(0, setupFraction(p))) * 100);
+        bar.style.width = `${pct}%`;
+        track.setAttribute("aria-valuenow", String(pct));
+        label.textContent = setupLabel(p);
+      };
+
+      // Subscribing replays the most recent report, so a tracker that was already loading when
+      // the trial started does not show an empty bar.
+      unsubscribeProgress = extension.onSetupProgress?.(render) ?? null;
+      if (!unsubscribeProgress) render(null);
+    };
+
+    showLoading();
 
     const end_trial = () => {
       unsubscribe?.();
       unsubscribe = null;
+      unsubscribeProgress?.();
+      unsubscribeProgress = null;
+      // This trial borrowed the tracker's <video> for the preview panel. hideVideo() hands it
+      // back to the extension's own (hidden, but rendered) container *before* the display is
+      // cleared below — otherwise the element is destroyed with the rest of the trial markup
+      // and Chrome stops delivering camera frames for the rest of the experiment.
+      const video = extension.getTracker().video;
+      if (video) {
+        // Drop this trial's sizing so the container it goes back to governs it again.
+        video.removeAttribute("id");
+        video.style.width = "";
+        video.style.height = "";
+      }
       extension.hideVideo();
       extension.pause();
 
@@ -270,15 +358,20 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
 
     begin
       .then(() => {
+        unsubscribeProgress?.();
+        unsubscribeProgress = null;
         extension.resume();
         showTrial();
       })
       .catch((error) => {
+        unsubscribeProgress?.();
+        unsubscribeProgress = null;
         console.error(error);
         display_element.innerHTML = `
           <p>The experiment cannot continue because the eye tracker failed to start.</p>
           <p>This may be a technical problem, or you may not have given the page permission to use
-          your camera.</p>`;
+          your camera.</p>
+          <p class="saccade-preview-detail">${escapeHtml(String(error?.message ?? error))}</p>`;
         on_load();
       });
 
@@ -286,6 +379,14 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
       trial_complete = resolve;
     });
   }
+}
+
+/** The failure message is put in the display as markup; a message is not trusted as markup. */
+function escapeHtml(text: string): string {
+  return text.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
+  );
 }
 
 function injectStyle() {

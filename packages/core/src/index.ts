@@ -66,7 +66,12 @@ export type {
   ValidationResult,
   ValidationSample,
 } from "./calibration";
-export { runCalibration, runValidation } from "./calibration";
+export {
+  DEFAULT_FRAME_TIMEOUT_MS,
+  runCalibration,
+  runValidation,
+  withFrameTimeout,
+} from "./calibration";
 
 // ---- timing loopback ---------------------------------------------------------
 export type {

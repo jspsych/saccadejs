@@ -89,6 +89,42 @@ describe("Pipeline", () => {
     expect(frames[0].time.presentedFrames).toBeNull();
   });
 
+  it("keeps ticking when requestVideoFrameCallback never fires", async () => {
+    // Chrome delivers no rVFC for a video that is not rendered, which used to stall the loop
+    // forever (and with it every nextFrame() waiter, e.g. a calibration capture).
+    const video = fakeVideo({ silent: true, ready: true });
+    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), { tta: 1 });
+    const frames: TrackerFrame[] = [];
+    p.onFrame = (f) => frames.push(f);
+    p.start();
+    await waitFor(() => frames.length >= 3, 4000);
+    p.stop();
+    video.stop();
+
+    // rVFC was asked every time and never answered, so every frame came from the watchdog.
+    expect(video.count).toBe(0);
+    expect(video.requested).toBeGreaterThanOrEqual(3);
+    expect(video.cancelled).toBeGreaterThanOrEqual(3);
+    expect(frames.every((f) => f.time.source === "callback")).toBe(true);
+    expect(frames[0].time.presentedFrames).toBeNull();
+    expect(frames[0].faceFound).toBe(true);
+    // And the loop still produces real work, so a waiter resolves instead of hanging.
+    expect(frames.some((f) => f.embedding !== null)).toBe(true);
+  }, 10000);
+
+  it("does not tick while the video has no frame data", async () => {
+    // readyState 0: the camera has not produced anything yet. Ticking then would fabricate
+    // frames out of a blank element rather than waiting for the stream.
+    const video = fakeVideo({ silent: true });
+    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), {});
+    let n = 0;
+    p.onFrame = () => n++;
+    p.start();
+    await new Promise((r) => setTimeout(r, 700));
+    p.stop();
+    expect(n).toBe(0);
+  });
+
   it("resolves nextFrame / nextEmbedding with the next emitted frame", async () => {
     const video = fakeVideo();
     const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), { tta: 1 });

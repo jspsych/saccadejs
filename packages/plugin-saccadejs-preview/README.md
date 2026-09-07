@@ -6,9 +6,11 @@ replacement for `webgazer-init-camera`.
 
 The trial shows the mirrored camera image, the 144×36 eye crop that the model actually sees
 (scaled up), a face-found indicator and the frame rate, and a continue button that stays disabled
-until a face is being found. Because it is the first trial that touches the camera, it is also
-where the browser's camera-permission prompt appears and where the ONNX model and MediaPipe wasm
-are downloaded.
+until the tracker is running and a face is being found. Because it is the first trial that
+touches the camera, it is also where the browser's camera-permission prompt appears and where the
+ONNX model and MediaPipe wasm are downloaded — so it opens on a progress bar that names each
+stage as it loads (`Downloading eye model 12.3 / 20.6 MB` for the ~20 MB model, the only stage
+that can report bytes). Set `show_progress: false` for a plain "Starting the camera…" message.
 
 Requires the [`@saccadejs/extension`](../extension-saccadejs) extension to be registered in
 `initJsPsych`.
@@ -48,6 +50,7 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-preview
 | `require_face`  | boolean     | `true`                       | Enable the continue button only while a face is being found.                                                                                                                                                                                 |
 | `face_timeout`  | integer     | `null`                       | Escape hatch for `require_face`: after this many ms the button is enabled even if no face has ever been found, so a participant the model cannot cope with is not stuck. `null` waits indefinitely; `face_detected` still records the truth. |
 | `preview_width` | integer     | `320`                        | Width of the camera preview, in pixels.                                                                                                                                                                                                      |
+| `show_progress` | boolean     | `true`                       | Show a progress bar and a stage label while the camera, MediaPipe, the face landmarker, onnxruntime-web and the eye model load, instead of a plain "Starting the camera…" message.                                                            |
 
 ## Data generated
 
@@ -60,8 +63,8 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-preview
 | `rt`            | integer | Time from the start of the trial until the button was clicked.                                                           |
 
 If the camera cannot be started (permission denied, no camera, WebGPU and wasm both unavailable),
-the trial shows an explanation and does not continue — the same dead end `webgazer-init-camera`
-uses, since there is nothing useful to record without a camera.
+the trial shows an explanation and the underlying error message, and does not continue — the same
+dead end `webgazer-init-camera` uses, since there is nothing useful to record without a camera.
 
 ## License
 

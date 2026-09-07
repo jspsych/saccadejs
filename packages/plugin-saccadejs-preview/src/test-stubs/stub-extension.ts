@@ -74,8 +74,27 @@ export class StubSaccadeExtension implements JsPsychExtension {
   private started = false;
   private offset: number | null = null;
   private loopback: any = null;
+  private progressCallbacks: Array<(p: any) => void> = [];
+  private lastProgress: any = null;
 
   constructor(private jsPsych: JsPsych) {}
+
+  /** Test helper: report one setup-progress stage to every subscriber. */
+  emitProgress(p: any) {
+    this.lastProgress = p;
+    for (const cb of [...this.progressCallbacks]) cb(p);
+  }
+
+  onSetupProgress = (cb: (p: any) => void) => {
+    this.progressCallbacks.push(cb);
+    if (this.lastProgress) cb(this.lastProgress);
+    return () => {
+      this.progressCallbacks = this.progressCallbacks.filter((item) => item !== cb);
+    };
+  };
+
+  getSetupProgress = () => this.lastProgress;
+  dispose = jest.fn();
 
   initialize = async () => {};
   on_start = () => {};

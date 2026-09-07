@@ -89,6 +89,13 @@ interface RingEntry {
   t: number;
 }
 
+/**
+ * How long to wait for `requestVideoFrameCallback` before falling back to a plain tick. Long
+ * enough that a healthy 15 fps camera never trips it, short enough that a stalled loop recovers
+ * within a few frames.
+ */
+const RVFC_WATCHDOG_MS = 300;
+
 interface InFlight {
   stage: Stage;
   started: number;
@@ -112,6 +119,9 @@ export class Pipeline {
   private active = false;
   private busy = false;
   private handle: number | null = null;
+  private watchdog: ReturnType<typeof setTimeout> | null = null;
+  /** Bumped by every `schedule()`; a callback from an older generation is ignored. */
+  private schedGen = 0;
   private ring: RingEntry[] = [];
   private tta: number;
   private center: number;
@@ -157,6 +167,8 @@ export class Pipeline {
     // An in-flight embed is deliberately left in `inflight`: the next step awaits it before
     // starting another, which is what keeps session.run non-concurrent.
     this.epoch++;
+    this.schedGen++;
+    this.clearWatchdog();
     if (this.handle != null && this.video.cancelVideoFrameCallback) {
       this.video.cancelVideoFrameCallback(this.handle);
     }
@@ -209,10 +221,60 @@ export class Pipeline {
 
   private schedule(): void {
     if (!this.active) return;
+    const gen = ++this.schedGen;
+    this.clearWatchdog();
     if (this.video.requestVideoFrameCallback) {
-      this.handle = this.video.requestVideoFrameCallback((now, meta) => void this.tick(now, meta));
+      this.handle = this.video.requestVideoFrameCallback((now, meta) => {
+        if (gen !== this.schedGen) return;
+        this.clearWatchdog();
+        void this.tick(now, meta);
+      });
+      this.armWatchdog(gen);
     } else {
-      this.handle = requestAnimationFrame((now) => void this.tick(now, null));
+      this.handle = requestAnimationFrame((now) => {
+        if (gen !== this.schedGen) return;
+        void this.tick(now, null);
+      });
+    }
+  }
+
+  /**
+   * Self-healing for a video that stops delivering `requestVideoFrameCallback`s.
+   *
+   * Chrome only fires rVFC for a rendered video element, so a host that hides or detaches the
+   * element kills the loop with no error: no frames, and every `nextFrame()` waiter hangs
+   * forever (which is what stalls a calibration run). The tracker keeps the element attached,
+   * but this is the belt to that pair of braces: if rVFC has not fired within the watchdog and
+   * the element still has frame data, cancel the pending callback and tick anyway on the plain
+   * `performance.now()` clock (`time.source === "callback"`, the same path used when rVFC does
+   * not exist at all). Scheduling then goes back to rVFC, so a stream that recovers is used
+   * with its proper timestamps again.
+   */
+  private armWatchdog(gen: number): void {
+    if (typeof setTimeout !== "function") return;
+    this.clearWatchdog();
+    this.watchdog = setTimeout(() => {
+      this.watchdog = null;
+      if (!this.active || gen !== this.schedGen) return;
+      // No frame data yet (the camera is still starting): wait, do not fabricate a tick.
+      if (this.video.readyState < 2 || this.video.paused) {
+        this.armWatchdog(gen);
+        return;
+      }
+      // Invalidate the pending rVFC before ticking, so a late one cannot start a second loop.
+      this.schedGen++;
+      if (this.handle != null && this.video.cancelVideoFrameCallback) {
+        this.video.cancelVideoFrameCallback(this.handle);
+      }
+      this.handle = null;
+      void this.tick(performance.now(), null);
+    }, RVFC_WATCHDOG_MS);
+  }
+
+  private clearWatchdog(): void {
+    if (this.watchdog != null) {
+      clearTimeout(this.watchdog);
+      this.watchdog = null;
     }
   }
 

@@ -2,6 +2,7 @@ import { clickTarget, flushPromises, startTimeline } from "@jspsych/test-utils";
 import { ParameterType, initJsPsych } from "jspsych";
 
 import SaccadePreviewPlugin from ".";
+import { setupFraction, setupLabel } from "./setup-progress";
 import { StubSaccadeExtension, makeFrame } from "./test-stubs/stub-extension";
 
 function setup() {
@@ -34,6 +35,7 @@ describe("saccade-preview info", () => {
     expect(p.require_face.default).toBe(true);
     expect(p.preview_width.default).toBe(320);
     expect(p.face_timeout.default).toBeNull();
+    expect(p.show_progress.default).toBe(true);
     expect(typeof p.instructions.default).toBe("string");
   });
 
@@ -45,6 +47,32 @@ describe("saccade-preview info", () => {
       "load_time",
       "rt",
     ]);
+  });
+});
+
+describe("setup progress formatting", () => {
+  it("names the stage, and the bytes for the model download", () => {
+    expect(setupLabel(null)).toBe("Starting…");
+    expect(setupLabel({ stage: "camera" })).toBe("Waiting for camera permission…");
+    expect(setupLabel({ stage: "model", loaded: 12.3e6, total: 20.6e6 })).toBe(
+      "Downloading eye model 12.3 / 20.6 MB",
+    );
+    // No Content-Length: report what has arrived rather than a fraction of nothing.
+    expect(setupLabel({ stage: "model", loaded: 5e6 })).toBe("Downloading eye model 5.0 MB");
+    expect(setupLabel({ stage: "ready" })).toBe("Ready");
+  });
+
+  it("grows monotonically through the stages and ends at 1", () => {
+    const stages = ["camera", "mediapipe", "landmarker", "ort", "model", "session"] as const;
+    const fractions = stages.map((stage) => setupFraction({ stage }));
+    expect(setupFraction(null)).toBe(0);
+    for (let i = 1; i < fractions.length; i++) {
+      expect(fractions[i]).toBeGreaterThan(fractions[i - 1]);
+    }
+    expect(setupFraction({ stage: "model", loaded: 10, total: 20 })).toBeGreaterThan(
+      setupFraction({ stage: "model" }),
+    );
+    expect(setupFraction({ stage: "ready" })).toBe(1);
   });
 });
 
@@ -135,6 +163,63 @@ describe("saccade-preview trial", () => {
     await clickTarget(button);
     await finished;
     expect(getData().values()[0].face_detected).toBe(false);
+  });
+
+  it("shows the setup progress while the tracker loads", async () => {
+    const jsPsych = setup();
+    const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
+    // Hold init open so the loading screen stays on display for the assertions.
+    let finishStart: () => void;
+    extension.start.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishStart = () => {
+            extension.tracker.start();
+            resolve();
+          };
+        }),
+    );
+
+    const { displayElement, expectFinished } = await startTimeline(
+      [{ type: SaccadePreviewPlugin }],
+      jsPsych,
+    );
+    await flushPromises();
+
+    const bar = displayElement.querySelector<HTMLElement>("#saccade-preview-progress-bar");
+    const label = displayElement.querySelector<HTMLElement>("#saccade-preview-progress-label");
+    expect(bar).not.toBeNull();
+    expect(label.textContent).toBe("Starting…");
+
+    extension.emitProgress({ stage: "model", loaded: 12.3e6, total: 20.6e6 });
+    expect(label.textContent).toBe("Downloading eye model 12.3 / 20.6 MB");
+    expect(parseFloat(bar.style.width)).toBeGreaterThan(0);
+    expect(parseFloat(bar.style.width)).toBeLessThan(100);
+
+    finishStart();
+    await flushPromises();
+
+    // The preview replaces the loading screen, and later reports go nowhere.
+    expect(displayElement.querySelector("#saccade-preview-progress-bar")).toBeNull();
+    extension.emitProgress({ stage: "ready" });
+
+    const button = displayElement.querySelector<HTMLButtonElement>("#saccade-preview-continue");
+    extension.tracker.emit(makeFrame({ faceFound: true }));
+    await clickTarget(button);
+    await expectFinished();
+  });
+
+  it("shows a plain message when show_progress is false", async () => {
+    const jsPsych = setup();
+    const { displayElement, expectFinished } = await startTimeline(
+      [{ type: SaccadePreviewPlugin, show_progress: false, require_face: false }],
+      jsPsych,
+    );
+    await flushPromises();
+
+    expect(displayElement.querySelector("#saccade-preview-progress-bar")).toBeNull();
+    await clickTarget(displayElement.querySelector("#saccade-preview-continue"));
+    await expectFinished();
   });
 
   it("shows an error message when the camera cannot be started", async () => {

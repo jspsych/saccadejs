@@ -41,6 +41,9 @@ export interface InitResult {
 const LUM_W = 64;
 const LUM_H = 48;
 
+/** How often the tracker re-checks that its video is still in the document, in ms. */
+const ATTACH_CHECK_MS = 1000;
+
 /**
  * Camera + face landmarks + eye embedding + calibration, as one object.
  *
@@ -49,6 +52,14 @@ const LUM_H = 48;
  * until calibration points have been added and `fitCalibration()` has run.
  */
 export class SaccadeTracker {
+  /**
+   * The camera element. The tracker keeps this element in the document while running, because
+   * Chrome only delivers camera frames (`requestVideoFrameCallback`) for a video that is
+   * actually rendered. Move it wherever you like — into a preview panel, a corner of the page —
+   * but never `display: none` it and never detach it from the document while the tracker is
+   * running; to hide it, use `opacity: 0` (and/or a 2x2 px size) instead. If it is not in the
+   * document, the tracker puts it back into a tiny invisible holder of its own on `document.body`.
+   */
   readonly video: HTMLVideoElement;
   private opts: SaccadeTrackerOptions;
   private assets: SaccadeAssets;
@@ -68,6 +79,8 @@ export class SaccadeTracker {
   private disposed = false;
   private lumCanvas: HTMLCanvasElement | null = null;
   private lumCtx: CanvasRenderingContext2D | null = null;
+  private holder: HTMLDivElement | null = null;
+  private attachTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(opts: SaccadeTrackerOptions = {}) {
     this.opts = opts;
@@ -112,6 +125,8 @@ export class SaccadeTracker {
       });
       this.ownsStream = true;
     }
+    // Before play(): Chrome delivers frames only to a rendered video element.
+    this.watchAttachment();
     this.video.srcObject = this.stream;
     try {
       await this.video.play();
@@ -165,9 +180,54 @@ export class SaccadeTracker {
     for (const cb of Array.from(this.subscribers)) cb(f);
   }
 
+  /**
+   * Put `video` back in the document if it is not there.
+   *
+   * Chrome only fires `requestVideoFrameCallback` for a video element that is rendered — in the
+   * document and not `display: none` — so a host that unmounts the element (a step-based UI
+   * swapping screens, a jsPsych plugin clearing its display) silently stops every camera frame.
+   * The holder is rendered but invisible and inert: no `display: none`, no `visibility: hidden`,
+   * either of which would stop the frames just as effectively.
+   */
+  private ensureAttached(): void {
+    if (this.disposed) return;
+    if (typeof document === "undefined" || !document.body) return;
+    if (this.video.isConnected) return;
+    if (!this.holder) {
+      const holder = document.createElement("div");
+      holder.setAttribute("data-saccade-video-holder", "");
+      const s = holder.style;
+      s.position = "fixed";
+      s.left = "0";
+      s.top = "0";
+      s.width = "2px";
+      s.height = "2px";
+      s.opacity = "0";
+      s.pointerEvents = "none";
+      s.overflow = "hidden";
+      s.zIndex = "-1";
+      this.holder = holder;
+    }
+    if (!this.holder.isConnected) document.body.appendChild(this.holder);
+    this.holder.appendChild(this.video);
+  }
+
+  /**
+   * Keep `video` attached from here on. A host can detach it at any time (a screen change, a
+   * cleared jsPsych display), and `runLoopback` pumps frames while the tracker is *stopped*, so
+   * the watch is tied to the camera's lifetime rather than to the frame loop.
+   */
+  private watchAttachment(): void {
+    this.ensureAttached();
+    if (this.attachTimer == null && typeof setInterval === "function") {
+      this.attachTimer = setInterval(() => this.ensureAttached(), ATTACH_CHECK_MS);
+    }
+  }
+
   /** Start the frame loop. Safe before `init()`: the loop starts as soon as init finishes. */
   start(): void {
     this.wantRunning = true;
+    this.watchAttachment();
     this.pipeline?.start();
   }
 
@@ -184,6 +244,10 @@ export class SaccadeTracker {
   dispose(): void {
     this.disposed = true;
     this.stop();
+    if (this.attachTimer != null) {
+      clearInterval(this.attachTimer);
+      this.attachTimer = null;
+    }
     this.pipeline = null;
     this.landmarker?.close();
     this.landmarker = null;
@@ -193,6 +257,10 @@ export class SaccadeTracker {
     if (this.stream && this.ownsStream) for (const t of this.stream.getTracks()) t.stop();
     this.stream = null;
     this.video.srcObject = null;
+    if (this.holder) {
+      this.holder.remove();
+      this.holder = null;
+    }
     this.subscribers.clear();
     this.initResult = null;
     this.initPromise = null;

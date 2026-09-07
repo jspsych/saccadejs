@@ -1,6 +1,14 @@
 import { JsPsych, JsPsychExtension, JsPsychExtensionInfo, ParameterType } from "jspsych";
-import { SaccadeTracker } from "@saccadejs/core";
-import type { CalPoint, FrameTime, LoopbackResult, SaccadeAssets, TrackerFrame } from "@saccadejs/core";
+import { DEFAULT_FRAME_TIMEOUT_MS, SaccadeTracker, withFrameTimeout } from "@saccadejs/core";
+import type {
+  CalPoint,
+  FrameTime,
+  LoopbackResult,
+  SaccadeAssets,
+  SaccadeProgress,
+  SaccadeProgressCallback,
+  TrackerFrame,
+} from "@saccadejs/core";
 
 import { version } from "../package.json";
 
@@ -81,12 +89,25 @@ const CSS = `
   position: fixed;
   bottom: 10px;
   left: 10px;
+  width: 160px;
   z-index: 2147483646;
   line-height: 0;
   border-radius: 6px;
   overflow: hidden;
   background: #000;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+/* Hidden, but still rendered: Chrome delivers camera frames only for a video element that is
+   in the document and not display:none / visibility:hidden, so hiding the preview that way
+   would stop the tracker dead. Two invisible pixels in the corner cost nothing. */
+#${VIDEO_CONTAINER_ID}.saccade-hidden {
+  width: 2px;
+  height: 2px;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: none;
 }
 #${VIDEO_CONTAINER_ID} video {
   display: block;
@@ -117,7 +138,7 @@ const CSS = `
  * `initJsPsych({ extensions: [{ type: jsPsychExtensionSaccade }] })`, then opt individual trials
  * in with `extensions: [{ type: jsPsychExtensionSaccade, params: { targets: [...] } }]`.
  *
- * @see {@link https://jspsych.github.io/saccadejs/ saccade.js documentation}
+ * @see {@link https://saccade.jspsych.org/reference/extension/ saccade.js: the jsPsych extension}
  */
 class SaccadeExtension implements JsPsychExtension {
   static info: JsPsychExtensionInfo = {
@@ -195,11 +216,17 @@ class SaccadeExtension implements JsPsychExtension {
 
   // ---- tracker state -------------------------------------------------------------------------
   private tracker: SaccadeTracker | null = null;
+  /** False for a tracker handed in through the `tracker` parameter: `dispose()` leaves it alone. */
+  private ownsTracker = false;
   private initialized = false;
   private starting: Promise<void> | null = null;
   private backend: string | null = null;
   private frameUnsubscribe: (() => void) | null = null;
   private faceFound = false;
+
+  // ---- setup progress ------------------------------------------------------------------------
+  private progressCallbacks: Array<SaccadeProgressCallback> = [];
+  private lastProgress: SaccadeProgress | null = null;
 
   // ---- per-trial state -----------------------------------------------------------------------
   private currentTrialData: SaccadeGazeSample[] = [];
@@ -242,6 +269,8 @@ class SaccadeExtension implements JsPsychExtension {
 
     if (tracker) {
       this.tracker = tracker;
+      this.ownsTracker = false;
+      this.parkVideo();
     }
 
     if (typeof MutationObserver !== "undefined") {
@@ -352,18 +381,20 @@ class SaccadeExtension implements JsPsychExtension {
 
   /** Show the small mirrored camera preview in the bottom-left corner. */
   showVideo = (): void => {
-    this.injectStyle();
-    const container = this.ensureVideoContainer();
-    const tracker = this.tracker;
-    if (tracker && tracker.video && tracker.video.parentElement !== container) {
-      container.appendChild(tracker.video);
-    }
-    container.style.display = "";
+    const container = this.claimVideo();
+    container.classList.remove("saccade-hidden");
   };
 
-  /** Hide the camera preview. */
+  /**
+   * Hide the camera preview.
+   *
+   * The video element is taken back into the extension's own container and made invisible
+   * there; it is never `display: none`d or detached, because Chrome only delivers camera
+   * frames for a video that is actually rendered. Hiding it any other way stops the tracker.
+   */
   hideVideo = (): void => {
-    if (this.videoContainer) this.videoContainer.style.display = "none";
+    const container = this.claimVideo();
+    container.classList.add("saccade-hidden");
   };
 
   /** Show a dot at the current gaze prediction. */
@@ -393,6 +424,8 @@ class SaccadeExtension implements JsPsychExtension {
    * @param y Vertical position of the target, in pixels from the top of the viewport.
    * @param embeddings Pre-collected embeddings for this point. Omit to collect them now.
    * @param captureMs How long to collect embeddings for when `embeddings` is omitted.
+   * @param timeoutMs How long to wait for a single camera frame before rejecting with `no
+   *   camera frames for <ms> ms`. Without it a dead frame source freezes the trial silently.
    * @returns The number of embeddings recorded for the point (0 if none could be collected).
    */
   calibratePoint = async (
@@ -400,6 +433,7 @@ class SaccadeExtension implements JsPsychExtension {
     y: number,
     embeddings?: Float32Array[],
     captureMs = 500,
+    timeoutMs = DEFAULT_FRAME_TIMEOUT_MS,
   ): Promise<number> => {
     const tracker = this.getTracker();
     const target = {
@@ -412,7 +446,7 @@ class SaccadeExtension implements JsPsychExtension {
       collected = [];
       const until = performance.now() + captureMs;
       while (performance.now() < until) {
-        const e = await tracker.nextEmbedding();
+        const e = await withFrameTimeout(tracker.nextEmbedding(), timeoutMs);
         if (e) collected.push(e);
       }
     }
@@ -451,8 +485,85 @@ class SaccadeExtension implements JsPsychExtension {
 
   /** The underlying `SaccadeTracker`, constructing it if it does not exist yet. */
   getTracker = (): SaccadeTracker => {
-    this.tracker ??= new SaccadeTracker({ assets: this.assets, tta: this.tta });
+    if (!this.tracker) {
+      this.tracker = new SaccadeTracker({
+        assets: this.assets,
+        tta: this.tta,
+        onProgress: this.handleProgress,
+      });
+      this.ownsTracker = true;
+      this.parkVideo();
+    }
     return this.tracker;
+  };
+
+  /**
+   * Subscribe to the load progress of `start()` — camera permission, MediaPipe, the
+   * face-landmarker task, onnxruntime-web, the ~20 MB eye model, and the warm-up — so a trial
+   * can show a progress bar instead of a blank wait. The most recent report (if any) is
+   * delivered synchronously on subscribe, so a late subscriber is not left with an empty bar.
+   *
+   * A tracker supplied through the `tracker` initialize parameter was constructed by the page,
+   * which owns its `onProgress`; nothing is reported for it here.
+   *
+   * @returns A function that removes the subscription.
+   */
+  onSetupProgress = (callback: SaccadeProgressCallback): (() => void) => {
+    this.progressCallbacks.push(callback);
+    if (this.lastProgress) {
+      try {
+        callback(this.lastProgress);
+      } catch {
+        // A broken listener must not take the caller down with it.
+      }
+    }
+    return () => {
+      this.progressCallbacks = this.progressCallbacks.filter((item) => item !== callback);
+    };
+  };
+
+  /** The most recent setup progress report, or `null` if `start()` has not begun. */
+  getSetupProgress = (): SaccadeProgress | null => this.lastProgress;
+
+  /**
+   * Tear down everything the extension put on the page: the frame subscriptions, the camera
+   * preview container, the gaze dot, and — unless the tracker was handed in through the
+   * `tracker` initialize parameter — the tracker itself, which releases the camera.
+   *
+   * jsPsych has no extension teardown hook, so an application that ends an experiment and
+   * starts another (a demo page with a "run again" button, a React route change) has to call
+   * this itself. The extension is left in its pre-`start()` state, so a later `start()` builds
+   * a fresh tracker rather than reusing a disposed one.
+   */
+  dispose = (): void => {
+    this.trialUnsubscribe?.();
+    this.trialUnsubscribe = null;
+    this.frameUnsubscribe?.();
+    this.frameUnsubscribe = null;
+    // Disconnected, not discarded: a MutationObserver is reusable, and `initialize` is the only
+    // place one is built, so throwing it away would leave a re-started extension without one.
+    this.domObserver?.disconnect();
+
+    if (this.tracker) {
+      if (this.ownsTracker) this.tracker.dispose();
+      else this.tracker.stop();
+    }
+    this.tracker = null;
+    this.ownsTracker = false;
+    this.initialized = false;
+    this.starting = null;
+    this.backend = null;
+    this.faceFound = false;
+    this.currentGaze = null;
+    this.lastProgress = null;
+    this.progressCallbacks = [];
+    this.gazeUpdateCallbacks = [];
+
+    this.gazeDot?.remove();
+    this.gazeDot = null;
+    this.predictionsVisible = false;
+    this.videoContainer?.remove();
+    this.videoContainer = null;
   };
 
   /** The measured display + camera lag in ms, or `null` if it was never measured. */
@@ -477,6 +588,18 @@ class SaccadeExtension implements JsPsychExtension {
   // =============================================================================================
   // internals
   // =============================================================================================
+
+  /** Fan the tracker's load progress out to `onSetupProgress` subscribers. */
+  private handleProgress = (p: SaccadeProgress): void => {
+    this.lastProgress = p;
+    for (const cb of Array.from(this.progressCallbacks)) {
+      try {
+        cb(p);
+      } catch {
+        // Progress is a UI convenience; a broken listener must not fail init.
+      }
+    }
+  };
 
   /** Persistent per-frame handler: overlays, the current prediction, and subscriber callbacks. */
   private handleFrame = (frame: TrackerFrame): void => {
@@ -562,22 +685,60 @@ class SaccadeExtension implements JsPsychExtension {
 
   private ensureVideoContainer(): HTMLDivElement {
     if (!this.videoContainer) {
-      const container = document.createElement("div");
+      // Reuse an existing container if one is already on the page (a second extension
+      // instance, a re-initialised jsPsych): two elements with the same id, one of them
+      // holding the video, is a good way to end up hiding the wrong one.
+      const existing = document.getElementById(VIDEO_CONTAINER_ID) as HTMLDivElement | null;
+      const container = existing ?? document.createElement("div");
       container.id = VIDEO_CONTAINER_ID;
-      container.style.width = "160px";
-      document.body.appendChild(container);
+      container.classList.add("saccade-hidden");
       this.videoContainer = container;
     }
+    if (!this.videoContainer.isConnected) document.body.appendChild(this.videoContainer);
     return this.videoContainer;
+  }
+
+  /**
+   * Put the camera element in the hidden container if it is not in the document at all.
+   *
+   * Done as soon as a tracker exists, so an experiment that never runs `saccade-preview` (and
+   * therefore never calls `showVideo`) still gets camera frames: the tracker's `<video>` has to
+   * be rendered somewhere for Chrome to deliver them. A video the page has already placed
+   * itself is left where it is.
+   */
+  private parkVideo(): void {
+    const video = this.tracker?.video;
+    if (!video || video.isConnected || typeof document === "undefined" || !document.body) return;
+    this.injectStyle();
+    this.ensureVideoContainer().appendChild(video);
+  }
+
+  /**
+   * Move the tracker's video element into the extension's container and return it.
+   *
+   * Both `showVideo` and `hideVideo` do this, so a plugin that borrowed the element (the
+   * preview plugin puts it in the jsPsych display) hands it back rather than leaving it to be
+   * destroyed by the next `display_element.innerHTML = ""` — which would silently end the
+   * camera frames for the rest of the experiment.
+   */
+  private claimVideo(): HTMLDivElement {
+    this.injectStyle();
+    const container = this.ensureVideoContainer();
+    const video = this.tracker?.video;
+    if (video && video.parentElement !== container) container.appendChild(video);
+    return container;
   }
 
   private ensureGazeDot(): HTMLDivElement {
     if (!this.gazeDot) {
-      const dot = document.createElement("div");
+      // Reuse a dot already on the page, for the same reason as the video container: a second
+      // extension instance (a re-initialised jsPsych) must not leave two elements sharing an id.
+      const existing = document.getElementById(GAZE_DOT_ID) as HTMLDivElement | null;
+      const dot = existing ?? document.createElement("div");
       dot.id = GAZE_DOT_ID;
-      document.body.appendChild(dot);
       this.gazeDot = dot;
     }
+    if (!this.gazeDot.isConnected) document.body.appendChild(this.gazeDot);
     return this.gazeDot;
   }
 

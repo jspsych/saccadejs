@@ -5,11 +5,26 @@ import { median } from "./grids";
 import type { SaccadeTracker } from "./tracker";
 import type { CalPoint, Gaze } from "./types";
 
+/** Default for `CollectOptions.timeoutMs`: how long a capture waits for one camera frame. */
+export const DEFAULT_FRAME_TIMEOUT_MS = 5000;
+
 export interface CollectOptions {
   /** How long the target is shown before sampling starts, so the eye can land on it. */
   settleMs: number;
   /** How long samples are collected at each target. */
   captureMs: number;
+  /**
+   * How long to wait for a single camera frame before giving up, in ms.
+   *
+   * A frame source that has died — a `<video>` the host stopped rendering, a camera another
+   * program took, a track that ended — never resolves `nextFrame()`, so without this the
+   * capture loop waits forever and the trial freezes with nothing on screen to say why.
+   * Rejects with `no camera frames for <ms> ms` instead, which the caller can display.
+   * `0` (or any non-finite value) waits indefinitely.
+   *
+   * @default 5000
+   */
+  timeoutMs?: number;
 }
 
 export interface TargetUi {
@@ -18,6 +33,29 @@ export interface TargetUi {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Reject `p` if it has not settled within `ms`, with a message a plugin can put on screen.
+ *
+ * Exported because the jsPsych extension's `calibratePoint` runs the same capture loop against
+ * the same frame source and needs the same guard.
+ */
+export function withFrameTimeout<T>(p: Promise<T>, ms = DEFAULT_FRAME_TIMEOUT_MS): Promise<T> {
+  if (!Number.isFinite(ms) || ms <= 0) return p;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`no camera frames for ${ms} ms`)), ms);
+    p.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 /**
@@ -31,6 +69,7 @@ export async function runCalibration(
   ui: TargetUi,
 ): Promise<CalPoint[]> {
   const out: CalPoint[] = [];
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_FRAME_TIMEOUT_MS;
   for (const target of targets) {
     ui.showTarget(target, "settle");
     await sleep(opts.settleMs);
@@ -38,7 +77,7 @@ export async function runCalibration(
     const embeddings: Float32Array[] = [];
     const until = performance.now() + opts.captureMs;
     while (performance.now() < until) {
-      const e = await tracker.nextEmbedding();
+      const e = await withFrameTimeout(tracker.nextEmbedding(), timeoutMs);
       if (e) embeddings.push(e);
     }
     if (embeddings.length === 0) continue;
@@ -93,6 +132,7 @@ export async function runValidation(
 ): Promise<ValidationResult> {
   const { width, height } = opts.viewport;
   const points: ValidationPoint[] = [];
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_FRAME_TIMEOUT_MS;
   for (const target of targets) {
     ui.showTarget(target, "settle");
     await sleep(opts.settleMs);
@@ -100,7 +140,7 @@ export async function runValidation(
     const samples: ValidationSample[] = [];
     const until = performance.now() + opts.captureMs;
     while (performance.now() < until) {
-      const f = await tracker.nextFrame();
+      const f = await withFrameTimeout(tracker.nextFrame(), timeoutMs);
       if (f.gaze) samples.push({ gaze: f.gaze, time: f.time.meanCapture ?? f.time.capture });
     }
     if (samples.length === 0) {

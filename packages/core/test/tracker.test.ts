@@ -125,6 +125,37 @@ describe("SaccadeTracker", () => {
     expect(t.video.srcObject).toBeNull();
   }, 15000);
 
+  it("keeps its video in the document, and puts it back if it is detached", () => {
+    const t = new SaccadeTracker();
+    expect(t.video.isConnected).toBe(false);
+
+    t.start();
+    // Rendered but invisible: Chrome only delivers camera frames for a rendered video, so the
+    // holder must not use display:none or visibility:hidden.
+    const holder = t.video.parentElement!;
+    expect(holder.isConnected).toBe(true);
+    expect(holder.hasAttribute("data-saccade-video-holder")).toBe(true);
+    expect(holder.style.display).not.toBe("none");
+    expect(holder.style.visibility).not.toBe("hidden");
+    expect(holder.style.opacity).toBe("0");
+
+    // A host is free to move it into its own container.
+    const mine = document.createElement("div");
+    document.body.appendChild(mine);
+    mine.appendChild(t.video);
+    t.start();
+    expect(t.video.parentElement).toBe(mine);
+
+    // But if that container goes away, the tracker takes the video back.
+    mine.remove();
+    expect(t.video.isConnected).toBe(false);
+    t.start();
+    expect(t.video.parentElement).toBe(holder);
+
+    t.dispose();
+    expect(holder.isConnected).toBe(false);
+  });
+
   it("hands out the grids the contract names", () => {
     expect(defaultGrid13()).toHaveLength(13);
     expect(trainingGrid20()).toHaveLength(20);
