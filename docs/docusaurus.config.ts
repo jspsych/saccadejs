@@ -32,12 +32,7 @@ const config: Config = defineJspsychConfig({
     items: [
       { to: "/", label: "Introduction", position: "left", activeBaseRegex: "^/$" },
       { to: "/demo", label: "Live demo", position: "left" },
-      {
-        type: "docSidebar",
-        sidebarId: "gettingStarted",
-        label: "Getting started",
-        position: "left",
-      },
+      { to: "/getting-started", label: "Getting started", position: "left" },
       {
         type: "docSidebar",
         sidebarId: "guides",

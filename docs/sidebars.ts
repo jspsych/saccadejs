@@ -1,11 +1,11 @@
 import type { SidebarsConfig } from "@docusaurus/plugin-content-docs";
 
 /**
- * One sidebar per navbar tab. Introduction and the live demo are single pages linked
- * directly from the navbar, so they have no sidebar of their own.
+ * One sidebar per navbar tab. Introduction, the live demo and Getting started are single
+ * pages linked directly from the navbar, so they have no sidebar of their own: they run
+ * full width, and their own headings are the only navigation they need.
  */
 const sidebars: SidebarsConfig = {
-  gettingStarted: ["getting-started"],
   guides: [
     "guides/timing-and-synchrony",
     "guides/hosting-the-assets",
