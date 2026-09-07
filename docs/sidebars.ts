@@ -20,6 +20,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         "reference/plugin-preview",
+        "reference/plugin-performance",
         "reference/plugin-time-sync",
         "reference/plugin-calibrate",
         "reference/plugin-validate",

@@ -19,8 +19,12 @@ to separate quadrants or a handful of well-spaced regions of interest. It is not
 reading or for small stimuli.
 
 <p>
-  <Link className="button button--primary button--lg" to="/demo">Try the live demo</Link>{" "}
-  <Link className="button button--secondary button--lg" to="/getting-started">Getting started</Link>
+  <Link className="button button--primary button--lg" to="/demo">
+    Try the live demo
+  </Link>{" "}
+  <Link className="button button--secondary button--lg" to="/getting-started">
+    Getting started
+  </Link>
 </p>
 
 ## What you need
@@ -28,19 +32,22 @@ reading or for small stimuli.
 - **Chrome or Edge**, on a laptop or desktop. Other browsers run the tracker but may not supply
   camera capture timestamps, which the timing measurement needs.
 - **A webcam**, and a page served over `https://` or `localhost`.
-- **WebGPU** for full frame rate. Without it the model runs on WebAssembly, more slowly.
+- **WebGPU** for full frame rate. Without it the model runs on WebAssembly, more slowly —
+  [`saccade-performance`](reference/plugin-performance) measures which you got, and can turn
+  a machine that is too slow away before it reaches calibration.
 - **About 25 MB** downloaded on a participant's first visit, cached by the browser afterwards.
 
 ## The packages
 
-| Package | What it does | Browser global |
-| --- | --- | --- |
-| [`@saccadejs/core`](reference/core-api) | Tracker, calibration, validation, timing loopback. No jsPsych dependency. | `Saccade` |
-| [`@saccadejs/extension`](reference/extension) | Records `{x, y, t}` per camera frame during any trial. | `jsPsychExtensionSaccade` |
-| [`@saccadejs/plugin-preview`](reference/plugin-preview) | Starts the camera and lets the participant position themselves. | `jsPsychSaccadePreview` |
-| [`@saccadejs/plugin-time-sync`](reference/plugin-time-sync) | Measures screen-to-camera lag and applies it to gaze timestamps. | `jsPsychSaccadeTimeSync` |
-| [`@saccadejs/plugin-calibrate`](reference/plugin-calibrate) | Calibration trial. | `jsPsychSaccadeCalibrate` |
-| [`@saccadejs/plugin-validate`](reference/plugin-validate) | Validation trial. | `jsPsychSaccadeValidate` |
+| Package                                                         | What it does                                                                        | Browser global              |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------- |
+| [`@saccadejs/core`](reference/core-api)                         | Tracker, calibration, validation, timing loopback. No jsPsych dependency.           | `Saccade`                   |
+| [`@saccadejs/extension`](reference/extension)                   | Records `{x, y, t}` per camera frame during any trial.                              | `jsPsychExtensionSaccade`   |
+| [`@saccadejs/plugin-preview`](reference/plugin-preview)         | Starts the camera and lets the participant position themselves.                     | `jsPsychSaccadePreview`     |
+| [`@saccadejs/plugin-performance`](reference/plugin-performance) | Measures the effective frame rate, and can exclude machines too slow for the study. | `jsPsychSaccadePerformance` |
+| [`@saccadejs/plugin-time-sync`](reference/plugin-time-sync)     | Measures screen-to-camera lag and applies it to gaze timestamps.                    | `jsPsychSaccadeTimeSync`    |
+| [`@saccadejs/plugin-calibrate`](reference/plugin-calibrate)     | Calibration trial.                                                                  | `jsPsychSaccadeCalibrate`   |
+| [`@saccadejs/plugin-validate`](reference/plugin-validate)       | Validation trial.                                                                   | `jsPsychSaccadeValidate`    |
 
 ## Where to go next
 
