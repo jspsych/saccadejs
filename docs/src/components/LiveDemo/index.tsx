@@ -10,11 +10,17 @@ import styles from "./styles.module.css";
 /**
  * The live demo on `/demo`.
  *
- * It is a **real jsPsych experiment**: the published extension and the four published plugins,
- * on the timeline from `docs/getting-started.mdx`, rendered into a container on this page with
+ * It is a **real jsPsych experiment**: the published extension and the published plugins, on the
+ * timeline from `docs/getting-started.mdx`, rendered into a container on this page with
  * `initJsPsych({ display_element })`. Nothing about the eye tracking is reimplemented here —
  * whatever an experimenter installs is exactly what runs, so the demo cannot quietly drift away
  * from the documentation.
+ *
+ * The one departure from that timeline is `saccade-time-sync`, which is left out. It measures
+ * this computer's screen-to-camera lag so that gaze samples can be lined up with stimulus
+ * timing, and there is nothing in a demo that ends at "where were you looking" for it to change:
+ * a visitor would spend a minute on a trial whose result they never see. Experiments that care
+ * about when a participant looked at something still need it — see `Timing and synchrony`.
  *
  * React contributes three things and no more: the intro screen, the annotation banner above the
  * experiment (driven from jsPsych's `on_trial_start`), and the plain-language summary after
@@ -35,37 +41,35 @@ interface Annotation {
   text: string;
 }
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 5;
 
 /**
- * What to say above each trial, keyed by the plugin's `info.name` — the same string that lands
- * in the data as `trial_type`. `on_trial_start` looks the running trial up in here, so adding a
- * trial to the timeline means adding a line here and nothing else.
+ * What to say above the experiment, keyed by the `demo_step` that every trial on the timeline
+ * carries in its `data`. Keyed by step rather than by plugin because the mapping is not one
+ * trial to one line either way round: calibration is an instruction screen followed by the
+ * calibration trial, and both should leave the banner reading "Calibration". `on_trial_start`
+ * looks the running trial's `demo_step` up in here, so adding a trial to the timeline means
+ * giving it one of these ids and nothing else.
  */
 const ANNOTATIONS: Record<string, Annotation> = {
-  "saccade-preview": {
+  camera: {
     title: "Camera setup",
     step: 1,
     text: "Your browser is asking for the camera and downloading the eye model, about 20 MB. Sit an arm's length away, with light on your face rather than behind you.",
   },
-  "saccade-time-sync": {
-    title: "Timing check",
-    step: 2,
-    text: "Screens and cameras both add a small delay. Measuring it is what lets a gaze sample be lined up with whatever was on the screen at the time.",
-  },
-  "saccade-calibrate": {
+  calibrate: {
     title: "Calibration",
-    step: 3,
+    step: 2,
     text: "Thirteen dots, one at a time. Look straight at each one and hold still — this is where the tracker learns what your eyes look like when you look at a known place.",
   },
-  "saccade-validate": {
+  validate: {
     title: "Accuracy check",
-    step: 4,
+    step: 3,
     text: "Nine dots the calibration never saw, so the number at the end is an honest measure of how far off the tracker is.",
   },
-  "html-keyboard-response": {
+  look: {
     title: "Free look",
-    step: 5,
+    step: 4,
     text: "An ordinary jsPsych trial with the extension attached. The red dot is where the tracker thinks you are looking; every frame of it is being recorded.",
   },
 };
@@ -81,6 +85,48 @@ const RESULTS: Annotation = {
   step: TOTAL_STEPS,
   text: "What the experiment measured, in the units an experiment would report.",
 };
+
+// ---------------------------------------------------------------------------------------
+// the instruction screens
+
+/**
+ * Wrap instruction copy in the markup the screens share.
+ *
+ * Calibration and validation both start moving a dot the moment the trial begins, so a
+ * participant who has not been told what to do misses the first few points — which is exactly
+ * why a real experiment puts a screen like this in front of each of them, and why the demo does
+ * too. Plain HTML with inline styles, for the same reason as `LOOK_STIMULUS`.
+ *
+ * There is no "press a key to continue" line: these run on `html-button-response`, so the
+ * button below the text says what to do.
+ */
+function instructions(heading: string, body: string): string {
+  return `
+    <div style="max-width:34rem; margin:0 auto 1.5rem; text-align:left;">
+      <h2 style="margin-top:0;">${heading}</h2>
+      ${body}
+    </div>`;
+}
+
+const CALIBRATE_INSTRUCTIONS = instructions(
+  "Calibration",
+  `<p>A dot is about to appear on the screen. After a moment it will vanish and reappear
+  somewhere else, thirteen times in all — about twenty seconds.</p>
+  <ul>
+    <li>Look straight at each dot as soon as it appears, and keep looking until it moves.</li>
+    <li>Move your eyes, not your head. From here on, hold your head as still as you can.</li>
+  </ul>
+  <p>This is the part where the tracker learns what your eyes look like when you look at a known
+  place, so everything that comes after depends on it.</p>`,
+);
+
+const VALIDATE_INSTRUCTIONS = instructions(
+  "Accuracy check",
+  `<p>The same thing again, with nine dots. Look straight at each one and keep your head still,
+  exactly as before.</p>
+  <p>These dots are in places the calibration never used, so how close the tracker comes to them
+  is an honest measure of how accurate it is — and it is the number you will see at the end.</p>`,
+);
 
 // ---------------------------------------------------------------------------------------
 // the free-viewing trial
@@ -104,8 +150,6 @@ const LOOK_STIMULUS = `
 // summarising the data
 
 interface Summary {
-  lagMs: number | null;
-  lagVerdict: string | null;
   errorPercent: number | null;
   leftSamples: number;
   rightSamples: number;
@@ -136,16 +180,15 @@ function summarise(jsPsych: JsPsych): Summary {
   const first = (trial_type: string): any => data.filter({ trial_type }).values()[0] ?? {};
 
   const preview = first("saccade-preview");
-  const sync = first("saccade-time-sync");
   const validation = first("saccade-validate");
-  const look = first("html-keyboard-response");
+  // By `demo_step` rather than by `trial_type`, so that it keeps finding the right trial if the
+  // free-viewing trial is ever rebuilt on a different plugin.
+  const look = data.filter({ demo_step: "look" }).values()[0] ?? ({} as any);
 
   const samples: Array<{ x: number; y: number }> = look.saccade_data ?? [];
   const targets: Record<string, Rect> = look.saccade_targets ?? {};
 
   return {
-    lagMs: Number.isFinite(sync.lag_ms) ? sync.lag_ms : null,
-    lagVerdict: sync.verdict ?? null,
     errorPercent: Number.isFinite(validation.median_error_viewport)
       ? validation.median_error_viewport * 100
       : null,
@@ -242,7 +285,7 @@ function Demo() {
     teardown();
     setError(null);
     setSummary(null);
-    setAnnotation(ANNOTATIONS["saccade-preview"]);
+    setAnnotation(ANNOTATIONS.camera);
     setPhase("running");
 
     try {
@@ -252,17 +295,17 @@ function Demo() {
         { initJsPsych },
         { default: jsPsychExtensionSaccade },
         { default: jsPsychSaccadePreview },
-        { default: jsPsychSaccadeTimeSync },
         { default: jsPsychSaccadeCalibrate },
         { default: jsPsychSaccadeValidate },
+        { default: jsPsychHtmlButtonResponse },
         { default: jsPsychHtmlKeyboardResponse },
       ] = await Promise.all([
         import("jspsych"),
         import("@saccadejs/extension"),
         import("@saccadejs/plugin-preview"),
-        import("@saccadejs/plugin-time-sync"),
         import("@saccadejs/plugin-calibrate"),
         import("@saccadejs/plugin-validate"),
+        import("@jspsych/plugin-html-button-response"),
         import("@jspsych/plugin-html-keyboard-response"),
       ]);
 
@@ -278,25 +321,39 @@ function Demo() {
           { type: jsPsychExtensionSaccade, params: { assets: { modelUrl } } },
         ],
         on_trial_start: (trial: any) => {
-          const name: string | undefined = trial?.type?.info?.name;
-          if (name && ANNOTATIONS[name]) setAnnotation(ANNOTATIONS[name]);
+          const step: string | undefined = trial?.data?.demo_step;
+          if (step && ANNOTATIONS[step]) setAnnotation(ANNOTATIONS[step]);
         },
       });
       jsPsychRef.current = jsPsych;
       const extension = jsPsych.extensions.saccade as unknown as SaccadeExtension;
 
+      // Every trial carries a `demo_step`: it is what the banner above the experiment reads,
+      // and it is how `summarise` picks the free-viewing trial out of the data.
       const timeline = [
         // Camera permission, the model download with its progress bar, and head positioning.
-        { type: jsPsychSaccadePreview },
-        // Measure this participant's screen-to-camera lag and apply it to every later `t`.
-        { type: jsPsychSaccadeTimeSync },
-        // Fit the gaze model on 13 points, then check it on 9 held-out points.
-        { type: jsPsychSaccadeCalibrate },
-        { type: jsPsychSaccadeValidate },
+        { type: jsPsychSaccadePreview, data: { demo_step: "camera" } },
+        // Fit the gaze model on 13 points, then check it on 9 held-out points. Each is preceded
+        // by an instruction screen, because each starts moving a dot as soon as it begins.
+        {
+          type: jsPsychHtmlButtonResponse,
+          stimulus: CALIBRATE_INSTRUCTIONS,
+          choices: ["Begin calibration"],
+          data: { demo_step: "calibrate" },
+        },
+        { type: jsPsychSaccadeCalibrate, data: { demo_step: "calibrate" } },
+        {
+          type: jsPsychHtmlButtonResponse,
+          stimulus: VALIDATE_INSTRUCTIONS,
+          choices: ["Begin accuracy check"],
+          data: { demo_step: "validate" },
+        },
+        { type: jsPsychSaccadeValidate, data: { demo_step: "validate" } },
         // An ordinary trial that records gaze. `extensions` is what turns recording on.
         {
           type: jsPsychHtmlKeyboardResponse,
           stimulus: LOOK_STIMULUS,
+          data: { demo_step: "look" },
           on_load: () => extension.showPredictions(),
           on_finish: () => extension.hidePredictions(),
           extensions: [{ type: jsPsychExtensionSaccade, params: { targets: ["#left", "#right"] } }],
@@ -425,23 +482,6 @@ function Results({ summary, onRerun }: { summary: Summary; onRerun: () => void }
     <div className={styles.panel}>
       <h3 className={styles.resultsHeading}>What just happened</h3>
       <ul className={styles.resultsList}>
-        <li>
-          {summary.lagMs === null ? (
-            <>
-              The delay between your screen and your camera could not be measured on this computer.
-              That only matters for experiments that line gaze up with stimulus timing.
-            </>
-          ) : (
-            <>
-              Your screen and camera together run{" "}
-              <strong>{summary.lagMs.toFixed(0)} ms behind</strong>. Every gaze timestamp above has
-              had that subtracted, so it is on the same clock as the trial's own timings.
-              {summary.lagVerdict && summary.lagVerdict !== "OK"
-                ? ` (The measurement came back ${summary.lagVerdict.toLowerCase()}.)`
-                : null}
-            </>
-          )}
-        </li>
         <li>
           {summary.errorPercent === null ? (
             <>No usable gaze was collected during the accuracy check.</>
