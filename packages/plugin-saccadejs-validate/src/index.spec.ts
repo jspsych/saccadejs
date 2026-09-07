@@ -41,7 +41,7 @@ describe("saccade-validate info", () => {
     expect(p.show_validation_data.default).toBe(false);
   });
 
-  it("documents the WebGazer-compatible data fields plus the error summaries", () => {
+  it("documents the per-point data fields plus the error summaries", () => {
     expect(Object.keys(SaccadeValidatePlugin.info.data).sort()).toEqual([
       "average_offset",
       "median_error_px",

@@ -7,7 +7,6 @@ import type { SidebarsConfig } from "@docusaurus/plugin-content-docs";
 const sidebars: SidebarsConfig = {
   gettingStarted: ["getting-started"],
   guides: [
-    "guides/migrating-from-webgazer",
     "guides/timing-and-synchrony",
     "guides/hosting-the-assets",
     "guides/how-it-works",

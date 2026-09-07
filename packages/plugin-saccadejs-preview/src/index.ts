@@ -162,7 +162,7 @@ type Info = typeof info;
 /**
  * Starts the saccade.js camera and models, and lets the participant position themselves in front
  * of the webcam. Shows the mirrored camera image, the 144×36 eye crop that the model sees, and a
- * face-found indicator. This is the saccade.js replacement for `webgazer-init-camera`.
+ * face-found indicator.
  *
  * The `saccade` extension must be registered in `initJsPsych`.
  *

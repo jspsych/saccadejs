@@ -236,12 +236,33 @@ describe("SaccadeExtension public API", () => {
     expect(container.style.display).toBe("");
   });
 
-  it("initializes the tracker eagerly when auto_initialize is set", async () => {
+  it("does not touch the camera until something starts it", async () => {
+    // initialize() runs during initJsPsych, before any trial is on screen: prompting for the
+    // camera there is exactly what the saccade-preview trial exists to avoid.
     const tracker = new SaccadeTracker();
     const extension = new SaccadeExtension(makeJsPsych(display));
-    await extension.initialize({ tracker: tracker as any, auto_initialize: true });
+    await extension.initialize({ tracker: tracker as any });
+    expect(extension.isInitialized()).toBe(false);
+    expect(tracker.init).not.toHaveBeenCalled();
+
+    await extension.start();
     expect(extension.isInitialized()).toBe(true);
     expect(tracker.init).toHaveBeenCalled();
+  });
+
+  it("warns once when a trial records before the camera has been started", () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const extension = new SaccadeExtension(makeJsPsych(display));
+
+    extension.on_start({ targets: [] });
+    extension.on_load();
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    extension.on_start({ targets: [] });
+    extension.on_load();
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    warn.mockRestore();
   });
 
   it("pauses and resumes the tracker", async () => {

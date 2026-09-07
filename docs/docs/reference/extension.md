@@ -22,10 +22,16 @@ requires it.
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | `round_predictions` | `boolean` | `true` | Round `x` and `y` to whole pixels in the recorded data. |
-| `auto_initialize` | `boolean` | `false` | Prompt for the camera and download the model during `initJsPsych` instead of at the [`saccade-preview`](plugin-preview) trial. |
 | `tta` | `number` | `5` | Frames whose embeddings are averaged before predicting. Higher is smoother and laggier; set `1` for gaze-contingent designs. |
 | `assets` | `SaccadeAssets` | `{}` | Model and runtime URLs. See [Hosting the assets](../guides/hosting-the-assets). |
 | `tracker` | `SaccadeTracker` | — | Use a pre-built tracker instead of constructing one. The extension will not dispose a tracker it did not create. |
+
+Registering the extension does not touch the camera. The permission prompt and the model download
+happen at the first [`saccade-preview`](plugin-preview) trial, where the participant has something
+to look at and an explanation of what is being asked — put one in the timeline before any trial
+that records gaze. Nothing stops you from calling
+[`start()`](#methods) yourself instead, from your own plugin or from a
+[`call-function`](https://www.jspsych.org/latest/plugins/call-function/) trial.
 
 ## Trial parameters
 

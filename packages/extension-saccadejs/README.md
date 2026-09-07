@@ -4,11 +4,6 @@ The [saccade.js](https://github.com/jspsych/saccadejs) eye-tracking extension fo
 [jsPsych](https://www.jspsych.org). Add it to a trial and the trial's data gains a gaze sample for
 every camera frame, plus the on-screen position of any elements you name.
 
-It mirrors [`@jspsych/extension-webgazer`](https://www.jspsych.org/latest/extensions/webgazer/)
-closely enough that porting an existing eye-tracking experiment is mostly search-and-replace:
-`webgazer` → `saccade`, `webgazer_data` → `saccade_data`, `webgazer_targets` →
-`saccade_targets`.
-
 ## Installation
 
 ```
@@ -54,10 +49,13 @@ Pass these in `initJsPsych` as `{ type: jsPsychExtensionSaccade, params: { ... }
 | Parameter           | Type           | Default | Description                                                                                                                                                    |
 | ------------------- | -------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `round_predictions` | boolean        | `true`  | Round the predicted `x`, `y` to whole pixels. Saves a lot of space in the data, and the predictions are nowhere near precise to a fraction of a pixel.         |
-| `auto_initialize`   | boolean        | `false` | Request the camera and download the models as soon as the extension loads. Leave this `false` and use the `saccade-preview` plugin to control when it happens. |
 | `tta`               | integer        | `5`     | Number of consecutive frames whose eye embeddings are averaged before a gaze prediction is made. Larger is smoother but adds group delay.                      |
 | `assets`            | object         | `{}`    | `SaccadeAssets`: `modelUrl`, `ortWasmUrl`, `mediapipeWasmUrl`, `faceLandmarkerUrl`. Set these to self-host the model and wasm files instead of using a CDN.    |
 | `tracker`           | SaccadeTracker | –       | A pre-built `SaccadeTracker` to use instead of letting the extension construct one. Useful when the page shares a tracker with non-jsPsych code.               |
+
+Registering the extension does not touch the camera: the permission prompt and the model download
+happen at the first `saccade-preview` trial, or whenever you call
+`jsPsych.extensions.saccade.start()` yourself.
 
 ## Trial parameters
 
@@ -121,17 +119,6 @@ Reach the extension with `jsPsych.extensions.saccade`.
 | `onSetupProgress(cb)`                           | Subscribe to `start()`'s load progress (`SaccadeProgress`: camera → mediapipe → landmarker → ort → model → session → ready; only `model` reports bytes). The most recent report is replayed on subscribe. Returns a function that unsubscribes. Nothing is reported for a tracker supplied through the `tracker` parameter — the page that built it owns its `onProgress`. |
 | `getSetupProgress()`                            | The most recent `SaccadeProgress`, or `null`.                                                                                                                                       |
 | `dispose()`                                     | End everything: frame subscriptions, the camera preview, the gaze dot, and (unless the tracker came in through the `tracker` parameter) the tracker itself, releasing the camera. jsPsych has no extension teardown hook, so a page that ends one experiment and starts another has to call this. |
-
-## Migrating from the WebGazer extension
-
-| WebGazer                            | saccade.js                                                            |
-| ----------------------------------- | --------------------------------------------------------------------- |
-| `jsPsychExtensionWebgazer`          | `jsPsychExtensionSaccade`                                             |
-| `webgazer_data`, `webgazer_targets` | `saccade_data`, `saccade_targets` (same shapes)                       |
-| `sampling_interval`                 | _(gone)_ — samples arrive one per camera frame, not on a timer        |
-| `setRegressionType()`               | _(gone)_ — the calibration is always ridge on the eye embedding       |
-| `startMouseCalibration()`           | _(gone)_ — use `saccade-calibrate` with `calibration_mode: "click"`   |
-| –                                   | `saccade_timing`, `getTimingOffset()`, the `saccade-time-sync` plugin |
 
 ## License
 

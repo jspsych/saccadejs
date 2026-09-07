@@ -97,9 +97,8 @@ Register the extension and use the plugins; you never touch this API directly.
 const jsPsych = initJsPsych({ extensions: [{ type: jsPsychExtensionSaccade }] });
 ```
 
-See the [documentation site](https://saccade.jspsych.org/) for the extension, the
-`saccade-preview` / `saccade-calibrate` / `saccade-validate` / `saccade-time-sync` plugins,
-and the migration guide from WebGazer.
+See the [documentation site](https://saccade.jspsych.org/) for the extension and the
+`saccade-preview` / `saccade-calibrate` / `saccade-validate` / `saccade-time-sync` plugins.
 
 ## API sketch
 

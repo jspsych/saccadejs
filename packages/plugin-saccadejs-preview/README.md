@@ -1,8 +1,7 @@
 # @saccadejs/plugin-preview
 
 A [jsPsych](https://www.jspsych.org) plugin that starts the [saccade.js](https://github.com/jspsych/saccadejs)
-camera and lets the participant position themselves in front of it. It is the saccade.js
-replacement for `webgazer-init-camera`.
+camera and lets the participant position themselves in front of it.
 
 The trial shows the mirrored camera image, the 144×36 eye crop that the model actually sees
 (scaled up), a face-found indicator and the frame rate, and a continue button that stays disabled
@@ -63,8 +62,8 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-preview
 | `rt`            | integer | Time from the start of the trial until the button was clicked.                                                           |
 
 If the camera cannot be started (permission denied, no camera, WebGPU and wasm both unavailable),
-the trial shows an explanation and the underlying error message, and does not continue — the same
-dead end `webgazer-init-camera` uses, since there is nothing useful to record without a camera.
+the trial shows an explanation and the underlying error message, and does not continue: there is
+nothing useful to record without a camera.
 
 ## License
 

@@ -6,9 +6,8 @@ targets — the same ring-and-dot animation as
 [`saccade-calibrate`](../plugin-saccadejs-calibrate) — and compares the gaze predictions with
 where the participant was asked to look.
 
-Its parameters and data fields follow
-[`webgazer-validate`](https://www.jspsych.org/latest/plugins/webgazer-validate/), so an existing
-validation trial ports across unchanged, plus two summary fields (`median_error_px`,
+It reports the error at each point, the proportion of samples that landed inside a region of
+interest around it, and two summary numbers for the trial as a whole (`median_error_px`,
 `median_error_viewport`).
 
 Requires the [`@saccadejs/extension`](../extension-saccadejs) extension to be registered in

@@ -50,13 +50,6 @@ export interface InitializeParameters {
    */
   round_predictions?: boolean;
   /**
-   * Whether to initialize the tracker (camera permission prompt + model download) as soon as the
-   * extension loads. Leave this `false` if you use the `saccade-preview` plugin, which does the
-   * initialization at a controlled point in the timeline.
-   * @default false
-   */
-  auto_initialize?: boolean;
-  /**
    * Size of the test-time-augmentation ring buffer: the number of consecutive frames whose
    * embeddings are averaged before the gaze prediction is made. Larger values are smoother but
    * add group delay.
@@ -134,7 +127,7 @@ const CSS = `
 `;
 
 /**
- * The saccade.js jsPsych extension. Mirrors `@jspsych/extension-webgazer`: add it to
+ * The saccade.js jsPsych extension. Add it to
  * `initJsPsych({ extensions: [{ type: jsPsychExtensionSaccade }] })`, then opt individual trials
  * in with `extensions: [{ type: jsPsychExtensionSaccade, params: { targets: [...] } }]`.
  *
@@ -223,6 +216,8 @@ class SaccadeExtension implements JsPsychExtension {
   private backend: string | null = null;
   private frameUnsubscribe: (() => void) | null = null;
   private faceFound = false;
+  /** So the "you never started the tracker" warning is printed once, not once per trial. */
+  private warnedNotStarted = false;
 
   // ---- setup progress ------------------------------------------------------------------------
   private progressCallbacks: Array<SaccadeProgressCallback> = [];
@@ -257,7 +252,6 @@ class SaccadeExtension implements JsPsychExtension {
 
   initialize = async ({
     round_predictions = true,
-    auto_initialize = false,
     tta = 5,
     assets = {},
     tracker,
@@ -275,10 +269,6 @@ class SaccadeExtension implements JsPsychExtension {
 
     if (typeof MutationObserver !== "undefined") {
       this.domObserver = new MutationObserver(this.mutationObserverCallback);
-    }
-
-    if (auto_initialize) {
-      await this.start();
     }
   };
 
@@ -304,6 +294,8 @@ class SaccadeExtension implements JsPsychExtension {
       }
       // Per-trial sampling: subscribe for the duration of the trial only.
       this.trialUnsubscribe = this.tracker.onFrame(this.handleTrialFrame);
+    } else {
+      this.warnNotStarted();
     }
   };
 
@@ -553,6 +545,7 @@ class SaccadeExtension implements JsPsychExtension {
     this.initialized = false;
     this.starting = null;
     this.backend = null;
+    this.warnedNotStarted = false;
     this.faceFound = false;
     this.currentGaze = null;
     this.lastProgress = null;
@@ -579,7 +572,7 @@ class SaccadeExtension implements JsPsychExtension {
 
   /**
    * Store a loopback result so later trials can report it. Called by the `saccade-time-sync`
-   * plugin; not part of the WebGazer-compatible surface.
+   * plugin.
    */
   setLastLoopback = (result: LoopbackResult | null): void => {
     this.lastLoopback = result;
@@ -588,6 +581,21 @@ class SaccadeExtension implements JsPsychExtension {
   // =============================================================================================
   // internals
   // =============================================================================================
+
+  /**
+   * Warn, once, that a trial opted into the extension before anything started the camera. The
+   * trial records nothing in that case, and a silently empty `saccade_data` is a hard thing to
+   * debug after the fact.
+   */
+  private warnNotStarted(): void {
+    if (this.warnedNotStarted) return;
+    this.warnedNotStarted = true;
+    console.warn(
+      "saccade: a trial is recording gaze, but the camera has not been started, so " +
+        "`saccade_data` will be empty. Run a `saccade-preview` trial before the first recording " +
+        "trial, or call `jsPsych.extensions.saccade.start()` yourself.",
+    );
+  }
 
   /** Fan the tracker's load progress out to `onSetupProgress` subscribers. */
   private handleProgress = (p: SaccadeProgress): void => {

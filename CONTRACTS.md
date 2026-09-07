@@ -162,28 +162,30 @@ dynamically `import()`s onnxruntime-web and tasks-vision from the jsdelivr URLs 
 
 ## Extension: `@saccadejs/extension`
 
-Mirrors `@jspsych/extension-webgazer` so existing experiments port by search-and-replace.
-
 ```ts
 initialize({
   round_predictions = true,      // round x,y to integer pixels
-  auto_initialize = false,       // call tracker.init() now (camera prompt) vs from the preview plugin
   tta = 5,
   assets = {},                   // SaccadeAssets
   tracker,                       // optional pre-built SaccadeTracker
 }): Promise<void>
 on_start({ targets: string[] }); on_load(); on_finish() => ({ saccade_data, saccade_targets, saccade_timing })
 ```
+`initialize()` never touches the camera: `initJsPsych` runs before any trial is on screen, so a
+permission prompt there has nothing to explain itself with. `tracker.init()` happens at the
+`saccade-preview` trial, or when the page calls `start()` itself. A trial that records with no
+tracker in existence warns once on the console rather than silently returning empty `saccade_data`.
+
 Trial data:
-- `saccade_data: { x, y, t }[]` — x,y in **pixels** relative to the viewport (like WebGazer);
+- `saccade_data: { x, y, t }[]` — x,y in **pixels** relative to the viewport;
   `t` = `FrameTime.capture` minus the trial start time, **minus the timing offset** (see below)
   when one has been measured, else uncorrected. One row per camera frame while a face is found.
-- `saccade_targets: { [selector]: { x, y, width, height, top, bottom, left, right } }` (same as WebGazer).
+- `saccade_targets: { [selector]: { x, y, width, height, top, bottom, left, right } }`.
 - `saccade_timing: { offset_ms: number | null, corrected: boolean, clock: FrameTime["source"], dropped_frames: number, fps: number }`.
 
-Methods (all public, same names as WebGazer where they exist):
+Methods (all public):
 `start(): Promise<void>` (init tracker + start), `pause()`, `resume()`, `isInitialized()`,
-`showVideo()`/`hideVideo()` (a small mirrored preview, bottom-left, like WebGazer),
+`showVideo()`/`hideVideo()` (a small mirrored preview, bottom-left),
 `showPredictions()`/`hidePredictions()` (gaze dot), `resetCalibration()`,
 `calibratePoint(x_px, y_px, embeddings?)` (collects `captureMs` of embeddings if none given),
 `fitCalibration(lambda?)`, `getCalibrationPoints()`, `getCurrentPrediction(): {x,y,t} | null`
@@ -193,10 +195,9 @@ Methods (all public, same names as WebGazer where they exist):
 ## Plugins
 
 Each plugin requires the extension to be registered (`extensions: [{ type: jsPsychExtensionSaccade }]`
-in `initJsPsych`) and fetches it via `jsPsych.extensions.saccade`. Parameters follow the
-WebGazer plugins' names so the migration is mechanical. All plugins record `rt`.
+in `initJsPsych`) and fetches it via `jsPsych.extensions.saccade`. All plugins record `rt`.
 
-### `saccade-preview` (replaces `webgazer-init-camera`)
+### `saccade-preview`
 Parameters: `instructions` (HTML, default explains positioning), `button_text` ("Continue"),
 `show_eye_crop` (true), `require_face` (true; the button is enabled only while a face is found),
 `preview_width` (320).
@@ -210,14 +211,14 @@ Parameters: `calibration_points` (default the 13-point grid as `[x%, y%]` pairs)
 `randomize_calibration_order` (false), `time_to_saccade` (1000 = settle), `time_per_point`
 (500 = capture), `point_size` (20), `lambda` (null → `lambdaFor(n)`), `clear_previous` (true).
 Behaviour: same ring/dot animation as the demo (ring shrinks during settle, turns green during
-capture). "click" mode collects on click like WebGazer. Fits at the end via
+capture). "click" mode collects on click. Fits at the end via
 `extension.fitCalibration`. Data: `calibration_points` (px), `n_points`, `lambda`.
 
 ### `saccade-validate`
-Parameters as WebGazer: `validation_points`, `validation_point_coordinates` ("percent" |
+Parameters: `validation_points`, `validation_point_coordinates` ("percent" |
 "center-offset-pixels"), `roi_radius` (200), `randomize_validation_order`, `time_to_saccade`
 (1000), `validation_duration` (2000), `point_size` (20), `show_validation_data` (false).
-Data as WebGazer: `raw_gaze` (per point: `{x,y,dx,dy,t}[]`), `percent_in_roi[]`,
+Data: `raw_gaze` (per point: `{x,y,dx,dy,t}[]`), `percent_in_roi[]`,
 `average_offset[]` (`{x,y,r}`), `validation_points`, plus `median_error_px`,
 `median_error_viewport`.
 
@@ -238,14 +239,14 @@ scripts, `typecheck`), `title: "saccade.js"`, `url: "https://saccade.jspsych.org
 (central: preview → time sync → calibrate → validate → free gaze with dot, in the page, using
 the built `@saccadejs/core` package via a workspace dependency and the model served from
 `docs/static/models/` copied by a `predev`/`prebuild` script), Getting started, Guides
-(timing & synchrony — the loopback, what `t` means, the bounded uncertainty; migrating from
-WebGazer; hosting assets), Reference (core API, extension, each plugin, data fields).
+(timing & synchrony — the loopback, what `t` means, the bounded uncertainty; hosting assets),
+Reference (core API, extension, each plugin, data fields).
 
 ## Amendments from the core build (2026-09-05)
 
 The core landed with these additive deviations; the extension, plugins and docs must follow them:
 - `LoopbackResult.verdict` is the enum (`"OK" | "INCONCLUSIVE" | "UNRELIABLE"`) with a separate `reason` (`null` only when OK).
-- `runValidation` reports `percentInRoi` on a **0–100** scale (per point and aggregate), matching WebGazer's `percent_in_roi`; points with no gaze are kept with `NaN` errors. `ValidationSample.time` is `meanCapture ?? capture`.
+- `runValidation` reports `percentInRoi` on a **0–100** scale (per point and aggregate); points with no gaze are kept with `NaN` errors. `ValidationSample.time` is `meanCapture ?? capture`.
 - The browser global `Saccade` is a namespace of named exports (`Saccade.SaccadeTracker`, `Saccade.runLoopback`, …), not a default export.
 - Extra optional inputs: `SaccadeAssets.ortModuleUrl` / `mediapipeModuleUrl`; `SaccadeTrackerOptions.stream` (an existing `MediaStream`) and `.model`. Extra members: `tracker.nextGaze()`, `getTta()`, `getKernel()`, `initialized`. Extra exports: `Pipeline`, `Landmarker`, `OrtEmbeddingModel`, `StubEmbeddingModel`, `fitRidge`, `CENTER`, `CAL_HEAD`, `mSequence`, `stimulusAt`, `refineLag`, `modelUrl`, `loadOrt`, `loadVision`, `DEFAULT_*_URL`.
 
@@ -253,7 +254,7 @@ The core landed with these additive deviations; the extension, plugins and docs 
 
 1. **`t` in `saccade_data` uses the smoothed sample's own time**: `t = (time.meanCapture ?? time.capture) − trialStart − (offset ?? 0)`. With the default TTA of 5 that is the mean capture time of the ring buffer — the instant the reported gaze actually refers to. `saccade_timing` also records `tta`.
 2. **`saccade-calibrate` data**: the pixel list is `calibration_points_px` (not `calibration_points`, which stays the parameter in percent). `n_points` = number of distinct targets; data also records `repetitions_per_point`.
-3. **`saccade-validate` data**: `raw_gaze` is `{x, y, dx, dy, t}[][]` (one array per validation point, in presentation order); add `samples_per_sec` (mean over points) as WebGazer does.
+3. **`saccade-validate` data**: `raw_gaze` is `{x, y, dx, dy, t}[][]` (one array per validation point, in presentation order); add `samples_per_sec` (mean over points).
 4. **`saccade-time-sync`** runs the loopback on a full-viewport overlay appended to `document.body` (the core default), not the jsPsych display element — the whole screen must light the face. It hides the jsPsych content underneath for the duration and restores it.
 5. **`saccade-preview`** gains `face_timeout` (ms, default `null`): when set, the Continue button enables after that long even if no face has been found, and the data records `face_detected: false`. `fps` is a number, `backend` is `"webgpu" | "wasm"`.
 6. Directory names are `packages/plugin-saccadejs-<name>` and `packages/extension-saccadejs`; npm names are `@saccadejs/plugin-<name>` and `@saccadejs/extension`. Intentional.
