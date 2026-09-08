@@ -257,7 +257,7 @@ const PACKAGES = [
   {
     name: "@saccadejs/plugin-performance",
     to: "/reference/plugin-performance",
-    what: "Measures the effective frame rate, and can exclude machines that are too slow.",
+    what: "Measures the effective frame rate and can exclude machines that are too slow.",
   },
   {
     name: "@saccadejs/plugin-time-sync",
@@ -280,7 +280,7 @@ const REQUIREMENTS = [
   {
     what: "Chrome or Edge",
     detail:
-      "on a laptop or desktop. Other browsers run the tracker, but may not supply the camera capture timestamps that the timing measurement needs.",
+      "on a laptop or desktop. Other browsers run the tracker but may not supply the camera capture timestamps that the timing measurement needs.",
   },
   {
     what: "A webcam",
@@ -332,7 +332,7 @@ function Details(): React.ReactElement {
 
 export default function Home(): React.ReactElement {
   return (
-    <Layout description="saccade.js estimates where a participant is looking from an ordinary webcam, in the browser. It provides a jsPsych extension, plugins for camera setup, calibration, validation and timing, and a core library that runs without jsPsych.">
+    <Layout description="saccade.js estimates where a participant is looking, from an ordinary webcam, in the browser. It provides a jsPsych extension, plugins for camera setup, calibration, validation and timing, and a core library that runs without jsPsych.">
       <main>
         <Hero />
         <Features />

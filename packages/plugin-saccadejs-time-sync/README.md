@@ -64,7 +64,7 @@ screen changes, then ends. When `apply_offset` is true the measured lag is hande
 | `duration`     | integer                 | `15000`       | How long the measurement runs, in ms. Longer gives more edges and a tighter estimate.                                                            |
 | `gap_min`      | integer                 | `500`         | Minimum gap between brightness changes, in ms.                                                                                                   |
 | `gap_max`      | integer                 | `1000`        | Maximum gap between brightness changes, in ms.                                                                                                   |
-| `contrast`     | `"full"` \| `"reduced"` | `"full"`      | `"full"` switches between black and white (strongest signal); `"reduced"` uses dark grey and light grey — gentler, but noisier.                  |
+| `contrast`     | `"full"` \| `"reduced"` | `"full"`      | `"full"` switches between black and white (strongest signal); `"reduced"` uses dark gray and light gray — gentler, but noisier.                  |
 | `instructions` | HTML string             | _(see below)_ | Shown before the measurement starts. The default explains what is about to happen and states that it is not a flickering display.                |
 | `button_text`  | string                  | `"Start"`     | Text of the button that begins the measurement.                                                                                                  |
 | `require_ok`   | boolean                 | `false`       | If true, an `UNRELIABLE` result is measured once more before continuing. The trial always continues either way; `verdict` records what happened. |

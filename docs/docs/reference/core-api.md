@@ -179,14 +179,14 @@ runLoopback(tracker: SaccadeTracker, opts?: LoopbackOptions): Promise<LoopbackRe
 ```
 
 Measures display lag plus camera lag as one number by flashing the page and watching it with the
-camera. The tracker must be initialised; if it is running, gaze processing pauses for the
+camera. The tracker must be initialized; if it is running, gaze processing pauses for the
 duration and resumes after.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `durationMs` | `15000` | |
 | `gapMinMs` / `gapMaxMs` | `500` / `1000` | Random interval between flips. |
-| `levels` | `["#000", "#fff"]` | `[dark, light]` CSS colours. `["#333", "#ccc"]` is gentler and needs a longer run. |
+| `levels` | `["#000", "#fff"]` | `[dark, light]` CSS colors. `["#333", "#ccc"]` is gentler and needs a longer run. |
 | `seed` | random | For a reproducible schedule. |
 | `container` | a full-viewport `div` on `document.body` | Where to draw. |
 | `onProgress` | — | `(fractionDone: number) => void`. |
@@ -209,7 +209,7 @@ duration and resumes after.
 The verdict is `"OK"` when `peakD` is at least 0.5, the plateau is at most 34 ms, and the halves
 agree: within 8 ms when there are at least 15 edges per half, within 20 ms otherwise.
 
-The estimator is exported so stored `flips` and `samples` can be re-analysed offline:
+The estimator is exported so stored `flips` and `samples` can be re-analyzed offline:
 `estimateLagEdges`, `estimateLag`, `refineLag`, `sparseSchedule`, `mSequence`, `seededRandom`,
 `intervalStats`, `splitHalves`, `stimulusAt`.
 

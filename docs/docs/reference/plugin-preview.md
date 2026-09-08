@@ -69,7 +69,7 @@ permission, MediaPipe, the face landmarker, onnxruntime-web, the eye model, warm
 eye model download reports bytes, so it is the only stage with a moving bar —
 `Downloading eye model 12.3 / 20.6 MB` — and the rest step the bar on as they complete.
 
-The continue button appears only once the tracker is initialised, and (with `require_face`)
+The continue button appears only once the tracker is initialized, and (with `require_face`)
 enables only while a face is being found.
 
 `backend: "wasm"` on a machine that should have WebGPU usually means an asset URL is wrong. See

@@ -27,7 +27,7 @@ timeline.push({ type: jsPsychSaccadeValidate });
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | `validation_points` | `[number, number][]` | 9 points: 3 × 3 at 15/50/85% | `[x, y]` pairs, interpreted by `validation_point_coordinates`. |
-| `validation_point_coordinates` | `"percent" \| "center-offset-pixels"` | `"percent"` | Percentages of the viewport, or pixel offsets from its centre. |
+| `validation_point_coordinates` | `"percent" \| "center-offset-pixels"` | `"percent"` | Percentages of the viewport, or pixel offsets from its center. |
 | `roi_radius` | `number` | `200` | Radius in pixels of the region of interest around each point, used for `percent_in_roi`. |
 | `randomize_validation_order` | `boolean` | `false` | Shuffle the order of the points. |
 | `time_to_saccade` | `number` | `1000` | Settle time in ms before gaze is recorded. |

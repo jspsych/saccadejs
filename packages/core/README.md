@@ -134,7 +134,7 @@ it to a tiny invisible holder of its own on `document.body`, and if rVFC stops a
 the frame loop falls back to a ~300 ms timer tick (frames then carry
 `time.source === "callback"`) until it starts again.
 
-As a last line of defence, `runCalibration` and `runValidation` take a `timeoutMs` in their
+As a last line of defense, `runCalibration` and `runValidation` take a `timeoutMs` in their
 `CollectOptions` (default `5000`, `0` to wait indefinitely). If one camera frame takes longer
 than that, the run rejects with `no camera frames for 5000 ms` rather than hanging, so a caller
 has something to put on screen. `withFrameTimeout(promise, ms)` is exported for callers that run

@@ -49,7 +49,7 @@ timeline.push({ type: jsPsychSaccadeCalibrate });
 ## Example
 
 ```js
-// A denser grid, randomised, for a study that can afford the extra time.
+// A denser grid, randomized, for a study that can afford the extra time.
 timeline.push({
   type: jsPsychSaccadeCalibrate,
   calibration_points: [

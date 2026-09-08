@@ -31,7 +31,7 @@ timeline.push({ type: jsPsychSaccadeTimeSync });
 | `duration` | `number` | `15000` | Length of the measurement, in ms. Longer runs give more edges and a tighter estimate. |
 | `gap_min` | `number` | `500` | Minimum interval between brightness changes, in ms. |
 | `gap_max` | `number` | `1000` | Maximum interval, in ms. |
-| `contrast` | `"full" \| "reduced"` | `"full"` | `"full"` is black and white; `"reduced"` is dark grey and light grey, gentler but noisier. |
+| `contrast` | `"full" \| "reduced"` | `"full"` | `"full"` is black and white; `"reduced"` is dark gray and light gray, gentler but noisier. |
 | `instructions` | `HTML string` | an explanation of the brightness test | Shown before the run. |
 | `button_text` | `string` | `"Start"` | Text of the button that starts the measurement. |
 | `require_ok` | `boolean` | `false` | Rerun once on an `UNRELIABLE` verdict. The trial continues either way. |
