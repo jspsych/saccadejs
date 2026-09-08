@@ -22,7 +22,7 @@ const config: Config = defineJspsychConfig({
 
   docs: {
     sidebarPath: "./sidebars.ts",
-    // Docs-only site: the Introduction page is the landing page.
+    // Docs at the root of the site; the landing page is src/pages/index.tsx.
     routeBasePath: "/",
     editUrl,
     showLastUpdateTime: true,
@@ -31,7 +31,6 @@ const config: Config = defineJspsychConfig({
   navbar: {
     title: "saccade.js",
     items: [
-      { to: "/", label: "Introduction", position: "left", activeBaseRegex: "^/$" },
       { to: "/demo", label: "Live demo", position: "left" },
       { to: "/getting-started", label: "Getting started", position: "left" },
       {
@@ -53,7 +52,7 @@ const config: Config = defineJspsychConfig({
     {
       title: "Docs",
       items: [
-        { label: "Introduction", to: "/" },
+        { label: "Home", to: "/" },
         { label: "Live demo", to: "/demo" },
         { label: "Getting started", to: "/getting-started" },
         { label: "Reference", to: "/reference/core-api" },

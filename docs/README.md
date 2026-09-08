@@ -92,21 +92,22 @@ HTTPS** in the repository's Pages settings.
 Only **user-facing** documentation. Interface contracts and internal design notes live in
 `CONTRACTS.md` at the repo root and are not published.
 
-Content is in `docs/docs/`, matching the navbar:
+The landing page is `src/pages/index.tsx`, a React page rather than a doc. Everything else is
+in `docs/docs/`, at the root of the site (`routeBasePath: "/"`), matching the navbar:
 
 | Path | Navbar |
 | --- | --- |
-| `introduction.md` | Introduction (the landing page — the site is docs-only, `routeBasePath: "/"`) |
 | `demo.mdx` | Live demo |
 | `getting-started.mdx` | Getting started |
 | `guides/` | Guides |
 | `reference/` | Reference |
 
-`sidebars.ts` defines one sidebar per tab. Introduction and the demo are single pages linked
-directly from the navbar and have no sidebar.
+`sidebars.ts` defines one sidebar per tab. The demo and Getting started are single pages linked
+directly from the navbar: they have no sidebar, run full width, and are navigated by the table
+of contents on the right.
 
-Components are in `src/components/`: `Steps` (the numbered walkthrough used in Getting started)
-and `LiveDemo` (the demo itself).
+Components are in `src/components/`: `Steps` (the numbered walkthrough used in Getting started),
+`LiveDemo` (the demo itself) and `SaccadeMark` (the brand mark, in the navbar and the hero).
 
 ## Notes for editors
 
