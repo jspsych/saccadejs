@@ -7,6 +7,7 @@ import type { SidebarsConfig } from "@docusaurus/plugin-content-docs";
  */
 const sidebars: SidebarsConfig = {
   guides: [
+    "guides/browser-compatibility",
     "guides/timing-and-synchrony",
     "guides/hosting-the-assets",
     "guides/how-it-works",
