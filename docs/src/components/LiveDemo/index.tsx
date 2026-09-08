@@ -5,26 +5,31 @@ import useBaseUrl from "@docusaurus/useBaseUrl";
 import clsx from "clsx";
 import type { JsPsych } from "jspsych";
 import type SaccadeExtension from "@saccadejs/extension";
+import { detectFixations, drawScanpath, type Fixation, type Rect, type Sample } from "./scanpath";
 import styles from "./styles.module.css";
 
 /**
  * The live demo on `/demo`.
  *
- * It is a **real jsPsych experiment**: the published extension and the published plugins, on the
- * timeline from `docs/getting-started.mdx`, rendered into a container on this page with
+ * It is a **real jsPsych experiment**: the published extension and the published plugins, on a
+ * timeline that would work unchanged in a study, rendered into a container on this page with
  * `initJsPsych({ display_element })`. Nothing about the eye tracking is reimplemented here —
  * whatever an experimenter installs is exactly what runs, so the demo cannot quietly drift away
  * from the documentation.
  *
- * The one departure from that timeline is `saccade-time-sync`, which is left out. It measures
- * this computer's screen-to-camera lag so that gaze samples can be lined up with stimulus
- * timing, and there is nothing in a demo that ends at "where were you looking" for it to change:
- * a visitor would spend a minute on a trial whose result they never see. Experiments that care
- * about when a participant looked at something still need it — see `Timing and synchrony`.
+ * The experiment sets the camera up, calibrates, checks the calibration, and then shows a
+ * painting for fifteen seconds while it records gaze. It ends by giving the participant their
+ * own data twice over: the recorded trial as a scanpath drawn on the picture, and then the same
+ * picture again with the gaze dot live on top of it.
  *
- * React contributes three things and no more: the intro screen, the annotation banner above the
- * experiment (driven from jsPsych's `on_trial_start`), and the plain-language summary after
- * `jsPsych.run()` resolves.
+ * It runs everything a study would except `saccade-time-sync`, which measures this computer's
+ * screen-to-camera lag so gaze can be lined up with stimulus timing. Nothing in a demo that ends
+ * at "where were you looking" depends on it, and it costs a visitor a minute on a trial whose
+ * result they never see. Experiments that care about *when* someone looked still need it — see
+ * `Timing and synchrony`.
+ *
+ * React owns only what is outside the experiment: the screen before it starts and the numbers
+ * after it finishes. Everything in between is jsPsych's.
  *
  * Everything the experiment touches — `navigator.mediaDevices`, WebGPU/WebAssembly, a `<video>`
  * element — is absent while Docusaurus prerenders this page to static HTML, so the component is
@@ -32,172 +37,197 @@ import styles from "./styles.module.css";
  * `import()` from inside a callback, never at module scope.
  */
 
-// ---------------------------------------------------------------------------------------
-// the annotation banner
+/** How long the painting stays on screen. Long enough for a scanpath with a shape to it. */
+const SCENE_MS = 15000;
 
-interface Annotation {
-  title: string;
-  step: number | null;
-  text: string;
-}
-
-const TOTAL_STEPS = 5;
-
-/**
- * What to say above the experiment, keyed by the `demo_step` that every trial on the timeline
- * carries in its `data`. Keyed by step rather than by plugin because the mapping is not one
- * trial to one line either way round: calibration is an instruction screen followed by the
- * calibration trial, and both should leave the banner reading "Calibration". `on_trial_start`
- * looks the running trial's `demo_step` up in here, so adding a trial to the timeline means
- * giving it one of these ids and nothing else.
- */
-const ANNOTATIONS: Record<string, Annotation> = {
-  camera: {
-    title: "Camera setup",
-    step: 1,
-    text: "Your browser is asking for the camera and downloading the eye model, about 20 MB. Sit an arm's length away, with light on your face rather than behind you.",
-  },
-  calibrate: {
-    title: "Calibration",
-    step: 2,
-    text: "Thirteen dots, one at a time. Look straight at each one and hold still — this is where the tracker learns what your eyes look like when you look at a known place.",
-  },
-  validate: {
-    title: "Accuracy check",
-    step: 3,
-    text: "Nine dots the calibration never saw, so the number at the end is an honest measure of how far off the tracker is.",
-  },
-  look: {
-    title: "Free look",
-    step: 4,
-    text: "An ordinary jsPsych trial with the extension attached. The red dot is where the tracker thinks you are looking; every frame of it is being recorded.",
-  },
-};
-
-const INTRO: Annotation = {
-  title: "Before you start",
-  step: null,
-  text: "This page runs a real eye tracker in your browser. Nothing is uploaded — every camera frame is used and then thrown away on your own computer.",
-};
-
-const RESULTS: Annotation = {
-  title: "Results",
-  step: TOTAL_STEPS,
-  text: "What the experiment measured, in the units an experiment would report.",
-};
+/** A fixation has to last at least this long. Four or five frames at a webcam's 30 Hz. */
+const FIXATION_MIN_MS = 150;
 
 // ---------------------------------------------------------------------------------------
-// the instruction screens
+// the screens jsPsych renders
 
-/**
- * Wrap instruction copy in the markup the screens share.
- *
- * Calibration and validation both start moving a dot the moment the trial begins, so a
- * participant who has not been told what to do misses the first few points — which is exactly
- * why a real experiment puts a screen like this in front of each of them, and why the demo does
- * too. Plain HTML with inline styles, for the same reason as `LOOK_STIMULUS`.
- *
- * There is no "press a key to continue" line: these run on `html-button-response`, so the
- * button below the text says what to do.
- */
+/** Wrap instruction copy in the markup the instruction screens share. */
 function instructions(heading: string, body: string): string {
-  return `
-    <div style="max-width:34rem; margin:0 auto 1.5rem; text-align:left;">
-      <h2 style="margin-top:0;">${heading}</h2>
-      ${body}
-    </div>`;
+  return `<div class="demo-prose"><h2>${heading}</h2>${body}</div>`;
 }
 
 const CALIBRATE_INSTRUCTIONS = instructions(
   "Calibration",
-  `<p>A dot is about to appear on the screen. After a moment it will vanish and reappear
-  somewhere else, thirteen times in all — about twenty seconds.</p>
+  `<p>A dot will appear on the screen, hold for a moment, then jump somewhere else — thirteen
+  dots in all, about twenty seconds.</p>
   <ul>
     <li>Look straight at each dot as soon as it appears, and keep looking until it moves.</li>
-    <li>Move your eyes, not your head. From here on, hold your head as still as you can.</li>
-  </ul>
-  <p>This is the part where the tracker learns what your eyes look like when you look at a known
-  place, so everything that comes after depends on it.</p>`,
+    <li>Move your eyes, not your head. Hold your head still from here on.</li>
+  </ul>`,
 );
 
 const VALIDATE_INSTRUCTIONS = instructions(
   "Accuracy check",
-  `<p>The same thing again, with nine dots. Look straight at each one and keep your head still,
-  exactly as before.</p>
-  <p>These dots are in places the calibration never used, so how close the tracker comes to them
-  is an honest measure of how accurate it is — and it is the number you will see at the end.</p>`,
+  `<p>Nine more dots, the same as before: look straight at each one as it appears, and keep your
+  head still.</p>`,
 );
 
-// ---------------------------------------------------------------------------------------
-// the free-viewing trial
+const SCENE_INSTRUCTIONS = instructions(
+  "Free viewing",
+  `<p>You will see a painting for about fifteen seconds. Look at it however you like — there is
+  nothing to find, and nothing to press.</p>
+  <p>Keep your head still, as you did for the dots.</p>`,
+);
 
 /**
- * Two coloured squares with ids the extension records the position of. Written as a plain HTML
- * string with inline styles because it is rendered by jsPsych inside its own display element,
- * where this component's CSS module class names do not reach.
+ * The stimulus screens. Plain HTML strings with class names rather than JSX: jsPsych renders
+ * these inside its own display element, so they are styled by the `:global` rules at the foot of
+ * this component's stylesheet.
  */
-const LOOK_STIMULUS = `
-  <div style="display:flex; gap:12vw; justify-content:center; align-items:center; margin-bottom:1.5rem;">
-    <div id="left" style="width:26vw; max-width:280px; aspect-ratio:4/3; border-radius:12px;
-      background:#2563eb;"></div>
-    <div id="right" style="width:26vw; max-width:280px; aspect-ratio:4/3; border-radius:12px;
-      background:#f97316;"></div>
+function sceneStimulus(src: string): string {
+  const alt =
+    "A painting of a man in a long coat entering a room, watched by a woman, two children and " +
+    "a servant.";
+  return `<div class="demo-figure">
+    <img id="scene" class="demo-scene demo-scene-full" src="${src}" alt="${alt}" />
+  </div>`;
+}
+
+function scanpathStimulus(src: string): string {
+  return `<div class="demo-figure demo-figure-stacked">
+    <img id="scanpath-scene" class="demo-scene" src="${src}" alt="" />
+    <canvas id="scanpath-canvas" class="demo-overlay"></canvas>
   </div>
-  <p style="max-width:36rem; margin:0 auto;">Look at whichever square you prefer, for as long as
-  you like. The red dot follows your gaze. Press any key when you are done.</p>`;
+  <div class="demo-caption">
+    <p>Each circle is a fixation — somewhere your gaze stayed put — and the bigger ones are the
+    ones you held longer. The lines between them are your saccades.</p>
+    <p class="demo-legend"><span>start of the trial</span><i></i><span>end</span></p>
+    <p class="demo-prompt">Press any key to continue.</p>
+  </div>`;
+}
+
+function liveStimulus(src: string): string {
+  return `<div class="demo-figure">
+    <img id="live-scene" class="demo-scene" src="${src}" alt="" />
+  </div>
+  <div class="demo-caption">
+    <p>The dot is where the tracker thinks you are looking, redrawn on every camera frame.</p>
+    <p class="demo-prompt">Press any key to finish.</p>
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------------------
+// the scanpath figure
+
+/**
+ * How far apart samples may sit and still count as one fixation, in pixels.
+ *
+ * Scaled to the error the validation trial just measured on this participant, rather than fixed:
+ * a threshold tight enough to be meaningful on a good calibration shatters a noisy one into
+ * dozens of one-sample fixations. `median_error_px` is a radius and the dispersion measure sums
+ * two axes, hence the factor. The clamp keeps a wild validation result from producing either a
+ * single fixation covering the whole picture or none at all.
+ */
+function dispersionFor(errorPx: number | null, rect: Rect): number {
+  const unit = Math.min(rect.width, rect.height);
+  const scaled = errorPx === null ? 0.18 * unit : 2.2 * errorPx;
+  return Math.max(0.08 * unit, Math.min(0.34 * unit, scaled));
+}
+
+interface SceneTrial {
+  saccade_data?: Sample[];
+  saccade_targets?: Record<string, Rect>;
+}
+
+/**
+ * Draw the scanpath over the copy of the painting on screen, and keep drawing it if the window
+ * changes size. Returns the teardown for the resize listener.
+ *
+ * The samples were recorded in viewport pixels, but they are mapped through the rect the picture
+ * occupied at the time rather than through the viewport, so the figure stays correct however the
+ * page has moved since.
+ */
+function mountScanpath(
+  display: HTMLElement,
+  scene: SceneTrial,
+  errorPx: number | null,
+): { fixations: Fixation[]; teardown: () => void } {
+  const img = display.querySelector<HTMLImageElement>("#scanpath-scene");
+  const canvas = display.querySelector<HTMLCanvasElement>("#scanpath-canvas");
+  const samples = scene.saccade_data ?? [];
+  const from = scene.saccade_targets?.["#scene"];
+
+  if (!img || !canvas || !from) return { fixations: [], teardown: () => {} };
+
+  const fixations = detectFixations(samples, {
+    dispersion: dispersionFor(errorPx, from),
+    minDuration: FIXATION_MIN_MS,
+  });
+
+  const draw = () => {
+    if (!img.clientWidth) return;
+    drawScanpath(canvas, fixations, samples, {
+      from,
+      width: img.clientWidth,
+      height: img.clientHeight,
+    });
+  };
+
+  // The picture was on screen a moment ago so it is in the cache, but a cached image still has
+  // no layout box until the frame after it is inserted.
+  if (img.complete && img.naturalWidth) requestAnimationFrame(draw);
+  else img.addEventListener("load", () => requestAnimationFrame(draw), { once: true });
+
+  window.addEventListener("resize", draw);
+  return { fixations, teardown: () => window.removeEventListener("resize", draw) };
+}
 
 // ---------------------------------------------------------------------------------------
 // summarising the data
 
 interface Summary {
   errorPercent: number | null;
-  leftSamples: number;
-  rightSamples: number;
-  totalSamples: number;
+  errorPx: number | null;
+  samples: number;
+  seconds: number;
+  hz: number | null;
+  fixations: number;
+  medianFixationMs: number | null;
   backend: string | null;
   fps: number | null;
   clock: string | null;
   json: string;
 }
 
-interface Rect {
-  top: number;
-  bottom: number;
-  left: number;
-  right: number;
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-function countInRect(samples: Array<{ x: number; y: number }>, rect: Rect | undefined): number {
-  if (!rect) return 0;
-  return samples.filter(
-    (s) => s.x >= rect.left && s.x <= rect.right && s.y >= rect.top && s.y <= rect.bottom,
-  ).length;
-}
-
-/** Pull the handful of numbers a participant can actually read out of the trial data. */
-function summarise(jsPsych: JsPsych): Summary {
+/** The numbers a participant can read off their own run. */
+function summarise(jsPsych: JsPsych, fixations: Fixation[]): Summary {
   const data = jsPsych.data.get();
   const first = (trial_type: string): any => data.filter({ trial_type }).values()[0] ?? {};
 
   const preview = first("saccade-preview");
   const validation = first("saccade-validate");
-  // By `demo_step` rather than by `trial_type`, so that it keeps finding the right trial if the
-  // free-viewing trial is ever rebuilt on a different plugin.
-  const look = data.filter({ demo_step: "look" }).values()[0] ?? ({} as any);
+  // By `demo_step` rather than by `trial_type`, so it keeps finding the free-viewing trial if
+  // that is ever rebuilt on a different plugin.
+  const scene = data.filter({ demo_step: "scene" }).values()[0] ?? ({} as any);
 
-  const samples: Array<{ x: number; y: number }> = look.saccade_data ?? [];
-  const targets: Record<string, Rect> = look.saccade_targets ?? {};
+  const samples: Sample[] = scene.saccade_data ?? [];
+  const seconds = SCENE_MS / 1000;
 
   return {
     errorPercent: Number.isFinite(validation.median_error_viewport)
       ? validation.median_error_viewport * 100
       : null,
-    leftSamples: countInRect(samples, targets["#left"]),
-    rightSamples: countInRect(samples, targets["#right"]),
-    totalSamples: samples.length,
+    errorPx: Number.isFinite(validation.median_error_px) ? validation.median_error_px : null,
+    samples: samples.length,
+    seconds,
+    hz: samples.length ? samples.length / seconds : null,
+    fixations: fixations.length,
+    medianFixationMs: median(fixations.map((f) => f.duration)),
     backend: preview.backend ?? null,
     fps: Number.isFinite(preview.fps) ? preview.fps : null,
-    clock: look.saccade_timing?.clock ?? null,
+    clock: scene.saccade_timing?.clock ?? null,
     json: data.json(),
   };
 }
@@ -230,9 +260,12 @@ type Phase = "intro" | "running" | "done" | "error";
 
 function Demo() {
   const modelUrl = useBaseUrl("/models/eye_embedding.onnx");
+  const sceneUrl = useBaseUrl("/img/repin-unexpected-visitors.jpg");
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const jsPsychRef = useRef<JsPsych | null>(null);
+  /** Undoes whatever the scanpath trial attached to `window`; replaced on every run. */
+  const scanpathTeardownRef = useRef<() => void>(() => {});
   /** Guards every `setState` after an await: the visitor may have navigated away mid-run. */
   const mountedRef = useRef(true);
 
@@ -240,7 +273,6 @@ function Demo() {
     () => window.isSecureContext && !!navigator.mediaDevices?.getUserMedia,
   );
   const [phase, setPhase] = useState<Phase>("intro");
-  const [annotation, setAnnotation] = useState<Annotation>(INTRO);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -253,6 +285,8 @@ function Demo() {
    * releases the camera and removes the gaze dot and the camera preview from the page.
    */
   const teardown = useCallback(() => {
+    scanpathTeardownRef.current();
+    scanpathTeardownRef.current = () => {};
     const jsPsych = jsPsychRef.current;
     jsPsychRef.current = null;
     if (jsPsych) {
@@ -285,8 +319,11 @@ function Demo() {
     teardown();
     setError(null);
     setSummary(null);
-    setAnnotation(ANNOTATIONS.camera);
     setPhase("running");
+
+    // Start the painting downloading now. Calibration and validation take two minutes, so it is
+    // in the cache long before the trial that needs it, and nothing has to wait on this.
+    new Image().src = sceneUrl;
 
     try {
       // Everything below reaches for the camera, WebGPU or the DOM at import time, so none of
@@ -320,51 +357,89 @@ function Demo() {
           // experiment that has not been through `Hosting the assets`.
           { type: jsPsychExtensionSaccade, params: { assets: { modelUrl } } },
         ],
-        on_trial_start: (trial: any) => {
-          const step: string | undefined = trial?.data?.demo_step;
-          if (step && ANNOTATIONS[step]) setAnnotation(ANNOTATIONS[step]);
-        },
+        // The experiment sits in the middle of a documentation page. Every trial begins by
+        // putting it where the participant can see all of it — gaze is recorded in viewport
+        // coordinates, so a stage half off the bottom of the window would be recorded honestly
+        // and read as nonsense.
+        on_trial_start: () => display.scrollIntoView({ block: "center" }),
       });
       jsPsychRef.current = jsPsych;
       const extension = jsPsych.extensions.saccade as unknown as SaccadeExtension;
 
-      // Every trial carries a `demo_step`: it is what the banner above the experiment reads,
-      // and it is how `summarise` picks the free-viewing trial out of the data.
+      // Set by the scanpath trial, and read by the results panel afterwards: the figure and the
+      // fixation count in the summary have to be the same fixations.
+      let fixations: Fixation[] = [];
+
       const timeline = [
         // Camera permission, the model download with its progress bar, and head positioning.
-        { type: jsPsychSaccadePreview, data: { demo_step: "camera" } },
+        { type: jsPsychSaccadePreview },
         // Fit the gaze model on 13 points, then check it on 9 held-out points. Each is preceded
         // by an instruction screen, because each starts moving a dot as soon as it begins.
         {
           type: jsPsychHtmlButtonResponse,
           stimulus: CALIBRATE_INSTRUCTIONS,
           choices: ["Begin calibration"],
-          data: { demo_step: "calibrate" },
         },
-        { type: jsPsychSaccadeCalibrate, data: { demo_step: "calibrate" } },
+        { type: jsPsychSaccadeCalibrate },
         {
           type: jsPsychHtmlButtonResponse,
           stimulus: VALIDATE_INSTRUCTIONS,
           choices: ["Begin accuracy check"],
-          data: { demo_step: "validate" },
         },
-        { type: jsPsychSaccadeValidate, data: { demo_step: "validate" } },
-        // An ordinary trial that records gaze. `extensions` is what turns recording on.
+        { type: jsPsychSaccadeValidate },
+        // Free viewing. An ordinary jsPsych trial; `extensions` is what turns recording on, and
+        // `targets` records where the picture was, which is what the scanpath is drawn against.
+        {
+          type: jsPsychHtmlButtonResponse,
+          stimulus: SCENE_INSTRUCTIONS,
+          choices: ["Begin"],
+        },
         {
           type: jsPsychHtmlKeyboardResponse,
-          stimulus: LOOK_STIMULUS,
-          data: { demo_step: "look" },
+          stimulus: sceneStimulus(sceneUrl),
+          choices: "NO_KEYS",
+          trial_duration: SCENE_MS,
+          data: { demo_step: "scene" },
+          extensions: [{ type: jsPsychExtensionSaccade, params: { targets: ["#scene"] } }],
+        },
+        // The recorded trial, given back as a picture.
+        {
+          type: jsPsychHtmlKeyboardResponse,
+          stimulus: scanpathStimulus(sceneUrl),
+          data: { demo_step: "scanpath" },
+          on_load: () => {
+            const scene = jsPsych.data.get().filter({ demo_step: "scene" }).values()[0] ?? {};
+            const validation =
+              jsPsych.data.get().filter({ trial_type: "saccade-validate" }).values()[0] ?? {};
+            scanpathTeardownRef.current();
+            const mounted = mountScanpath(
+              display,
+              scene,
+              Number.isFinite(validation.median_error_px) ? validation.median_error_px : null,
+            );
+            fixations = mounted.fixations;
+            scanpathTeardownRef.current = mounted.teardown;
+          },
+          on_finish: () => {
+            scanpathTeardownRef.current();
+            scanpathTeardownRef.current = () => {};
+          },
+        },
+        // And the same picture live, which is the thing a recording can never show.
+        {
+          type: jsPsychHtmlKeyboardResponse,
+          stimulus: liveStimulus(sceneUrl),
+          data: { demo_step: "live" },
           on_load: () => extension.showPredictions(),
           on_finish: () => extension.hidePredictions(),
-          extensions: [{ type: jsPsychExtensionSaccade, params: { targets: ["#left", "#right"] } }],
+          extensions: [{ type: jsPsychExtensionSaccade, params: { targets: ["#live-scene"] } }],
         },
       ];
 
       await jsPsych.run(timeline);
       if (!mountedRef.current || jsPsychRef.current !== jsPsych) return;
 
-      setSummary(summarise(jsPsych));
-      setAnnotation(RESULTS);
+      setSummary(summarise(jsPsych, fixations));
       setPhase("done");
       // The experiment is over: give the camera back, but leave the data in `jsPsych`.
       extension.dispose?.();
@@ -374,38 +449,27 @@ function Demo() {
       setPhase("error");
       teardown();
     }
-  }, [modelUrl, teardown]);
+  }, [modelUrl, sceneUrl, teardown]);
 
-  /** Abandon a run that cannot continue, and go back to the intro screen. */
+  /** Abandon a run that cannot continue, and go back to the start. */
   const abandon = useCallback(() => {
     teardown();
     setSummary(null);
     setError(null);
-    setAnnotation(INTRO);
     setPhase("intro");
   }, [teardown]);
 
   return (
     <div className={styles.demo}>
-      <div className={styles.banner}>
-        <div className={styles.bannerHead}>
-          <span className={styles.bannerTitle}>{annotation.title}</span>
-          {annotation.step !== null ? (
-            <span className={styles.bannerCount}>
-              Step {annotation.step} of {TOTAL_STEPS}
-            </span>
-          ) : null}
-        </div>
-        <p className={styles.bannerText}>{annotation.text}</p>
-      </div>
-
       {phase === "intro" ? (
         <div className={clsx(styles.panel, styles.panelCentered)}>
           <p className={styles.lead}>
-            Over the next few minutes your camera will watch your eyes while you look at a handful
-            of dots. From that, the page learns to guess where on the screen you are looking, and
-            then shows you a dot that follows your gaze. It is an ordinary jsPsych experiment,
-            running the same plugins you would install yourself, in this tab.
+            Your webcam watches your eyes while you look at a handful of dots, and from that the
+            page learns to guess where on the screen you are looking. Then it shows you a
+            painting, and afterwards, where you looked at it. About four minutes.
+          </p>
+          <p className={styles.lead}>
+            Every camera frame is used and discarded on your own computer. Nothing is uploaded.
           </p>
           <ul className={styles.requirements}>
             <li>Chrome or Edge on a laptop or desktop</li>
@@ -470,40 +534,51 @@ function Demo() {
 // ---------------------------------------------------------------------------------------
 // the results screen
 
-function Results({ summary, onRerun }: { summary: Summary; onRerun: () => void }) {
-  const preferred =
-    summary.leftSamples === summary.rightSamples
-      ? null
-      : summary.leftSamples > summary.rightSamples
-        ? "blue"
-        : "orange";
+function Measure({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className={styles.measure}>
+      <dt className={styles.measureKey}>{label}</dt>
+      <dd className={styles.measureValue}>{children}</dd>
+    </div>
+  );
+}
 
+function Results({ summary, onRerun }: { summary: Summary; onRerun: () => void }) {
   return (
     <div className={styles.panel}>
-      <h3 className={styles.resultsHeading}>What just happened</h3>
-      <ul className={styles.resultsList}>
-        <li>
-          {summary.errorPercent === null ? (
-            <>No usable gaze was collected during the accuracy check.</>
-          ) : (
-            <>
-              On the nine points it had never seen, the tracker was off by{" "}
-              <strong>{summary.errorPercent.toFixed(1)}% of the screen</strong> on average.
-              {summary.errorPercent < 10
-                ? " That is a normal webcam result — good enough to tell which part of the screen you were looking at, not which word."
-                : " That is on the high side. Recalibrating with more light on your face, and without moving your head, usually helps."}
-            </>
+      <h3 className={styles.resultsHeading}>Your data</h3>
+      <dl className={styles.measures}>
+        <Measure label="Accuracy, 9 held-out points">
+          {summary.errorPercent === null
+            ? "—"
+            : `${summary.errorPercent.toFixed(1)}% of the screen`}
+          {summary.errorPx === null ? null : (
+            <span className={styles.measureAside}>{summary.errorPx.toFixed(0)} px</span>
           )}
-        </li>
-        <li>
-          While the two squares were on screen, the tracker recorded{" "}
-          <strong>{summary.totalSamples}</strong> gaze samples:{" "}
-          <strong>{summary.leftSamples}</strong> landed on the blue square and{" "}
-          <strong>{summary.rightSamples}</strong> on the orange one
-          {preferred ? `, so you spent more of the trial looking at the ${preferred} one` : null}.
-          The rest fell somewhere else on the page.
-        </li>
-      </ul>
+        </Measure>
+        <Measure label="Free viewing">
+          {summary.samples} gaze samples
+          <span className={styles.measureAside}>
+            {summary.seconds.toFixed(0)} s
+            {summary.hz === null ? null : ` · ${summary.hz.toFixed(1)} Hz`}
+          </span>
+        </Measure>
+        <Measure label="Fixations">
+          {summary.fixations}
+          {summary.medianFixationMs === null ? null : (
+            <span className={styles.measureAside}>
+              {summary.medianFixationMs.toFixed(0)} ms median
+            </span>
+          )}
+        </Measure>
+      </dl>
+
+      {summary.errorPercent !== null && summary.errorPercent >= 12 ? (
+        <p className={styles.note}>
+          At that error only large, well-separated regions are distinguishable. More light on your
+          face and a still head usually bring it down.
+        </p>
+      ) : null}
 
       <details className={styles.details}>
         <summary className={styles.detailsSummary}>Details for developers</summary>

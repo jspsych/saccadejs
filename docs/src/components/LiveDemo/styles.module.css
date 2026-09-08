@@ -1,57 +1,23 @@
 /* The live demo is a real jsPsych experiment embedded in the page, so almost everything on
    screen is styled by the plugins and by jspsych.css. What is left here is the frame around
-   it: the annotation banner, the intro screen, the results, and the stage jsPsych renders
-   into. */
+   it: the screen before it starts, the results after it finishes, the stage jsPsych renders
+   into, and — at the foot of the file — the trial markup inside that stage. */
 
 .demo {
   margin: 1.5rem 0 3rem;
 }
 
-/* ------------------------------------------------------------------ banner ---------- */
-
-.banner {
-  border-left: 3px solid var(--ifm-color-primary);
-  margin-bottom: 1.25rem;
-  padding: 0.1rem 0 0.1rem 0.9rem;
-}
-
-.bannerHead {
-  align-items: baseline;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
-.bannerTitle {
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.bannerCount {
-  color: var(--ifm-color-emphasis-600);
-  font-size: 0.75rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.bannerText {
-  color: var(--ifm-color-emphasis-800);
-  font-size: 0.95rem;
-  line-height: 1.5;
-  margin: 0.3rem 0 0;
-  max-width: 46rem;
-}
-
 /* ------------------------------------------------------------------ stage ----------- */
 
-/* jsPsych's display element. `.jspsych-display-element` is `display: flex` with no height of
-   its own, so give it one: a trial that renders a short line of text should not make the page
-   jump. It stays mounted between runs — see the comment at its JSX. */
+/* jsPsych's display element. Its height is fixed for the whole run rather than left to the
+   content: every trial begins by scrolling this element to the middle of the window, which only
+   works if the element does not change size underneath the participant when a 15-second
+   painting replaces a line of instructions. It stays mounted between runs — see the comment at
+   its JSX. */
 .stage {
   border: 1px solid var(--ifm-color-emphasis-200);
   border-radius: 12px;
-  min-height: 26rem;
+  height: clamp(26rem, 78vh, 46rem);
   padding: 0.5rem;
 }
 
@@ -59,7 +25,7 @@
    rather than unmounted, and never `display: none`: a hidden <video> gets no camera frames. */
 .stageIdle {
   border: 0;
-  min-height: 0;
+  height: 0;
   padding: 0;
 }
 
@@ -105,17 +71,50 @@
 
 .resultsHeading {
   font-size: 1.1rem;
-  margin: 0 0 0.75rem;
+  margin: 0 0 1rem;
 }
 
-.resultsList {
-  line-height: 1.65;
+.measures {
+  display: grid;
+  gap: 1.1rem 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   margin: 0;
-  padding-left: 1.2rem;
 }
 
-.resultsList li + li {
-  margin-top: 0.6rem;
+.measure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.measureKey {
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.measureValue {
+  font-size: 1.15rem;
+  line-height: 1.3;
+  margin: 0;
+}
+
+/* The second number in a measure: the same fact in other units, or the interval it was taken
+   over. Set below the first so the row reads as one value, not two. */
+.measureAside {
+  color: var(--ifm-color-emphasis-600);
+  display: block;
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.note {
+  color: var(--ifm-color-emphasis-800);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin: 1.25rem 0 0;
+  max-width: 42rem;
 }
 
 /* ------------------------------------------------------------------ buttons --------- */
@@ -230,4 +229,96 @@
 
 .abandon:hover {
   color: var(--ifm-font-color-base);
+}
+
+/* ------------------------------------------------------------------ trial markup ---- */
+
+/* What follows styles the screens the experiment renders. jsPsych builds those from HTML
+   strings inside its own display element, where this module's hashed class names do not reach,
+   so they carry plain class names matched here through `:global()` — still under `.stage`, so
+   nothing here escapes into the rest of the page. */
+
+.stage :global(.demo-prose) {
+  margin: 0 auto;
+  max-width: 34rem;
+  text-align: left;
+}
+
+.stage :global(.demo-prose h2) {
+  font-size: 1.35rem;
+  margin-top: 0;
+}
+
+.stage :global(.demo-prose p),
+.stage :global(.demo-prose li) {
+  line-height: 1.65;
+}
+
+/* The stimulus. Two sizes, both chosen so that the picture and whatever is under it together
+   fit the fixed stage without scrolling: `demo-scene` leaves room for a caption, and
+   `demo-scene-full` is the free-viewing trial, which has nothing under it and every reason to be
+   as large as the screen allows. `demo-figure-stacked` is the scanpath, where the canvas lies
+   exactly over the picture and so needs an inline-block wrapper shrink-wrapped to the rendered
+   image rather than to the stage. */
+.stage :global(.demo-figure) {
+  line-height: 0;
+}
+
+.stage :global(.demo-figure-stacked) {
+  display: inline-block;
+  position: relative;
+}
+
+.stage :global(.demo-scene) {
+  border-radius: 4px;
+  display: block;
+  margin: 0 auto;
+  max-height: clamp(15rem, 52vh, 30rem);
+  max-width: 100%;
+}
+
+.stage :global(.demo-scene-full) {
+  max-height: clamp(16rem, 70vh, 40rem);
+}
+
+.stage :global(.demo-overlay) {
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+}
+
+.stage :global(.demo-caption) {
+  line-height: 1.6;
+  margin: 1.1rem auto 0;
+  max-width: 38rem;
+}
+
+.stage :global(.demo-caption p) {
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+/* The colour key under the scanpath: the same four brand stops the figure is drawn with, laid
+   out as a bar between its two labels. It is what tells a reader that colour means time. */
+.stage :global(.demo-legend) {
+  align-items: center;
+  color: var(--ifm-color-emphasis-700);
+  display: flex;
+  font-size: 0.8rem;
+  gap: 0.6rem;
+  justify-content: center;
+  margin-top: 0.7rem !important;
+}
+
+.stage :global(.demo-legend i) {
+  background: linear-gradient(to right, #006838, #13b24b, #f78f1e, #ee4523);
+  border-radius: 3px;
+  height: 6px;
+  width: 8rem;
+}
+
+.stage :global(.demo-prompt) {
+  color: var(--ifm-color-emphasis-600);
+  margin-top: 0.6rem !important;
 }

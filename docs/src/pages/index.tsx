@@ -121,8 +121,8 @@ function Hero(): React.ReactElement {
                 <h2 className={styles.pathCardTitle}>Live demo</h2>
               </div>
               <p className={styles.pathCardDesc}>
-                Camera setup, calibration and validation, running in this page
-                with your own webcam.
+                Calibrate your own webcam in this page, look at a painting,
+                and see the scanpath you left on it.
               </p>
               <div className={styles.pathCardActions}>
                 <Link className="button button--primary" to="/demo">
