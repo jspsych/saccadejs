@@ -66,6 +66,21 @@ describe("SaccadeExtension lifecycle", () => {
     });
   });
 
+  it("feeds the prediction API from a supplied tracker without start()", async () => {
+    // An experiment that brings its own tracker and skips `saccade-preview` never calls
+    // `start()`. `saccade-validate` collects every sample through `onGazeUpdate`, so if the
+    // frame subscription waited for `start()` it would record an empty validation.
+    const { extension, tracker } = await makeExtension(display);
+    const seen: number[] = [];
+    extension.onGazeUpdate((sample) => seen.push(sample.x));
+
+    tracker.emit(makeFrame({ gaze: { x: 0.5, y: 0.25 } }));
+
+    expect(seen).toHaveLength(1);
+    expect(extension.getCurrentPrediction()).not.toBeNull();
+    expect(extension.faceDetected()).toBe(true);
+  });
+
   it("reports the smoothing the tracker actually used, not the parameter", async () => {
     // A supplied tracker carries its own setting, and `setSmoothingFrames` can change it mid
     // experiment. `saccade_timing` has to describe the samples that were recorded.
@@ -262,14 +277,17 @@ describe("SaccadeExtension lifecycle", () => {
 
   it("unsubscribes from the tracker when the trial ends", async () => {
     const { extension, tracker } = await makeExtension(display);
-    expect(tracker.subscriberCount).toBe(0);
+    // One subscriber throughout: the persistent handler behind `getCurrentPrediction` and the
+    // gaze dot. The trial-scoped one that fills `saccade_data` is the second, and only that one
+    // comes and goes with the trial.
+    expect(tracker.subscriberCount).toBe(1);
 
     extension.on_start({ targets: [] });
     extension.on_load();
-    expect(tracker.subscriberCount).toBe(1);
+    expect(tracker.subscriberCount).toBe(2);
 
     extension.on_finish();
-    expect(tracker.subscriberCount).toBe(0);
+    expect(tracker.subscriberCount).toBe(1);
 
     // frames after the trial are not recorded
     tracker.emit(makeFrame());

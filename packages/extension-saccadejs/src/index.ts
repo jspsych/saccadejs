@@ -269,6 +269,7 @@ class SaccadeExtension implements JsPsychExtension {
       this.tracker = tracker;
       this.ownsTracker = false;
       this.parkVideo();
+      this.watchFrames();
     }
 
     if (typeof MutationObserver !== "undefined") {
@@ -350,7 +351,7 @@ class SaccadeExtension implements JsPsychExtension {
       const tracker = this.getTracker();
       const { ep } = await tracker.init();
       this.backend = ep;
-      this.frameUnsubscribe ??= tracker.onFrame(this.handleFrame);
+      this.watchFrames();
       tracker.start();
       this.initialized = true;
     })();
@@ -495,6 +496,7 @@ class SaccadeExtension implements JsPsychExtension {
       });
       this.ownsTracker = true;
       this.parkVideo();
+      this.watchFrames();
     }
     return this.tracker;
   };
@@ -616,6 +618,22 @@ class SaccadeExtension implements JsPsychExtension {
       } catch {
         // Progress is a UI convenience; a broken listener must not fail init.
       }
+    }
+  };
+
+  /**
+   * Subscribe the persistent frame handler, unless it is already subscribed.
+   *
+   * Everything the extension offers outside a trial — `getCurrentPrediction`, `onGazeUpdate`,
+   * `faceDetected` and the gaze dot — is fed from `handleFrame`, so the subscription has to
+   * follow the *tracker*, not `start()`. An experiment that supplies its own tracker through the
+   * `tracker` parameter and never runs `saccade-preview` never calls `start()`, and everything
+   * on that list used to go quietly dead: `saccade-validate`, which collects its samples through
+   * `onGazeUpdate`, would record nothing at all and report an empty validation.
+   */
+  private watchFrames = (): void => {
+    if (this.tracker && !this.frameUnsubscribe) {
+      this.frameUnsubscribe = this.tracker.onFrame(this.handleFrame);
     }
   };
 
