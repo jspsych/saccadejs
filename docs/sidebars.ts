@@ -13,6 +13,7 @@ const sidebars: SidebarsConfig = {
     "guides/how-it-works",
   ],
   reference: [
+    "models",
     "reference/extension",
     {
       type: "category",

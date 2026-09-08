@@ -1,0 +1,41 @@
+{
+  "id": "eye-embedding",
+  "comment": [
+    "Published releases of the eye-embedding model, oldest first; the last entry is current.",
+    "`served: true` means this version's files are committed under packages/core/models/ and",
+    "are therefore deployed to saccade.jspsych.org. GitHub Pages only serves the current",
+    "build, so a version drops off the site the moment its bytes leave the repo -- keep",
+    "`served` honest, and give superseded versions a durable link (npm/jsDelivr or a DOI)",
+    "before flipping it to false.",
+    "Produced by web/export in jspsych/eye-tracking; see that repo's ARCHITECTURE.md."
+  ],
+  "releases": [
+    {
+      "version": "1.0.0",
+      "date": "2026-09-05",
+      "served": true,
+      "file": "eye_embedding.onnx",
+      "sha256": "c323131f766097194503fc048c4a64c5ac771f8dd281eefd07239ee89fcaebf7",
+      "bytes": 20635318,
+      "contract": 1,
+      "io": {
+        "input": { "name": "eye_image", "shape": [1, 36, 144, 1], "dtype": "float32" },
+        "output": { "name": "embedding", "shape": [1, 128], "dtype": "float32" },
+        "inputRange": "uint8_0_255",
+        "opset": 17
+      },
+      "provenance": {
+        "wandb": "vassar-cogsci-lab/eye-tracking-multiframe/kwppnkuj",
+        "checkpoint": "multiframe_random_s42_ext70.weights.h5",
+        "exportedAt": "2026-09-05T12:54:51Z",
+        "toolchain": {
+          "keras": "3.14.1",
+          "tensorflow": "2.20.0",
+          "tf2onnx": "1.16.1",
+          "onnx": "1.17.0"
+        }
+      },
+      "notes": "First public model. Hybrid backbone, embedding_dim 128, token_pool_extra 1."
+    }
+  ]
+}

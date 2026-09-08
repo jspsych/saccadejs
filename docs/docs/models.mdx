@@ -1,0 +1,78 @@
+---
+id: models
+title: Model releases
+sidebar_label: Model releases
+description: Every published version of the saccade.js eye-embedding model, with its URL, hash and provenance.
+---
+
+import ModelReleases from "@site/src/components/ModelReleases";
+
+# Model releases
+
+saccade.js turns an eye image into a 128-dimensional embedding with a small ONNX model, and
+your calibration turns that embedding into a gaze point. The model is the part that stays
+fixed across participants, so it is the part a study needs to be able to name.
+
+Every version below is served from this site at a **versioned URL**. Use it.
+
+## Pin a version
+
+```js
+const tracker = new SaccadeTracker({
+  assets: {
+    modelUrl: "https://saccade.jspsych.org/models/eye-embedding/1.0.0/eye_embedding.onnx",
+  },
+});
+```
+
+There is also an unversioned path, `/models/eye_embedding.onnx`. **Do not use it for data
+collection.** It always holds whatever the most recent deploy put there, so a model update
+would change your measurements partway through a study — and nothing in your data would
+record that it happened. It exists only so older links keep working.
+
+For real studies, [host the model yourself](/guides/hosting-the-assets): download the
+versioned file once, serve it from your own origin, and your study cannot be affected by
+anything that happens here.
+
+## Recording which model you used
+
+Whatever you pin, write it into your data. A version string and a hash cost nothing now and
+are the only thing that can answer "did the model change between cohorts?" later:
+
+```js
+jsPsych.data.addProperties({
+  saccade_model: "eye-embedding@1.0.0",
+  saccade_model_sha256: "c323131f766097194503fc048c4a64c5ac771f8dd281eefd07239ee89fcaebf7",
+});
+```
+
+You can verify a downloaded file against the hash below with `shasum -a 256 eye_embedding.onnx`
+(macOS/Linux) or `Get-FileHash eye_embedding.onnx -Algorithm SHA256` (PowerShell).
+
+## Versions
+
+<ModelReleases />
+
+## How versions are numbered
+
+The model version is **independent of the `@saccadejs/core` package version** — they change
+for different reasons, and one does not imply the other.
+
+- **Patch/minor** — new weights, identical interface. Drop-in: the same crop, the same input
+  range, the same embedding size. Accuracy may differ; nothing else does.
+- **Major** — the preprocessing contract or the model's input/output changed. A library
+  version that implements an older contract will refuse to load it rather than produce
+  quietly wrong gaze.
+
+The `contract` number in the table is what the library actually checks.
+
+## How long a URL lasts
+
+A versioned URL is served for as long as that version ships in the repository behind this
+site. When a version is eventually retired its row here says so and points at a durable copy
+instead. If your study depends on a specific model being reachable years from now, do not
+rely on any URL you do not control — download it and serve it yourself.
+
+Models are built and gated in the
+[eye-tracking](https://github.com/jspsych/eye-tracking) repository, which trains the network
+and exports the ONNX; this repository ships the result.

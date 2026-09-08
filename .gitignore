@@ -7,5 +7,6 @@ coverage/
 .claude/
 docs/build/
 docs/.docusaurus/
-docs/static/models/*.onnx
+docs/static/models/
+docs/src/generated/
 docs/static/css/jspsych.css

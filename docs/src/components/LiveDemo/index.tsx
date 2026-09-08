@@ -6,6 +6,7 @@ import clsx from "clsx";
 import type { JsPsych } from "jspsych";
 import type { SaccadeTracker } from "@saccadejs/core";
 import type SaccadeExtension from "@saccadejs/extension";
+import releases from "@site/src/generated/model-releases.json";
 import FreeViewing from "./FreeViewing";
 import { detectFixations, drawScanpath, type Fixation, type Rect, type Sample } from "./scanpath";
 import styles from "./styles.module.css";
@@ -476,7 +477,11 @@ function explain(err: unknown): string {
 type Phase = "menu" | "running" | "explore" | "error";
 
 function Demo() {
-  const modelUrl = useBaseUrl("/models/eye_embedding.onnx");
+  // Deliberately the *versioned* path, not /models/eye_embedding.onnx: the demo should
+  // model the practice we ask of everyone else, and using it here means the versioned URL
+  // is exercised on every deploy instead of being a link nobody walks.
+  const current = releases.releases.filter((r) => r.served).at(-1)!;
+  const modelUrl = useBaseUrl(`/models/${releases.id}/${current.version}/${current.file}`);
   const sceneUrl = useBaseUrl("/img/repin-unexpected-visitors.jpg");
 
   const containerRef = useRef<HTMLDivElement | null>(null);
