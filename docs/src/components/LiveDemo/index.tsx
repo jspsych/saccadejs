@@ -94,10 +94,10 @@ function scanpathStimulus(src: string): string {
     <canvas id="scanpath-canvas" class="demo-overlay"></canvas>
   </div>
   <div class="demo-caption">
-    <p>Each circle is a fixation — somewhere your gaze stayed put — and the bigger ones are the
-    ones you held longer. The lines between them are your saccades.</p>
+    <p class="demo-explain">Each circle is a fixation — somewhere your gaze stayed put — and the
+    bigger ones are the ones you held longer. The lines between them are your saccades.</p>
     <p class="demo-legend"><span>start of the trial</span><i></i><span>end</span></p>
-    <p class="demo-prompt">Press any key to continue.</p>
+    <p class="demo-prompt">Press the space bar to continue.</p>
   </div>`;
 }
 
@@ -107,7 +107,7 @@ function liveStimulus(src: string): string {
   </div>
   <div class="demo-caption">
     <p>The dot is where the tracker thinks you are looking, redrawn on every camera frame.</p>
-    <p class="demo-prompt">Press any key to finish.</p>
+    <p class="demo-prompt">Press the space bar to finish.</p>
   </div>`;
 }
 
@@ -117,16 +117,31 @@ function liveStimulus(src: string): string {
 /**
  * How far apart samples may sit and still count as one fixation, in pixels.
  *
- * Scaled to the error the validation trial just measured on this participant, rather than fixed:
- * a threshold tight enough to be meaningful on a good calibration shatters a noisy one into
- * dozens of one-sample fixations. `median_error_px` is a radius and the dispersion measure sums
- * two axes, hence the factor. The clamp keeps a wild validation result from producing either a
- * single fixation covering the whole picture or none at all.
+ * Scaled to this participant's own tracker rather than fixed, because a threshold tight enough to
+ * be meaningful on a good calibration shatters a noisy one into dozens of one-sample fixations.
+ *
+ * The quantity to scale by is **precision**, not accuracy: `average_offset[].r` from the
+ * validation trial, the median distance of a point's samples from their own mean. Accuracy
+ * (`median_error_px`) measures how far the estimates sit from the target, which is a constant
+ * offset that shifts a fixation without spreading it, and using it produces a threshold roughly
+ * twice too generous — fixations then run to a 560 ms median, about double what free viewing
+ * actually produces.
+ *
+ * Six times the precision was chosen against a real run: it yields fixations with a median around
+ * 260 ms covering ~80% of the samples, which is where scene viewing sits. The clamp, in viewport
+ * heights, keeps a wild validation result from producing a single fixation over the whole picture
+ * or none at all.
  */
-function dispersionFor(errorPx: number | null, rect: Rect): number {
-  const unit = Math.min(rect.width, rect.height);
-  const scaled = errorPx === null ? 0.18 * unit : 2.2 * errorPx;
-  return Math.max(0.08 * unit, Math.min(0.34 * unit, scaled));
+function dispersionFor(precisionPx: number | null, viewportHeight: number): number {
+  const scaled = precisionPx === null ? 0.06 * viewportHeight : 6 * precisionPx;
+  return Math.max(0.02 * viewportHeight, Math.min(0.15 * viewportHeight, scaled));
+}
+
+/** The median of the validation trial's per-point precision, or null if it measured none. */
+function precisionOf(validation: any): number | null {
+  const offsets: Array<{ r?: number }> = validation?.average_offset ?? [];
+  const values = offsets.map((o) => o?.r).filter((r): r is number => Number.isFinite(r));
+  return median(values);
 }
 
 interface SceneTrial {
@@ -145,17 +160,27 @@ interface SceneTrial {
 function mountScanpath(
   display: HTMLElement,
   scene: SceneTrial,
-  errorPx: number | null,
+  precisionPx: number | null,
 ): { fixations: Fixation[]; teardown: () => void } {
   const img = display.querySelector<HTMLImageElement>("#scanpath-scene");
   const canvas = display.querySelector<HTMLCanvasElement>("#scanpath-canvas");
   const samples = scene.saccade_data ?? [];
   const from = scene.saccade_targets?.["#scene"];
 
-  if (!img || !canvas || !from) return { fixations: [], teardown: () => {} };
+  // Without a rect for the picture there is no way to map the samples onto it, and without
+  // samples there is nothing to map. Say so rather than leaving an unmarked painting on screen
+  // looking like a scanpath with nothing in it.
+  if (!img || !canvas || !from || !from.width || !from.height || samples.length === 0) {
+    const caption = display.querySelector(".demo-explain");
+    if (caption) {
+      caption.textContent =
+        "No gaze was recorded while the painting was on screen, so there is no scanpath to draw.";
+    }
+    return { fixations: [], teardown: () => {} };
+  }
 
   const fixations = detectFixations(samples, {
-    dispersion: dispersionFor(errorPx, from),
+    dispersion: dispersionFor(precisionPx, window.innerHeight),
     minDuration: FIXATION_MIN_MS,
   });
 
@@ -406,17 +431,17 @@ function Demo() {
         {
           type: jsPsychHtmlKeyboardResponse,
           stimulus: scanpathStimulus(sceneUrl),
+          // The space bar rather than any key. `ALL_KEYS` counts a modifier keydown as a
+          // response, so a participant who happens to hold Cmd or Shift — taking a screenshot of
+          // their own scanpath, say — skips the screen in 40 ms without touching anything.
+          choices: [" "],
           data: { demo_step: "scanpath" },
           on_load: () => {
             const scene = jsPsych.data.get().filter({ demo_step: "scene" }).values()[0] ?? {};
             const validation =
               jsPsych.data.get().filter({ trial_type: "saccade-validate" }).values()[0] ?? {};
             scanpathTeardownRef.current();
-            const mounted = mountScanpath(
-              display,
-              scene,
-              Number.isFinite(validation.median_error_px) ? validation.median_error_px : null,
-            );
+            const mounted = mountScanpath(display, scene, precisionOf(validation));
             fixations = mounted.fixations;
             scanpathTeardownRef.current = mounted.teardown;
           },
@@ -429,6 +454,7 @@ function Demo() {
         {
           type: jsPsychHtmlKeyboardResponse,
           stimulus: liveStimulus(sceneUrl),
+          choices: [" "],
           data: { demo_step: "live" },
           on_load: () => extension.showPredictions(),
           on_finish: () => extension.hidePredictions(),

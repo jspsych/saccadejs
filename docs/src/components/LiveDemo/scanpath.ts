@@ -87,7 +87,8 @@ function summarise(samples: Sample[], from: number, to: number): Fixation {
  * ever sampled.
  *
  * `dispersion` should be generous compared with a lab tracker's — the caller passes something
- * scaled to the gaze error the validation trial measured, not to a degree of visual angle.
+ * scaled to the precision the validation trial measured on this participant, not to a degree of
+ * visual angle.
  */
 export function detectFixations(
   samples: Sample[],
