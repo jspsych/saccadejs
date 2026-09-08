@@ -51,6 +51,11 @@ that records gaze. Nothing stops you from calling
 capture stamp, averaged over the `tta` frames the estimate came from, with the measured lag
 subtracted when [`saccade-time-sync`](plugin-time-sync) has run.
 
+Each target is measured once, the first time it has a layout box — which for an `<img>` is when
+its bitmap arrives, not when the trial loads. So `saccade_targets` records where an element was
+when the participant could first see it, and later movement is not tracked. An element that never
+appears is left out of the object entirely; test for it before hit-testing against it.
+
 ## Methods
 
 Reached as `jsPsych.extensions.saccade`.

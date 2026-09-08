@@ -161,6 +161,45 @@ describe("SaccadeExtension lifecycle", () => {
     ]);
   });
 
+  it("does not lock in a target that has no layout box yet", async () => {
+    // An <img> in the DOM whose bitmap has not arrived reports 0 x 0. Recording that would put a
+    // zero-size box in the data and make the trial's gaze impossible to hit-test.
+    display.innerHTML = `<img id="late" />`;
+    const img = display.querySelector("#late") as HTMLElement;
+    const rect = jest.spyOn(img, "getBoundingClientRect");
+    rect.mockReturnValue({ x: 40, y: 20, width: 0, height: 0, top: 20, bottom: 20, left: 40, right: 40 } as DOMRect);
+
+    const { extension, tracker } = await makeExtension(display);
+    extension.on_start({ targets: ["#late"] });
+    extension.on_load();
+    expect(extension["targetsPending"]).toBe(true);
+
+    // The image lays out. That is not a DOM mutation, so only the next camera frame notices.
+    rect.mockReturnValue({ x: 40, y: 20, width: 300, height: 200, top: 20, bottom: 220, left: 40, right: 340 } as DOMRect);
+    tracker.emit(makeFrame());
+
+    const { saccade_targets } = extension.on_finish();
+    expect(saccade_targets["#late"]).toMatchObject({ width: 300, height: 200, left: 40, top: 20 });
+  });
+
+  it("keeps the first real rect once a target has been measured", async () => {
+    display.innerHTML = `<div id="stable"></div>`;
+    const el = display.querySelector("#stable") as HTMLElement;
+    const rect = jest.spyOn(el, "getBoundingClientRect");
+    rect.mockReturnValue({ x: 0, y: 0, width: 100, height: 50, top: 0, bottom: 50, left: 0, right: 100 } as DOMRect);
+
+    const { extension, tracker } = await makeExtension(display);
+    extension.on_start({ targets: ["#stable"] });
+    extension.on_load();
+    expect(extension["targetsPending"]).toBe(false);
+
+    // Whatever the element does later, the trial recorded where it was when it was presented.
+    rect.mockReturnValue({ x: 999, y: 999, width: 1, height: 1, top: 999, bottom: 1000, left: 999, right: 1000 } as DOMRect);
+    tracker.emit(makeFrame());
+
+    expect(extension.on_finish().saccade_targets["#stable"]).toMatchObject({ width: 100, height: 50 });
+  });
+
   it("counts the frames dropped during the trial", async () => {
     const { extension, tracker } = await makeExtension(display);
     extension.on_start({ targets: [] });

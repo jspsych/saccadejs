@@ -232,6 +232,8 @@ class SaccadeExtension implements JsPsychExtension {
   private trialDroppedFrames = 0;
   private activeTrial = false;
   private domObserver: MutationObserver | null = null;
+  /** True while some requested target still has no rect worth recording. See `recordTargets`. */
+  private targetsPending = false;
 
   // ---- gaze / timing state -------------------------------------------------------------------
   private gazeUpdateCallbacks: Array<(sample: SaccadeGazeSample) => void> = [];
@@ -276,6 +278,7 @@ class SaccadeExtension implements JsPsychExtension {
     this.currentTrialData = [];
     this.currentTrialTargets = {};
     this.currentTrialSelectors = params?.targets ?? [];
+    this.targetsPending = this.currentTrialSelectors.length > 0;
     this.trialDroppedFrames = 0;
 
     this.domObserver?.observe(this.jsPsych.getDisplayElement(), { childList: true, subtree: true });
@@ -307,7 +310,9 @@ class SaccadeExtension implements JsPsychExtension {
     this.trialUnsubscribe?.();
     this.trialUnsubscribe = null;
 
-    this.recordTargets();
+    // No `recordTargets()` here: jsPsych empties the display element in `cleanupTrial()`, which
+    // runs *before* an extension's `on_finish`, so by now there is nothing left to measure.
+    // Everything must have been recorded while the trial was on screen.
     this.domObserver?.disconnect();
 
     this.activeTrial = false;
@@ -628,6 +633,10 @@ class SaccadeExtension implements JsPsychExtension {
     this.lastClock = frame.time.source;
     this.lastFps = frame.fps;
     if (frame.time.dropped != null) this.trialDroppedFrames += frame.time.dropped;
+    // Cheap once every target has a box: the flag is false and this does nothing for the rest of
+    // the trial. Until then it is the only hook that runs after an image lays out and before
+    // jsPsych tears the display down.
+    if (this.targetsPending) this.recordTargets();
     const sample = this.toSample(frame);
     if (sample) this.currentTrialData.push(sample);
   };
@@ -648,13 +657,33 @@ class SaccadeExtension implements JsPsychExtension {
     };
   };
 
+  /**
+   * Measure whichever requested targets can be measured, and remember which cannot yet.
+   *
+   * The first rect wins, but only if it is a rect: an element with zero width *and* zero height
+   * has no layout box yet, which is the normal state of an `<img>` that is in the DOM but whose
+   * bitmap has not arrived. Recording that would freeze a `0 x 0` box into the data and make the
+   * trial's gaze impossible to hit-test, so a degenerate rect leaves the target outstanding and
+   * the next call tries again.
+   *
+   * An image getting its box is a layout change, not a DOM change, so the mutation observer never
+   * sees it. `handleTrialFrame` is what retries — it fires on every camera frame, which is both
+   * during the trial and often enough to catch the box within a frame or two of it appearing.
+   */
   private recordTargets = (): void => {
     const display = this.jsPsych.getDisplayElement();
     if (!display) return;
+    let pending = false;
     for (const selector of this.currentTrialSelectors) {
-      if (this.currentTrialTargets[selector]) continue;
+      const recorded = this.currentTrialTargets[selector];
+      if (recorded && (recorded.width > 0 || recorded.height > 0)) continue;
       const el = display.querySelector(selector);
-      if (!el) continue;
+      if (!el) {
+        // Not on the page yet. It may still be added: the observer and the frame handler both
+        // call back in.
+        pending = true;
+        continue;
+      }
       const r = el.getBoundingClientRect();
       this.currentTrialTargets[selector] = {
         x: r.x,
@@ -666,7 +695,9 @@ class SaccadeExtension implements JsPsychExtension {
         left: r.left,
         right: r.right,
       };
+      if (r.width === 0 && r.height === 0) pending = true;
     }
+    this.targetsPending = pending;
   };
 
   private mutationObserverCallback = (): void => {
