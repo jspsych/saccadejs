@@ -123,12 +123,83 @@ const VALIDATE_INSTRUCTIONS = instructions(
   <p>Afterwards you will see where the tracker thought you were looking, point by point.</p>`,
 );
 
-const SCENE_INSTRUCTIONS = instructions(
-  "Image scanpath",
-  `<p>You will see a painting for about fifteen seconds. Look at it however you like — there is
-  nothing to find, and nothing to press.</p>
-  <p>Keep your head still, as you did for the dots.</p>`,
-);
+/**
+ * The seven questions Yarbus put to viewers of this painting.
+ *
+ * The picture is Repin's *They Did Not Expect Him* (1884–88), and it is here for one reason:
+ * it is the stimulus from the best-known result in the field. Yarbus (*Eye Movements and
+ * Vision*, 1967) recorded the same viewer examining it seven times, with a different question
+ * each time, and got seven visibly different scanpaths from one unchanging picture. Where
+ * someone looks is not a property of the image.
+ *
+ * So the demo does not offer a choice of question — it hands out the next one each time the
+ * activity is run, starting where Yarbus started, with free examination. A visitor who runs it
+ * twice has done the experiment, and has their own two scanpaths to compare.
+ */
+interface ViewingTask {
+  /** Short name for the results card. */
+  label: string;
+  /** The question, as the participant is given it before the picture appears. */
+  prompt: string;
+  /** The same question, named back to them under their scanpath. */
+  recap: string;
+}
+
+const VIEWING_TASKS: ViewingTask[] = [
+  {
+    label: "Free examination",
+    prompt: "Look at it however you like — there is nothing in particular to find.",
+    recap: "look at it however you liked",
+  },
+  {
+    label: "Their circumstances",
+    prompt: "Estimate the material circumstances of the family — how well off they are.",
+    recap: "estimate the material circumstances of the family",
+  },
+  {
+    label: "Their ages",
+    prompt: "Give the ages of the people.",
+    recap: "give the ages of the people",
+  },
+  {
+    label: "What just happened",
+    prompt: "Surmise what the family had been doing before the unexpected visitor arrived.",
+    recap: "surmise what the family had been doing before the visitor arrived",
+  },
+  {
+    label: "Their clothes",
+    prompt: "Remember the clothes worn by the people.",
+    recap: "remember the clothes worn by the people",
+  },
+  {
+    label: "Where things are",
+    prompt: "Remember the position of the people and the objects in the room.",
+    recap: "remember the position of the people and the objects in the room",
+  },
+  {
+    label: "How long he was away",
+    prompt: "Estimate how long the unexpected visitor had been away from the family.",
+    recap: "estimate how long the visitor had been away",
+  },
+];
+
+/** The screen before the picture. `index` is the question's place in Yarbus's seven. */
+function sceneInstructions(task: ViewingTask, index: number): string {
+  return instructions(
+    "Image scanpath",
+    `<p>You will see a painting for about fifteen seconds. While it is on screen:</p>
+    <p class="demo-task"><strong>${task.prompt}</strong></p>
+    <p>There is nothing to press. Keep your head still, as you did for the dots.</p>
+    <p class="demo-credit">${
+      index === 0
+        ? `This is Yarbus's experiment, and that is the question he started with. He put seven
+           different ones to viewers of this painting and got seven different scanpaths out of
+           it — run this again for the next of them.`
+        : `Question ${index + 1} of Yarbus's seven. Compare the scanpath you get with the last
+           one: the picture has not changed.`
+    }</p>`,
+  );
+}
 
 /**
  * The stimulus screens. Plain HTML strings with class names rather than JSX: jsPsych renders
@@ -144,15 +215,18 @@ function sceneStimulus(src: string): string {
   </div>`;
 }
 
-function scanpathStimulus(src: string): string {
+function scanpathStimulus(src: string, task: ViewingTask): string {
   return `<div class="demo-figure demo-figure-stacked">
     <img id="scanpath-scene" class="demo-scene" src="${src}" alt="" />
     <canvas id="scanpath-canvas" class="demo-overlay"></canvas>
   </div>
   <div class="demo-caption">
+    <p class="demo-task">You were asked to ${task.recap}.</p>
     <p class="demo-explain">Each circle is a fixation — somewhere your gaze stayed put — and the
     bigger ones are the ones you held longer. The lines between them are your saccades.</p>
     <p class="demo-legend"><span>start of the trial</span><i></i><span>end</span></p>
+    <p class="demo-credit">Ilya Repin, <i>They Did Not Expect Him</i> (1884–88), the painting
+    Yarbus used.</p>
   </div>`;
 }
 
@@ -254,10 +328,13 @@ function mountScanpath(
 /** The four things a visitor can choose. `explore` is the one that is not a jsPsych trial. */
 type Activity = "calibrate" | "validate" | "scanpath" | "explore";
 
-interface CalibrationResult {
-  nPoints: number;
-  lambda: number | null;
-}
+/**
+ * Whether there is a gaze model to use. `"failed"` is a calibration that ran to the end and
+ * fitted nothing — no usable points, or the camera stalled part way — which has to stay locked
+ * exactly like a calibration that never ran, but is worth saying out loud rather than leaving
+ * the card reading "Not run yet" after twenty seconds of looking at dots.
+ */
+type CalibrationState = "none" | "ok" | "failed";
 
 interface ValidationResult {
   errorPercent: number | null;
@@ -271,12 +348,16 @@ interface ScanpathResult {
   hz: number | null;
   fixations: number;
   medianFixationMs: number | null;
+  /** Which of Yarbus's questions this scanpath was recorded under. */
+  task: string;
 }
 
 interface Session {
-  calibration: CalibrationResult | null;
+  calibration: CalibrationState;
   validation: ValidationResult | null;
   scanpath: ScanpathResult | null;
+  /** How many scanpaths have been recorded, which is also the next question to hand out. */
+  scanpathRuns: number;
   /** Facts about this machine, filled in as the activities that measure them run. */
   backend: string | null;
   fps: number | null;
@@ -288,9 +369,10 @@ interface Session {
 }
 
 const EMPTY_SESSION: Session = {
-  calibration: null,
+  calibration: "none",
   validation: null,
   scanpath: null,
+  scanpathRuns: 0,
   backend: null,
   fps: null,
   clock: null,
@@ -317,6 +399,7 @@ function absorb(
   activity: Activity,
   jsPsych: JsPsych,
   fixations: Fixation[],
+  task: ViewingTask,
 ): Session {
   const data = jsPsych.data.get();
   const first = (trial_type: string): any => data.filter({ trial_type }).values()[0] ?? {};
@@ -327,11 +410,10 @@ function absorb(
   if (Number.isFinite(preview.fps)) next.fps = preview.fps;
 
   if (activity === "calibrate") {
+    // `lambda` is the ridge penalty the fit used, and the plugin records it as `null` when
+    // there was no fit — so it is also the answer to "is there a gaze model now?".
     const calibration = first("saccade-calibrate");
-    next.calibration = {
-      nPoints: calibration.n_points ?? 0,
-      lambda: Number.isFinite(calibration.lambda) ? calibration.lambda : null,
-    };
+    next.calibration = Number.isFinite(calibration.lambda) ? "ok" : "failed";
     next.validation = null;
     next.scanpath = null;
   }
@@ -357,7 +439,9 @@ function absorb(
       hz: samples.length ? samples.length / (SCENE_MS / 1000) : null,
       fixations: fixations.length,
       medianFixationMs: median(fixations.map((f) => f.duration)),
+      task: task.label,
     };
+    next.scanpathRuns = prev.scanpathRuns + 1;
     if (scene.saccade_timing?.clock) next.clock = scene.saccade_timing.clock;
     if (Number.isFinite(scene.saccade_timing?.fps)) next.fps = scene.saccade_timing.fps;
   }
@@ -389,7 +473,7 @@ function explain(err: unknown): string {
 // ---------------------------------------------------------------------------------------
 // the demo itself
 
-type Phase = "intro" | "menu" | "running" | "explore" | "error";
+type Phase = "menu" | "running" | "explore" | "error";
 
 function Demo() {
   const modelUrl = useBaseUrl("/models/eye_embedding.onnx");
@@ -408,12 +492,12 @@ function Demo() {
   const [supported] = useState(
     () => window.isSecureContext && !!navigator.mediaDevices?.getUserMedia,
   );
-  const [phase, setPhase] = useState<Phase>("intro");
+  const [phase, setPhase] = useState<Phase>("menu");
   const [running, setRunning] = useState<Activity | null>(null);
   const [session, setSession] = useState<Session>(EMPTY_SESSION);
   const [error, setError] = useState<string | null>(null);
 
-  const calibrated = session.calibration !== null;
+  const calibrated = session.calibration === "ok";
 
   /**
    * End the activity that is on screen, keeping the tracker and its calibration.
@@ -478,7 +562,7 @@ function Demo() {
     setSession(EMPTY_SESSION);
     setError(null);
     setRunning(null);
-    setPhase("intro");
+    setPhase("menu");
   }, [releaseCamera]);
 
   /** Abandon an activity that cannot continue, and go back to the menu. */
@@ -535,6 +619,10 @@ function Demo() {
         // saw and the fixation count in the summary have to be the same fixations.
         let fixations: Fixation[] = [];
 
+        // Yarbus's questions, in his order, wrapping round for anyone who runs all seven.
+        const taskIndex = session.scanpathRuns % VIEWING_TASKS.length;
+        const task = VIEWING_TASKS[taskIndex];
+
         // Camera permission, the model download with its progress bar, and head positioning.
         // Only on the first activity of the session: after that the camera is already open, and
         // making somebody sit through a preview screen to recalibrate is friction for nothing.
@@ -561,7 +649,11 @@ function Demo() {
           ],
           scanpath: [
             ...setup,
-            { type: m.button, stimulus: SCENE_INSTRUCTIONS, choices: ["Begin"] },
+            {
+              type: m.button,
+              stimulus: sceneInstructions(task, taskIndex),
+              choices: ["Begin"],
+            },
             // An ordinary jsPsych trial; `extensions` is what turns recording on, and `targets`
             // records where the picture was, which is what the scanpath is drawn against.
             {
@@ -569,13 +661,15 @@ function Demo() {
               stimulus: sceneStimulus(sceneUrl),
               choices: "NO_KEYS",
               trial_duration: SCENE_MS,
-              data: { demo_step: "scene" },
+              // The question goes into the data, because it is the manipulation: two of these
+              // trials differ in nothing else.
+              data: { demo_step: "scene", viewing_task: task.label },
               extensions: [{ type: m.extension, params: { targets: ["#scene"] } }],
             },
             // The recorded trial, given back as a picture.
             {
               type: m.button,
-              stimulus: scanpathStimulus(sceneUrl),
+              stimulus: scanpathStimulus(sceneUrl, task),
               choices: ["Back to the menu"],
               data: { demo_step: "scanpath" },
               on_load: () => {
@@ -600,7 +694,7 @@ function Demo() {
         await jsPsych.run(timelines[activity]);
         if (!mountedRef.current || jsPsychRef.current !== jsPsych) return;
 
-        setSession((prev) => absorb(prev, activity, jsPsych, fixations));
+        setSession((prev) => absorb(prev, activity, jsPsych, fixations, task));
         endActivity();
         setRunning(null);
         setPhase("menu");
@@ -612,7 +706,7 @@ function Demo() {
         endActivity();
       }
     },
-    [endActivity, modelUrl, sceneUrl, session.validation],
+    [endActivity, modelUrl, sceneUrl, session.scanpathRuns, session.validation],
   );
 
   const setSmoothing = useCallback((smoothingFrames: number) => {
@@ -621,8 +715,6 @@ function Demo() {
 
   return (
     <div className={styles.demo}>
-      {phase === "intro" ? <Intro supported={supported} onStart={() => setPhase("menu")} /> : null}
-
       {phase === "error" && error ? (
         <div className={styles.error} role="alert">
           <p className={styles.errorText}>{error}</p>
@@ -635,7 +727,13 @@ function Demo() {
       ) : null}
 
       {phase === "menu" || phase === "error" ? (
-        <Menu session={session} calibrated={calibrated} onRun={run} onReset={reset} />
+        <Menu
+          session={session}
+          calibrated={calibrated}
+          supported={supported}
+          onRun={run}
+          onReset={reset}
+        />
       ) : null}
 
       {/*
@@ -677,34 +775,37 @@ function Demo() {
 // ---------------------------------------------------------------------------------------
 // the screens React renders
 
-function Intro({ supported, onStart }: { supported: boolean; onStart: () => void }) {
+/**
+ * What a visitor needs to know before they press anything, above the menu rather than on a
+ * screen of its own: a click-through that only says "this is about to use your camera" is a
+ * click-through, and the camera prompt itself says that better. The setting-up advice is worth
+ * reading, so it stays until it has been acted on, and goes once the calibration exists.
+ */
+function Preamble({ supported, calibrated }: { supported: boolean; calibrated: boolean }) {
   return (
-    <div className={clsx(styles.panel, styles.panelCentered)}>
+    <div className={styles.preamble}>
       <p className={styles.lead}>
         Your webcam watches your eyes while you look at a handful of dots, and from that the page
         learns to guess where on the screen you are looking. Calibrating takes about a minute; after
         that you can check how accurate it is, record your own scanpath over a painting, or just
-        watch the estimate move, in any order and as often as you like.
+        watch the estimate move, in any order and as often as you like.{" "}
+        <strong>
+          Every camera frame is used and discarded on your own computer. Nothing is uploaded.
+        </strong>
       </p>
-      <p className={styles.lead}>
-        Every camera frame is used and discarded on your own computer. Nothing is uploaded.
-      </p>
-      <ul className={styles.requirements}>
-        <li>Chrome or Edge on a laptop or desktop</li>
-        <li>A webcam, and permission to use it when the browser asks</li>
-        <li>Sit about an arm's length from the screen</li>
-        <li>Light on your face, not behind you — avoid sitting with a window at your back</li>
-        <li>Keep your head still once calibration starts; move your eyes, not your head</li>
-      </ul>
-      {supported ? (
-        <button className={styles.primary} onClick={onStart}>
-          Start
-        </button>
-      ) : (
+      {!supported ? (
         <p className={styles.status}>
           This browser cannot open a camera on this page. Cameras need a secure connection — open
           the page over <code>https://</code> or on <code>localhost</code>.
         </p>
+      ) : calibrated ? null : (
+        <ul className={styles.requirements}>
+          <li>Chrome or Edge on a laptop or desktop</li>
+          <li>A webcam, and permission to use it when the browser asks</li>
+          <li>Sit about an arm's length from the screen</li>
+          <li>Light on your face, not behind you — avoid sitting with a window at your back</li>
+          <li>Keep your head still once calibration starts; move your eyes, not your head</li>
+        </ul>
       )}
     </div>
   );
@@ -742,11 +843,13 @@ function Card({ title, cost, blurb, result, cta, disabled, onRun }: CardProps) {
 function Menu({
   session,
   calibrated,
+  supported,
   onRun,
   onReset,
 }: {
   session: Session;
   calibrated: boolean;
+  supported: boolean;
   onRun: (activity: Activity) => void;
   onReset: () => void;
 }) {
@@ -754,6 +857,8 @@ function Menu({
 
   return (
     <div className={styles.menu}>
+      <Preamble supported={supported} calibrated={calibrated} />
+
       <div className={styles.cards}>
         <Card
           title="Calibration"
@@ -765,17 +870,16 @@ function Menu({
             </>
           }
           result={
-            calibration ? (
-              <>
-                Fitted on {calibration.nPoints} points
-                {calibration.lambda === null ? null : (
-                  <span className={styles.cardAside}>λ = {calibration.lambda}</span>
-                )}
-              </>
+            calibration === "ok" ? (
+              "Calibration complete"
+            ) : calibration === "failed" ? (
+              <span className={styles.cardPending}>
+                That calibration did not take. Try it again, with more light on your face.
+              </span>
             ) : null
           }
-          cta={calibrated ? "Calibrate again" : "Calibrate"}
-          disabled={false}
+          cta={calibration === "none" ? "Calibrate" : "Calibrate again"}
+          disabled={!supported}
           onRun={() => onRun("calibrate")}
         />
 
@@ -804,7 +908,7 @@ function Menu({
             ) : null
           }
           cta={validation ? "Check again" : "Check the accuracy"}
-          disabled={!calibrated}
+          disabled={!calibrated || !supported}
           onRun={() => onRun("validate")}
         />
 
@@ -813,8 +917,9 @@ function Menu({
           cost="about 20 seconds"
           blurb={
             <>
-              Fifteen seconds of a painting, recorded through the extension exactly as a study would
-              record it, and then your own fixations and saccades drawn back over it.
+              Fifteen seconds of Repin's painting, with one of Yarbus's seven questions to answer
+              while you look, and then your own fixations and saccades drawn back over it. Ask a
+              different question and the scanpath changes.
             </>
           }
           result={
@@ -828,11 +933,12 @@ function Menu({
                     ? null
                     : ` · ${scanpath.medianFixationMs.toFixed(0)} ms median`}
                 </span>
+                <span className={styles.cardAside}>Question: {scanpath.task}</span>
               </>
             ) : null
           }
-          cta={scanpath ? "Record another" : "Record a scanpath"}
-          disabled={!calibrated}
+          cta={scanpath ? "Ask the next question" : "Record a scanpath"}
+          disabled={!calibrated || !supported}
           onRun={() => onRun("scanpath")}
         />
 
@@ -841,19 +947,14 @@ function Menu({
           cost="as long as you like"
           blurb={
             <>
-              The estimate live on the page, with the frame rate, the sampling rate and the
-              smoothing window on show — and a slider that lets you trade one against the other.
+              The estimate live on the page, with the numbers behind it: how fast your camera runs,
+              how often the tracker guesses, and a slider that trades a steadier dot against one
+              that keeps up.
             </>
           }
-          result={
-            <>
-              Smoothing {session.smoothingFrames}{" "}
-              {session.smoothingFrames === 1 ? "frame" : "frames"}
-              <span className={styles.cardAside}>nothing is recorded</span>
-            </>
-          }
+          result={<span className={styles.cardPending}>Nothing is recorded</span>}
           cta="Look around"
-          disabled={!calibrated}
+          disabled={!calibrated || !supported}
           onRun={() => onRun("explore")}
         />
       </div>
@@ -914,7 +1015,7 @@ function SessionData({ session, onReset }: { session: Session; onReset: () => vo
 
       <div className={styles.buttonRow}>
         <button className={styles.abandon} onClick={onReset}>
-          Close the camera and start over
+          Close the camera and clear this session
         </button>
       </div>
     </div>

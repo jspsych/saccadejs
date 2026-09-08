@@ -1,6 +1,6 @@
 /* Three of the demo's four activities are real jsPsych trials, so almost everything on screen
    while one is running is styled by the plugins and by jspsych.css. What is here is the frame
-   around them: the intro screen, the menu of activities, the free-viewing panel and its gaze
+   around them: the menu of activities and its preamble, the free-viewing panel and its gaze
    overlay, the stage jsPsych renders into, and — at the foot of the file — the trial markup
    inside that stage. */
 
@@ -38,12 +38,13 @@
   padding: 1.4rem 1.5rem;
 }
 
-.panelCentered {
-  align-items: center;
+/* The copy above the cards: what the demo is, what it does with the camera, and — until there
+   is a calibration — how to sit for it. Not a panel: it introduces the cards rather than
+   competing with them, so it carries no border of its own. */
+.preamble {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  text-align: center;
+  gap: 0.9rem;
 }
 
 .lead {
@@ -59,7 +60,6 @@
   margin: 0;
   max-width: 42rem;
   padding-left: 1.2rem;
-  text-align: left;
 }
 
 .status {
@@ -530,6 +530,29 @@
 .stage :global(.demo-caption p) {
   font-size: 0.92rem;
   margin: 0;
+}
+
+/* The question the participant was given: the manipulation, on the instruction screen and again
+   under the scanpath they produced under it. Set apart from the surrounding prose, because on
+   the instruction screen it is the one line that has to be read. */
+.stage :global(.demo-task) {
+  border-left: 3px solid var(--ifm-color-primary);
+  font-size: 1rem !important;
+  line-height: 1.6;
+  margin: 1.1rem 0 !important;
+  padding-left: 0.9rem;
+}
+
+.stage :global(.demo-caption .demo-task) {
+  margin-top: 0 !important;
+}
+
+/* Where the picture and the questions come from. Quiet: a citation, not an instruction. */
+.stage :global(.demo-credit) {
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.82rem !important;
+  line-height: 1.6;
+  margin-top: 1.2rem !important;
 }
 
 /* The colour key under the scanpath: the same four brand stops the figure is drawn with, laid
