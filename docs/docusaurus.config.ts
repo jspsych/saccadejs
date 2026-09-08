@@ -18,6 +18,7 @@ const config: Config = defineJspsychConfig({
   organizationName: "jspsych",
   projectName: "saccadejs",
   githubUrl: "https://github.com/jspsych/saccadejs",
+  favicon: "img/saccadejs-icon.svg",
 
   docs: {
     sidebarPath: "./sidebars.ts",

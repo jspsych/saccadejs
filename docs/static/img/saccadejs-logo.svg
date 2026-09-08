@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"
+     role="img" aria-labelledby="saccadejs-logo-title">
+  <title id="saccadejs-logo-title">saccade.js</title>
+  <!--
+    saccade.js scanpath mark.
+
+    Eye tracking plots gaze the same way jsPsych draws its brain: circles of
+    varying radius. So the mark is built from that shared primitive — four
+    fixations joined by three saccades — using the brain's own brand colours.
+
+    Where the brain codes colour by position, this codes it by time. The ramp
+    runs #006838 -> #13b24b -> #f78f1e -> #ee4523, early to late, which is both
+    a legible progression and the convention scanpaths are actually coloured by.
+    Radius encodes dwell time. The path starts top left and resolves lower
+    right, the direction a scan of a scene really runs.
+
+    Sized for small use rather than for detail: radii are held in a narrow band
+    (20.8 / 26.8 / 32.8) and the stroke is heavy, so the mark reads as one
+    connected form at 16px instead of dots strung on wires. No two fixations
+    touch — the closest edge gap is 11.4 units.
+  -->
+  <line x1="32.06" y1="52.18" x2="95.22" y2="93.68" stroke="#006838" stroke-width="15.88" />
+  <line x1="95.22" y1="93.68" x2="71.76" y2="147.82" stroke="#13b24b" stroke-width="15.88" />
+  <line x1="71.76" y1="147.82" x2="161.98" y2="126.17" stroke="#f78f1e" stroke-width="15.88" />
+  <circle cx="32.06" cy="52.18" r="26.8" fill="#006838" />
+  <circle cx="95.22" cy="93.68" r="20.84" fill="#13b24b" />
+  <circle cx="71.76" cy="147.82" r="26.8" fill="#f78f1e" />
+  <circle cx="161.98" cy="126.17" r="32.75" fill="#ee4523" />
+</svg>

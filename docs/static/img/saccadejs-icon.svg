@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"
+     role="img" aria-label="saccade.js">
+  <!--
+    Favicon variant of the scanpath mark: the same geometry scaled up 10% about
+    the centre, trading margin for stroke weight because a favicon is read at
+    16px where margin is wasted and weight is everything.
+  -->
+  <line x1="25.27" y1="47.40" x2="94.74" y2="93.05" stroke="#006838" stroke-width="17.47" />
+  <line x1="94.74" y1="93.05" x2="68.94" y2="152.60" stroke="#13b24b" stroke-width="17.47" />
+  <line x1="68.94" y1="152.60" x2="168.18" y2="128.79" stroke="#f78f1e" stroke-width="17.47" />
+  <circle cx="25.27" cy="47.40" r="29.48" fill="#006838" />
+  <circle cx="94.74" cy="93.05" r="22.92" fill="#13b24b" />
+  <circle cx="68.94" cy="152.60" r="29.48" fill="#f78f1e" />
+  <circle cx="168.18" cy="128.79" r="36.03" fill="#ee4523" />
+</svg>
