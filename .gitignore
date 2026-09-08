@@ -8,5 +8,4 @@ coverage/
 docs/build/
 docs/.docusaurus/
 docs/static/models/
-docs/src/generated/
 docs/static/css/jspsych.css

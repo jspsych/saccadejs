@@ -5,8 +5,12 @@
   "type": "module",
   "main": "dist/index.cjs",
   "exports": {
-    "import": "./dist/index.js",
-    "require": "./dist/index.cjs"
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./models/releases.json": "./models/releases.json",
+    "./package.json": "./package.json"
   },
   "typings": "dist/index.d.ts",
   "unpkg": "dist/index.browser.min.js",

@@ -44,13 +44,6 @@ const staticDir = resolve(here, "../static/models");
 
 const registry = JSON.parse(readFileSync(registryPath, "utf8"));
 
-// Mirror the registry into the site source first, before any early return: the releases
-// page and the live demo both import it, so it has to exist even on a checkout with no
-// model file (a fresh clone, or a docs-only PR).
-const genDir = resolve(here, "../src/generated");
-mkdirSync(genDir, { recursive: true });
-writeFileSync(resolve(genDir, "model-releases.json"), JSON.stringify(registry, null, 2) + "\n");
-
 const current = registry.releases.filter((r) => r.served).at(-1);
 if (!current) {
   console.warn("[copy-model] no served release in releases.json — nothing to stage.");

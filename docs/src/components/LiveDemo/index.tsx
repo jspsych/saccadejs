@@ -6,7 +6,7 @@ import clsx from "clsx";
 import type { JsPsych } from "jspsych";
 import type { SaccadeTracker } from "@saccadejs/core";
 import type SaccadeExtension from "@saccadejs/extension";
-import releases from "@site/src/generated/model-releases.json";
+import releases from "@saccadejs/core/models/releases.json";
 import FreeViewing from "./FreeViewing";
 import { detectFixations, drawScanpath, type Fixation, type Rect, type Sample } from "./scanpath";
 import styles from "./styles.module.css";

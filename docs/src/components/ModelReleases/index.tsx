@@ -1,5 +1,5 @@
 import React from "react";
-import releases from "@site/src/generated/model-releases.json";
+import releases from "@saccadejs/core/models/releases.json";
 
 type Release = (typeof releases.releases)[number];
 
