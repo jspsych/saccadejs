@@ -77,7 +77,7 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-validate
 `median_error_px` is accuracy: how far the average prediction sits from where the participant was
 actually looking. `average_offset[i].r` is precision: how scattered the samples are around their
 own average. A large `r` with a small offset means a noisy but unbiased estimate — more smoothing
-(the extension's `tta`) will help. A small `r` with a large offset means a systematic bias — a
+(the extension's `smoothing_frames`) will help. A small `r` with a large offset means a systematic bias — a
 recalibration will help.
 
 `median_error_viewport` is the number to compare against published model evaluations, which report

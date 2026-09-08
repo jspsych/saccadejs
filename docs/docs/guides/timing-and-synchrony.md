@@ -43,7 +43,7 @@ Each trial also carries a `saccade_timing` object recording what was applied:
 | `clock` | Where camera timestamps came from. `"captureTime"` is the good one. |
 | `dropped_frames` | Camera frames the browser reported dropping during the trial. |
 | `fps` | Frame rate at the end of the trial. |
-| `tta` | Frames averaged per estimate. |
+| `smoothing_frames` | Frames averaged per estimate. |
 
 **Do not correct twice.** `lag_ms` already contains the display latency, so do not also subtract
 a display latency from a spec sheet or your own measurement. Processing time is already excluded
@@ -82,7 +82,7 @@ const bad = (d) =>
 If you change the display in response to gaze, the number that matters is how stale an estimate
 is by the time you can act on it: `frame.time.emit - frame.time.capture`, plus your own render
 and the display latency again on the way out. Expect a closed loop well over 100 ms. Averaging
-frames adds to it, so set `tta: 1` and accept a noisier estimate.
+frames adds to it, so leave `smoothing_frames` at its default of 1 and accept a noisier estimate.
 
 Every field listed here is documented in the
 [`saccade-time-sync` reference](../reference/plugin-time-sync).

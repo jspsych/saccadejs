@@ -31,7 +31,7 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | --- | --- | --- | --- |
 | `assets` | `SaccadeAssets` | `{}` | Model and runtime URLs. See [Hosting the assets](../guides/hosting-the-assets). |
 | `video` | `{ width?, height? }` | `640 × 480` | `getUserMedia` ideals, user-facing camera. |
-| `tta` | `number` | `5` | Embeddings averaged before predicting. |
+| `smoothingFrames` | `number` | `1` | Frames whose embeddings are averaged into one prediction. `1` predicts from the newest frame alone. |
 | `executionProviders` | `("webgpu" \| "wasm")[]` | `["webgpu", "wasm"]` | ONNX Runtime providers, tried in order. |
 | `onFrame` | `(f: TrackerFrame) => void` | — | Equivalent to calling `onFrame()` after construction. |
 | `onProgress` | `(p: SaccadeProgress) => void` | — | Called during `init()` as each stage starts: `camera`, `mediapipe`, `landmarker`, `ort`, `model`, `session`, `ready`. The `model` stage also reports `loaded` and `total` bytes of the ONNX download, so you can show a progress bar. |
@@ -59,7 +59,7 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `fitCalibration` | `(opts?: { lambda?, center? }) => { lambda, nPoints } \| null` | Solves the ridge map from the points added so far. `null` when there is nothing to fit. |
 | `calibrated` | `boolean` (getter) | `gaze` stays `null` until this is true. |
 | `getKernel` | `(): Float32Array \| null` | The fitted 256-long kernel, x and y interleaved. |
-| `setTta` / `getTta` | `(n: number): void` / `(): number` | |
+| `setSmoothingFrames` / `getSmoothingFrames` | `(n: number): void` / `(): number` | Changeable while running. |
 | `getCurrentGaze` | `(): { gaze: Gaze; time: FrameTime } \| null` | |
 | `sampleLuminance` | `(): number` | Mean luminance of the current camera frame. |
 
@@ -81,7 +81,7 @@ interface TrackerFrame {
   faceFound: boolean;
   crop: Uint8Array | null;             // 144 x 36 grayscale, row-major
   embedding: Float32Array | null;      // 128 values, this frame only
-  meanEmbedding: Float32Array | null;  // the TTA mean, which `gaze` came from
+  meanEmbedding: Float32Array | null;  // the smoothing mean, which `gaze` came from
   timings: { landmark: number; crop: number; embed: number; total: number; wait?: number };
   time: FrameTime;
   fps: number;                         // smoothed
@@ -104,7 +104,7 @@ interface Gaze { x: number; y: number }   // 0-1, origin top-left
 | `dropped` | `number \| null` | Frames the camera presented but the loop never saw, since the previous frame. |
 | `callback` | `number` | When JavaScript received the frame. |
 | `emit` | `number` | When the prediction became available. |
-| `meanCapture` | `number \| null` | Mean `capture` of the TTA ring buffer: the time the smoothed `gaze` refers to. Equals `capture` when `tta` is 1. Use this one. |
+| `meanCapture` | `number \| null` | Mean `capture` of the smoothing ring buffer: the time the smoothed `gaze` refers to. Equals `capture` when `smoothingFrames` is 1. Use this one. |
 
 What `capture` cannot see is display lag plus camera lag, which is what
 [`runLoopback`](#runloopback) measures.

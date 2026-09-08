@@ -25,9 +25,10 @@ method in a paper, or work out why something is behaving the way it is.
 4. **The embedding.** The strip goes through a small convolutional network (about 20 MB, ONNX,
    run on WebGPU or WebAssembly) that returns 128 numbers describing the appearance of the eyes.
    This model is trained once, on a large webcam dataset, and is the same for everybody.
-5. **Smoothing.** The last few embeddings are averaged before predicting, which is much less
-   jumpy than a single frame. The number averaged is the `tta` setting, 5 by default. Because
-   the estimate comes from several frames, its timestamp is the mean of their capture times.
+5. **Smoothing.** Embeddings can be averaged over several frames before predicting, which is
+   much less jumpy than a single frame. The number averaged is the `smoothing_frames` setting,
+   1 by default — the newest frame alone. Above 1 the estimate comes from several frames, so its
+   timestamp is the mean of their capture times and it lags the display.
 6. **The ridge.** A ridge regression maps the averaged embedding to a point on the screen. This
    is the only part fitted per participant, which is why calibration takes twenty seconds rather
    than several minutes.

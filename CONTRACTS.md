@@ -70,7 +70,7 @@ export interface TrackerFrame {
 export interface SaccadeTrackerOptions {
   assets?: SaccadeAssets;
   video?: { width?: number; height?: number };  // getUserMedia ideal; default 640x480
-  tta?: number;                                  // ring-buffer mean, default 5
+  smoothingFrames?: number;                      // frames averaged per estimate, default 1
   executionProviders?: ("webgpu" | "wasm")[];    // default ["webgpu", "wasm"]
   onFrame?: (f: TrackerFrame) => void;
 }
@@ -90,7 +90,7 @@ export class SaccadeTracker {
   getCalibrationPoints(): CalPoint[];
   fitCalibration(opts?: { lambda?: number; center?: number }): { lambda: number; nPoints: number } | null;
   get calibrated(): boolean;
-  setTta(n: number): void;
+  setSmoothingFrames(n: number): void;
   /** Latest gaze (viewport fractions) and its capture time, or null. */
   getCurrentGaze(): { gaze: Gaze; time: FrameTime } | null;
   /** The whole-frame luminance sampler the loopback needs, exposed so plugins can reuse the video. */
@@ -165,7 +165,7 @@ dynamically `import()`s onnxruntime-web and tasks-vision from the jsdelivr URLs 
 ```ts
 initialize({
   round_predictions = true,      // round x,y to integer pixels
-  tta = 5,
+  smoothing_frames = 1,          // frames averaged per estimate
   assets = {},                   // SaccadeAssets
   tracker,                       // optional pre-built SaccadeTracker
 }): Promise<void>
@@ -248,11 +248,11 @@ The core landed with these additive deviations; the extension, plugins and docs 
 - `LoopbackResult.verdict` is the enum (`"OK" | "INCONCLUSIVE" | "UNRELIABLE"`) with a separate `reason` (`null` only when OK).
 - `runValidation` reports `percentInRoi` on a **0–100** scale (per point and aggregate); points with no gaze are kept with `NaN` errors. `ValidationSample.time` is `meanCapture ?? capture`.
 - The browser global `Saccade` is a namespace of named exports (`Saccade.SaccadeTracker`, `Saccade.runLoopback`, …), not a default export.
-- Extra optional inputs: `SaccadeAssets.ortModuleUrl` / `mediapipeModuleUrl`; `SaccadeTrackerOptions.stream` (an existing `MediaStream`) and `.model`. Extra members: `tracker.nextGaze()`, `getTta()`, `getKernel()`, `initialized`. Extra exports: `Pipeline`, `Landmarker`, `OrtEmbeddingModel`, `StubEmbeddingModel`, `fitRidge`, `CENTER`, `CAL_HEAD`, `mSequence`, `stimulusAt`, `refineLag`, `modelUrl`, `loadOrt`, `loadVision`, `DEFAULT_*_URL`.
+- Extra optional inputs: `SaccadeAssets.ortModuleUrl` / `mediapipeModuleUrl`; `SaccadeTrackerOptions.stream` (an existing `MediaStream`) and `.model`. Extra members: `tracker.nextGaze()`, `getSmoothingFrames()`, `getKernel()`, `initialized`. Extra exports: `Pipeline`, `Landmarker`, `OrtEmbeddingModel`, `StubEmbeddingModel`, `fitRidge`, `CENTER`, `CAL_HEAD`, `mSequence`, `stimulusAt`, `refineLag`, `modelUrl`, `loadOrt`, `loadVision`, `DEFAULT_*_URL`.
 
 ## Decisions on ambiguities raised by the docs build (2026-09-05)
 
-1. **`t` in `saccade_data` uses the smoothed sample's own time**: `t = (time.meanCapture ?? time.capture) − trialStart − (offset ?? 0)`. With the default TTA of 5 that is the mean capture time of the ring buffer — the instant the reported gaze actually refers to. `saccade_timing` also records `tta`.
+1. **`t` in `saccade_data` uses the smoothed sample's own time**: `t = (time.meanCapture ?? time.capture) − trialStart − (offset ?? 0)`. Above `smoothing_frames: 1` that is the mean capture time of the ring buffer — the instant the reported gaze actually refers to. `saccade_timing` also records `smoothing_frames`.
 2. **`saccade-calibrate` data**: the pixel list is `calibration_points_px` (not `calibration_points`, which stays the parameter in percent). `n_points` = number of distinct targets; data also records `repetitions_per_point`.
 3. **`saccade-validate` data**: `raw_gaze` is `{x, y, dx, dy, t}[][]` (one array per validation point, in presentation order); add `samples_per_sec` (mean over points).
 4. **`saccade-time-sync`** runs the loopback on a full-viewport overlay appended to `document.body` (the core default), not the jsPsych display element — the whole screen must light the face. It hides the jsPsych content underneath for the duration and restores it.

@@ -22,7 +22,7 @@ requires it.
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | `round_predictions` | `boolean` | `true` | Round `x` and `y` to whole pixels in the recorded data. |
-| `tta` | `number` | `5` | Frames whose embeddings are averaged before predicting. Higher is smoother and laggier; set `1` for gaze-contingent designs. |
+| `smoothing_frames` | `number` | `1` | Frames whose embeddings are averaged into one prediction. `1` predicts from the newest frame alone. Higher is steadier and laggier; keep it at `1` for gaze-contingent designs. |
 | `assets` | `SaccadeAssets` | `{}` | Model and runtime URLs. See [Hosting the assets](../guides/hosting-the-assets). |
 | `tracker` | `SaccadeTracker` | — | Use a pre-built tracker instead of constructing one. The extension will not dispose a tracker it did not create. |
 
@@ -45,10 +45,11 @@ that records gaze. Nothing stops you from calling
 | --- | --- | --- |
 | `saccade_data` | `{x, y, t}[]` | One row per camera frame in which a face was found and a calibrated prediction was available. `x` and `y` are viewport pixels; `t` is ms since the trial started. |
 | `saccade_targets` | `{ [selector]: {x, y, width, height, top, bottom, left, right} }` | Bounding rectangle of each `targets` element, in viewport pixels. |
-| `saccade_timing` | `{offset_ms, corrected, clock, dropped_frames, fps, tta}` | What timing correction was applied, and camera health. See [Timing and synchrony](../guides/timing-and-synchrony). |
+| `saccade_timing` | `{offset_ms, corrected, clock, dropped_frames, fps, smoothing_frames}` | What timing correction was applied, and camera health. See [Timing and synchrony](../guides/timing-and-synchrony). |
 
 `t` is `(time.meanCapture ?? time.capture) - trialStart - (offset ?? 0)`: the camera's own
-capture stamp, averaged over the `tta` frames the estimate came from, with the measured lag
+capture stamp, averaged over the `smoothing_frames` frames the estimate came from, with the
+measured lag
 subtracted when [`saccade-time-sync`](plugin-time-sync) has run.
 
 Each target is measured once, the first time it has a layout box — which for an `<img>` is when
@@ -88,7 +89,7 @@ Reached as `jsPsych.extensions.saccade`.
 
 ```js
 const jsPsych = initJsPsych({
-  extensions: [{ type: jsPsychExtensionSaccade, params: { tta: 1 } }],
+  extensions: [{ type: jsPsychExtensionSaccade, params: { smoothing_frames: 3 } }],
 });
 
 timeline.push({

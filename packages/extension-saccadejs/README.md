@@ -49,7 +49,7 @@ Pass these in `initJsPsych` as `{ type: jsPsychExtensionSaccade, params: { ... }
 | Parameter           | Type           | Default | Description                                                                                                                                                    |
 | ------------------- | -------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `round_predictions` | boolean        | `true`  | Round the predicted `x`, `y` to whole pixels. Saves a lot of space in the data, and the predictions are nowhere near precise to a fraction of a pixel.         |
-| `tta`               | integer        | `5`     | Number of consecutive frames whose eye embeddings are averaged before a gaze prediction is made. Larger is smoother but adds group delay.                      |
+| `smoothing_frames`  | integer        | `1`     | Number of consecutive frames whose eye embeddings are averaged into one gaze prediction. `1` predicts from the newest frame alone. Larger is steadier but lags. |
 | `assets`            | object         | `{}`    | `SaccadeAssets`: `modelUrl`, `ortWasmUrl`, `mediapipeWasmUrl`, `faceLandmarkerUrl`. Set these to self-host the model and wasm files instead of using a CDN.    |
 | `tracker`           | SaccadeTracker | –       | A pre-built `SaccadeTracker` to use instead of letting the extension construct one. Useful when the page shares a tracker with non-jsPsych code.               |
 
@@ -71,14 +71,15 @@ Pass these on a trial as `extensions: [{ type: jsPsychExtensionSaccade, params: 
 | ----------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `saccade_data`    | array  | One object per camera frame in which a face was found and a calibrated prediction was available: `{x, y, t}`. `x` and `y` are **pixels** relative to the top-left of the viewport; `t` is the time the prediction refers to, in ms since the start of the trial, with the timing offset already subtracted (see below). |
 | `saccade_targets` | object | One key per selector in `targets`, whose value is `{x, y, width, height, top, bottom, left, right}` — the element's [bounding rectangle](https://developer.mozilla.org/en-US/docs/Web/API/Element/getBoundingClientRect) in viewport pixels.                                                                            |
-| `saccade_timing`  | object | `{offset_ms, corrected, clock, dropped_frames, fps, tta}`. See below.                                                                                                                                                                                                                                                   |
+| `saccade_timing`  | object | `{offset_ms, corrected, clock, dropped_frames, fps, smoothing_frames}`. See below.                                                                                                                                                                                                                                                   |
 
 ### What `t` means
 
 A camera frame carries a `captureTime`: the moment the browser says the sensor caught the light.
 But the light left the screen some milliseconds _before_ that stamp — the display's own lag — and
 the camera pipeline added more of its own. On top of that, the reported gaze is the average over
-the last `tta` frames, so it refers to the _middle_ of that window, not the newest frame. `t` is
+the last `smoothing_frames` frames, so it refers to the _middle_ of that window, not the newest
+frame. `t` is
 
 ```
 (frame.time.meanCapture ?? frame.time.capture) − trialStart − offset
@@ -91,8 +92,10 @@ is uncorrected, and `saccade_timing.corrected` is `false` so you know.
 
 `saccade_timing.clock` says where the camera timestamp came from: `"captureTime"` is the good one;
 `"receiveTime"` and `"callback"` mean the browser gave a weaker stamp and the timing is looser.
-`saccade_timing.tta` records the smoothing window the samples were averaged over, and
-`dropped_frames` how many camera frames the browser reported dropping during the trial.
+`saccade_timing.smoothing_frames` records the smoothing window the samples were actually averaged
+over — the tracker's own setting, which is not necessarily the parameter if you supplied a
+`tracker` or called `setSmoothingFrames` during the experiment. `dropped_frames` records
+how many camera frames the browser reported dropping during the trial.
 
 ## Methods
 

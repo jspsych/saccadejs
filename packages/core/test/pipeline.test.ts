@@ -6,7 +6,9 @@ import { fakeLandmarker, fakeVideo, waitFor } from "./helpers/fakes";
 describe("Pipeline", () => {
   it("emits a frame per camera frame, stamped from rVFC captureTime", async () => {
     const video = fakeVideo();
-    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), { tta: 5 });
+    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), {
+      smoothingFrames: 5,
+    });
     const frames: TrackerFrame[] = [];
     p.onFrame = (f) => frames.push(f);
     p.start();
@@ -30,7 +32,9 @@ describe("Pipeline", () => {
 
   it("averages the ring buffer and reports the mean capture time it refers to", async () => {
     const video = fakeVideo();
-    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), { tta: 3 });
+    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), {
+      smoothingFrames: 3,
+    });
     const frames: TrackerFrame[] = [];
     p.onFrame = (f) => frames.push(f);
     p.start();
@@ -50,7 +54,9 @@ describe("Pipeline", () => {
 
   it("produces gaze once a kernel is set, and reports no face when none is found", async () => {
     const video = fakeVideo();
-    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), { tta: 1 });
+    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), {
+      smoothingFrames: 1,
+    });
     // A kernel that ignores the embedding puts every prediction at the centre.
     p.setKernel(new Float32Array(256));
     expect(p.hasKernel()).toBe(true);
@@ -93,7 +99,9 @@ describe("Pipeline", () => {
     // Chrome delivers no rVFC for a video that is not rendered, which used to stall the loop
     // forever (and with it every nextFrame() waiter, e.g. a calibration capture).
     const video = fakeVideo({ silent: true, ready: true });
-    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), { tta: 1 });
+    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), {
+      smoothingFrames: 1,
+    });
     const frames: TrackerFrame[] = [];
     p.onFrame = (f) => frames.push(f);
     p.start();
@@ -127,7 +135,9 @@ describe("Pipeline", () => {
 
   it("resolves nextFrame / nextEmbedding with the next emitted frame", async () => {
     const video = fakeVideo();
-    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), { tta: 1 });
+    const p = new Pipeline(video.el, fakeLandmarker(), new StubEmbeddingModel(), {
+      smoothingFrames: 1,
+    });
     p.start();
     const frame = await p.nextFrame();
     expect(frame.time.capture).toBeGreaterThan(0);

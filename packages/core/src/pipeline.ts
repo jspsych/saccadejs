@@ -38,8 +38,8 @@ export interface FrameTime {
   /** When the frame was handed to consumers (prediction available). */
   emit: number;
   /**
-   * Mean `capture` of the frames in the TTA ring buffer, i.e. the time the smoothed `gaze`
-   * actually refers to. Equals `capture` when tta = 1.
+   * Mean `capture` of the frames in the smoothing ring buffer, i.e. the time the smoothed `gaze`
+   * actually refers to. Equals `capture` when smoothingFrames = 1.
    */
   meanCapture: number | null;
 }
@@ -57,7 +57,7 @@ export interface TrackerFrame {
 }
 
 export interface PipelineOptions {
-  tta?: number;
+  smoothingFrames?: number;
   center?: number;
   onFrame?: (frame: TrackerFrame) => void;
 }
@@ -105,7 +105,7 @@ interface InFlight {
 }
 
 /**
- * The per-frame loop: landmark -> crop -> embed -> TTA mean -> gaze.
+ * The per-frame loop: landmark -> crop -> embed -> smoothing mean -> gaze.
  *
  * The step is pipelined — the CPU work for frame N+1 (draw, landmark, crop) overlaps the GPU
  * embed of frame N, and exactly one `session.run` is ever in flight.
@@ -123,7 +123,7 @@ export class Pipeline {
   /** Bumped by every `schedule()`; a callback from an older generation is ignored. */
   private schedGen = 0;
   private ring: RingEntry[] = [];
-  private tta: number;
+  private smoothingFrames: number;
   private center: number;
   private kernel: Float32Array | null = null;
   private lastFrameTime = 0;
@@ -144,7 +144,7 @@ export class Pipeline {
     this.video = video as VideoFrameCallbackHost;
     this.landmarker = landmarker;
     this.model = model;
-    this.tta = opts.tta ?? 5;
+    this.smoothingFrames = opts.smoothingFrames ?? 1;
     this.center = opts.center ?? CENTER;
     this.onFrame = opts.onFrame ?? null;
     const ctx = this.canvas.getContext("2d", { willReadFrequently: true });
@@ -183,13 +183,13 @@ export class Pipeline {
     return this.kernel != null;
   }
 
-  setTta(n: number): void {
-    this.tta = Math.max(1, Math.round(n));
-    while (this.ring.length > this.tta) this.ring.shift();
+  setSmoothingFrames(n: number): void {
+    this.smoothingFrames = Math.max(1, Math.round(n));
+    while (this.ring.length > this.smoothingFrames) this.ring.shift();
   }
 
-  getTta(): number {
-    return this.tta;
+  getSmoothingFrames(): number {
+    return this.smoothingFrames;
   }
 
   setCenter(center: number): void {
@@ -439,7 +439,7 @@ export class Pipeline {
     let meanCapture: number | null = null;
     if (embedding) {
       this.ring.push({ e: embedding, t: p.stage.time.capture });
-      while (this.ring.length > this.tta) this.ring.shift();
+      while (this.ring.length > this.smoothingFrames) this.ring.shift();
       mean = this.meanEmbedding();
       meanCapture = this.meanCaptureTime();
       if (this.kernel && mean) gaze = predict(mean, this.kernel, this.center);

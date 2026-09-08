@@ -69,7 +69,10 @@ export class SaccadeTracker {
 
   private callbacks = new Set<(f: StubFrame) => void>();
 
+  smoothingFrames = 1;
+
   constructor(public options: Record<string, any> = {}) {
+    this.smoothingFrames = options.smoothingFrames ?? 1;
     SaccadeTracker.instances.push(this);
   }
 
@@ -127,7 +130,13 @@ export class SaccadeTracker {
     return this.calibrationPoints.length > 0;
   }
 
-  setTta(_n: number) {}
+  setSmoothingFrames(n: number) {
+    this.smoothingFrames = Math.max(1, Math.round(n));
+  }
+
+  getSmoothingFrames() {
+    return this.smoothingFrames;
+  }
 
   getCurrentGaze() {
     return null;

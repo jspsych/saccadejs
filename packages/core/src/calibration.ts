@@ -91,7 +91,7 @@ export async function runCalibration(
 
 export interface ValidationSample {
   gaze: Gaze;
-  /** Capture time of the frame the sample came from (`meanCapture` when TTA is on). */
+  /** Capture time of the frame the sample came from (`meanCapture` when smoothing is on). */
   time: number;
 }
 

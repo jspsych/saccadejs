@@ -77,18 +77,22 @@ describe("SaccadeTracker", () => {
     expect(t.getCalibrationPoints()).toHaveLength(0);
   });
 
-  it("clamps tta to at least one frame", () => {
-    const t = new SaccadeTracker({ tta: 7 });
-    expect(t.getTta()).toBe(7);
-    t.setTta(0);
-    expect(t.getTta()).toBe(1);
-    t.setTta(2.4);
-    expect(t.getTta()).toBe(2);
+  it("clamps smoothingFrames to at least one frame", () => {
+    const t = new SaccadeTracker({ smoothingFrames: 7 });
+    expect(t.getSmoothingFrames()).toBe(7);
+    t.setSmoothingFrames(0);
+    expect(t.getSmoothingFrames()).toBe(1);
+    t.setSmoothingFrames(2.4);
+    expect(t.getSmoothingFrames()).toBe(2);
   });
 
   it("initialises against a supplied stream and model, then tracks", async () => {
     presetModules(undefined, fakeVision());
-    const t = new SaccadeTracker({ stream: fakeStream(), model: new StubEmbeddingModel(), tta: 2 });
+    const t = new SaccadeTracker({
+      stream: fakeStream(),
+      model: new StubEmbeddingModel(),
+      smoothingFrames: 2,
+    });
     // jsdom's HTMLMediaElement.play() is "not implemented" and only prints noise.
     t.video.play = async () => undefined;
     Object.defineProperty(t.video, "videoWidth", { value: 64, configurable: true });

@@ -38,7 +38,7 @@ export interface SaccadeTimingInfo {
   clock: FrameTime["source"] | null;
   dropped_frames: number;
   fps: number | null;
-  tta: number;
+  smoothing_frames: number;
 }
 
 export interface InitializeParameters {
@@ -50,12 +50,13 @@ export interface InitializeParameters {
    */
   round_predictions?: boolean;
   /**
-   * Size of the test-time-augmentation ring buffer: the number of consecutive frames whose
-   * embeddings are averaged before the gaze prediction is made. Larger values are smoother but
-   * add group delay.
-   * @default 5
+   * How many consecutive camera frames are averaged into one gaze estimate. The default of 1
+   * predicts from the newest frame alone, which is the lowest latency and the only sane setting
+   * for a gaze-contingent design. Larger values are steadier but lag: the reported gaze then
+   * refers to a moment roughly `(n − 1) / 2` frames in the past.
+   * @default 1
    */
-  tta?: number;
+  smoothing_frames?: number;
   /**
    * URLs for the model and wasm assets (`SaccadeAssets`). Set these to self-host instead of
    * loading from the CDN.
@@ -181,8 +182,9 @@ class SaccadeExtension implements JsPsychExtension {
        * run), `corrected` says whether that offset was subtracted from `t`, `clock` is the clock
        * the camera timestamps came from (`captureTime` is the good one), `dropped_frames` is the
        * number of camera frames the browser reported dropping during the trial, `fps` is the
-       * frame rate of the tracker at the end of the trial, and `tta` is the size of the
-       * test-time-augmentation ring buffer the predictions were smoothed over.
+       * frame rate of the tracker at the end of the trial, and `smoothing_frames` is the
+       * number of camera frames each prediction was actually averaged over — the tracker's own
+       * setting, which need not be the `smoothing_frames` parameter.
        */
       saccade_timing: {
         type: ParameterType.COMPLEX,
@@ -192,7 +194,7 @@ class SaccadeExtension implements JsPsychExtension {
           clock: { type: ParameterType.STRING },
           dropped_frames: { type: ParameterType.INT },
           fps: { type: ParameterType.FLOAT },
-          tta: { type: ParameterType.INT },
+          smoothing_frames: { type: ParameterType.INT },
         },
       },
     },
@@ -204,7 +206,7 @@ class SaccadeExtension implements JsPsychExtension {
 
   // ---- configuration -------------------------------------------------------------------------
   private round_predictions = true;
-  private tta = 5;
+  private smoothing_frames = 1;
   private assets: SaccadeAssets = {};
 
   // ---- tracker state -------------------------------------------------------------------------
@@ -254,12 +256,12 @@ class SaccadeExtension implements JsPsychExtension {
 
   initialize = async ({
     round_predictions = true,
-    tta = 5,
+    smoothing_frames = 1,
     assets = {},
     tracker,
   }: InitializeParameters = {}): Promise<void> => {
     this.round_predictions = round_predictions;
-    this.tta = tta;
+    this.smoothing_frames = smoothing_frames;
     this.assets = assets;
     this.gazeUpdateCallbacks = [];
 
@@ -326,7 +328,10 @@ class SaccadeExtension implements JsPsychExtension {
         clock: this.lastClock,
         dropped_frames: this.trialDroppedFrames,
         fps: this.lastFps,
-        tta: this.tta,
+        // What the tracker was actually smoothing over, not what this extension was asked for:
+        // a tracker supplied through the `tracker` parameter carries its own setting, and it
+        // can be changed at any time with `setSmoothingFrames`.
+        smoothing_frames: this.tracker?.getSmoothingFrames() ?? this.smoothing_frames,
       },
     };
   };
@@ -485,7 +490,7 @@ class SaccadeExtension implements JsPsychExtension {
     if (!this.tracker) {
       this.tracker = new SaccadeTracker({
         assets: this.assets,
-        tta: this.tta,
+        smoothingFrames: this.smoothing_frames,
         onProgress: this.handleProgress,
       });
       this.ownsTracker = true;
@@ -646,8 +651,8 @@ class SaccadeExtension implements JsPsychExtension {
     if (!frame.faceFound || !frame.gaze) return null;
     const x = frame.gaze.x * this.viewportWidth();
     const y = frame.gaze.y * this.viewportHeight();
-    // The gaze is the mean over the TTA ring buffer, so it refers to the buffer's mean capture
-    // time, not the newest frame's.
+    // The gaze is the mean over the smoothing ring buffer, so it refers to the buffer's mean
+    // capture time, not the newest frame's.
     const capture = frame.time.meanCapture ?? frame.time.capture;
     const t = capture - (this.activeTrial ? this.currentTrialStart : 0) - (this.timingOffset ?? 0);
     return {

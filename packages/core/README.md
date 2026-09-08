@@ -27,7 +27,7 @@ from a CDN instead (see [Asset hosting](#asset-hosting)).
 ```js
 import { SaccadeTracker, defaultGrid13, runCalibration, runValidation } from "@saccadejs/core";
 
-const tracker = new SaccadeTracker({ tta: 5 });
+const tracker = new SaccadeTracker({ smoothingFrames: 1 });
 await tracker.init();                 // camera prompt + model load
 tracker.start();
 
@@ -104,7 +104,7 @@ See the [documentation site](https://saccade.jspsych.org/) for the extension and
 
 | | |
 |---|---|
-| `new SaccadeTracker(opts)` | `assets`, `video: {width, height}`, `tta` (default 5), `executionProviders` (default `["webgpu", "wasm"]`), `onFrame`, `onProgress` |
+| `new SaccadeTracker(opts)` | `assets`, `video: {width, height}`, `smoothingFrames` (default 1), `executionProviders` (default `["webgpu", "wasm"]`), `onFrame`, `onProgress` |
 | `init()` | camera + MediaPipe + ONNX, warmed up. Idempotent. Resolves `{ep, videoWidth, videoHeight}` |
 | `start()` / `stop()` / `dispose()` / `running` | the frame loop |
 | `video` | the live, **unmirrored** camera element — display it if you like (CSS-mirror the preview, never the pixels the model sees) |
@@ -178,9 +178,10 @@ Every frame carries a `time: FrameTime`, all on the `performance.now()` clock:
   `captureTime` (falling back to `receiveTime`, then to the callback time; `source` says
   which). This is the timestamp to record with a gaze sample, not the time the prediction
   became available.
-- **`meanCapture`** — because gaze is computed from a ring buffer of the last `tta` embeddings,
-  the smoothed estimate refers to the *mean* capture time of that buffer, not to the newest
-  frame. With `tta: 5` at 30 fps that is ≈ 67 ms before `capture`.
+- **`meanCapture`** — because gaze is computed from a ring buffer of the last `smoothingFrames`
+  embeddings, the smoothed estimate refers to the *mean* capture time of that buffer, not to the
+  newest frame. At the default of 1 it equals `capture`; with `smoothingFrames: 5` at 30 fps it is
+  ≈ 67 ms before `capture`.
 - **`emit`** — when the frame reached your callback. `emit - capture` is pipeline latency, and
   only matters for gaze-contingent designs.
 - **`dropped` / `presentedFrames`** — camera frames the loop never saw.

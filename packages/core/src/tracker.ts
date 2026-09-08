@@ -12,8 +12,13 @@ export interface SaccadeTrackerOptions {
   assets?: SaccadeAssets;
   /** getUserMedia ideals. Default 640x480, user-facing. */
   video?: { width?: number; height?: number };
-  /** Ring-buffer length for test-time augmentation (embeddings averaged). Default 5. */
-  tta?: number;
+  /**
+   * How many consecutive camera frames are averaged into one gaze estimate. Default 1, which
+   * predicts from the newest frame alone: the lowest latency, and the only sane setting for a
+   * gaze-contingent design. Raising it trades latency for a steadier estimate — the reported
+   * gaze then refers to `time.meanCapture`, roughly `(n − 1) / 2` frames in the past.
+   */
+  smoothingFrames?: number;
   /** ONNX Runtime execution providers, tried in order. Default ["webgpu", "wasm"]. */
   executionProviders?: ("webgpu" | "wasm")[];
   onFrame?: (f: TrackerFrame) => void;
@@ -74,7 +79,7 @@ export class SaccadeTracker {
   private kernel: Float32Array | null = null;
   private lastGaze: { gaze: Gaze; time: FrameTime } | null = null;
   private subscribers = new Set<(f: TrackerFrame) => void>();
-  private tta: number;
+  private smoothingFrames: number;
   private wantRunning = false;
   private disposed = false;
   private lumCanvas: HTMLCanvasElement | null = null;
@@ -85,7 +90,7 @@ export class SaccadeTracker {
   constructor(opts: SaccadeTrackerOptions = {}) {
     this.opts = opts;
     this.assets = opts.assets ?? {};
-    this.tta = opts.tta ?? 5;
+    this.smoothingFrames = opts.smoothingFrames ?? 1;
     if (opts.onFrame) this.subscribers.add(opts.onFrame);
     this.video = document.createElement("video");
     this.video.autoplay = true;
@@ -159,7 +164,7 @@ export class SaccadeTracker {
     }
 
     this.pipeline = new Pipeline(this.video, this.landmarker, this.model, {
-      tta: this.tta,
+      smoothingFrames: this.smoothingFrames,
       center: CENTER,
       onFrame: (f) => this.handleFrame(f),
     });
@@ -335,13 +340,13 @@ export class SaccadeTracker {
     return this.kernel;
   }
 
-  setTta(n: number): void {
-    this.tta = Math.max(1, Math.round(n));
-    this.pipeline?.setTta(this.tta);
+  setSmoothingFrames(n: number): void {
+    this.smoothingFrames = Math.max(1, Math.round(n));
+    this.pipeline?.setSmoothingFrames(this.smoothingFrames);
   }
 
-  getTta(): number {
-    return this.tta;
+  getSmoothingFrames(): number {
+    return this.smoothingFrames;
   }
 
   /** Latest gaze (viewport fractions) and the times of the frame it came from, or null. */
