@@ -50,6 +50,10 @@ describe("the shipped release registry", () => {
       expect(r.bytes).toBeGreaterThan(0);
       expect(typeof r.contract).toBe("number");
       expect(r.version).toMatch(/^\d+\.\d+\.\d+$/);
+      // Fingerprint of everything the runtime must implement. propose_version.py in
+      // jspsych/eye-tracking compares against it to decide major vs minor; a release
+      // published without one cannot be classified mechanically.
+      expect(r.contractHash).toMatch(/^sha256:[0-9a-f]{64}$/);
     }
   });
 

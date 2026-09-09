@@ -9,6 +9,11 @@
     "Layout: the current model sits at models/eye_embedding.onnx (assets.ts resolves exactly",
     "that path for bundler users); superseded versions live at models/<version>/. Each",
     "release's `file` names where its bytes actually are.",
+    "contractHash is sha256 over everything a browser must implement -- the whole preprocess",
+    "block, the ONNX I/O and the embedding dim. It is what decides major vs minor: the",
+    "registry recorded the I/O but not the preprocessing, so half the question was",
+    "unanswerable from here alone. Opset is deliberately outside it (it changes what can",
+    "load the file, not what the runtime implements) and is flagged for a person.",
     "Produced by web/export in jspsych/eye-tracking; see that repo's ARCHITECTURE.md."
   ],
   "releases": [
@@ -20,6 +25,7 @@
       "sha256": "c323131f766097194503fc048c4a64c5ac771f8dd281eefd07239ee89fcaebf7",
       "bytes": 20635318,
       "contract": 1,
+      "contractHash": "sha256:3d8321123a6a3e37b4e93484c30a031bdfd63c161bf74ac50cc3757bc992323c",
       "io": {
         "input": {
           "name": "eye_image",
