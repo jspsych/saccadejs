@@ -2,11 +2,13 @@
   "id": "eye-embedding",
   "comment": [
     "Published releases of the eye-embedding model, oldest first; the last entry is current.",
-    "`served: true` means this version's files are committed under packages/core/models/ and",
-    "are therefore deployed to saccade.jspsych.org. GitHub Pages only serves the current",
-    "build, so a version drops off the site the moment its bytes leave the repo -- keep",
-    "`served` honest, and give superseded versions a durable link (npm/jsDelivr or a DOI)",
-    "before flipping it to false.",
+    "Policy: every published version stays served, indefinitely. A versioned URL that stops",
+    "resolving is worse than one never published, because it is already in someone's methods",
+    "section -- and 20 MB per version on GitHub's own infrastructure is not a cost worth",
+    "optimising. `served: false` is for a version withdrawn on purpose, not for tidying up.",
+    "Layout: the current model sits at models/eye_embedding.onnx (assets.ts resolves exactly",
+    "that path for bundler users); superseded versions live at models/<version>/. Each",
+    "release's `file` names where its bytes actually are.",
     "Produced by web/export in jspsych/eye-tracking; see that repo's ARCHITECTURE.md."
   ],
   "releases": [
@@ -19,8 +21,16 @@
       "bytes": 20635318,
       "contract": 1,
       "io": {
-        "input": { "name": "eye_image", "shape": [1, 36, 144, 1], "dtype": "float32" },
-        "output": { "name": "embedding", "shape": [1, 128], "dtype": "float32" },
+        "input": {
+          "name": "eye_image",
+          "shape": [1, 36, 144, 1],
+          "dtype": "float32"
+        },
+        "output": {
+          "name": "embedding",
+          "shape": [1, 128],
+          "dtype": "float32"
+        },
         "inputRange": "uint8_0_255",
         "opset": 17
       },

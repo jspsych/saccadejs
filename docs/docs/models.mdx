@@ -84,10 +84,16 @@ The `contract` number in the table is what the library actually checks.
 
 ## How long a URL lasts
 
-A versioned URL is served for as long as that version ships in the repository behind this
-site. When a version is eventually retired its row here says so and points at a durable copy
-instead. If your study depends on a specific model being reachable years from now, do not
-rely on any URL you do not control — download it and serve it yourself.
+**Every version listed here stays up.** Once a versioned URL is published we keep serving it,
+because by the time anyone asks the question it is already written into a methods section
+somewhere. The files are ~20 MB each and sit on GitHub's infrastructure alongside this site,
+so there is no pressure to prune them, and the build fails if a published version ever goes
+missing.
+
+That is a promise about intent, not a guarantee about the universe. If your study must still
+resolve its model in ten years, do not depend on infrastructure you do not control — download
+the versioned file, serve it from your own origin, and record the hash. That advice would be
+the same for any host.
 
 Models are built and gated in the
 [eye-tracking](https://github.com/jspsych/eye-tracking) repository, which trains the network
