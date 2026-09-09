@@ -3,9 +3,15 @@ import { JsPsych } from "jspsych";
 import SaccadeExtension from ".";
 import { SaccadeTracker, makeFrame } from "./test-stubs/saccadejs";
 
-/** A minimal jsPsych double: the extension only ever calls `getDisplayElement()`. */
-function makeJsPsych(display: HTMLElement) {
-  return { getDisplayElement: () => display } as unknown as JsPsych;
+/**
+ * A minimal jsPsych double: the extension calls `getDisplayElement()` and, once,
+ * `data.addProperties()` to stamp which model produced the gaze.
+ */
+function makeJsPsych(display: HTMLElement, props: Record<string, unknown>[] = []) {
+  return {
+    getDisplayElement: () => display,
+    data: { addProperties: (p: Record<string, unknown>) => props.push(p) },
+  } as unknown as JsPsych;
 }
 
 async function makeExtension(
@@ -553,5 +559,70 @@ describe("SaccadeExtension public API", () => {
 
     expect(disposeSpy).not.toHaveBeenCalled();
     expect(tracker.running).toBe(false);
+  });
+});
+
+describe("recording which model produced the gaze", () => {
+  it("stamps saccade_model once, when the tracker it built initialises", async () => {
+    const display = document.createElement("div");
+    const props: Record<string, unknown>[] = [];
+    const extension = new SaccadeExtension(makeJsPsych(display, props));
+    await extension.initialize();
+
+    expect(props).toHaveLength(0); // initialize() must not touch the camera or the data
+
+    await extension.start();
+    expect(props).toEqual([{ saccade_model: "eye-embedding@1.0.0" }]);
+
+    // Idempotent: restarting must not add a second copy to every trial.
+    await extension.start();
+    await extension.start();
+    expect(props).toHaveLength(1);
+  });
+
+  it("stamps a tracker it was handed, which an experiment may never start() itself", async () => {
+    const display = document.createElement("div");
+    const props: Record<string, unknown>[] = [];
+    const tracker = new SaccadeTracker();
+    await tracker.init();
+    const extension = new SaccadeExtension(makeJsPsych(display, props));
+    await extension.initialize({ tracker });
+
+    expect(props).toEqual([{ saccade_model: "eye-embedding@1.0.0" }]);
+  });
+
+  it("records a fingerprint, not a guess, for a model that is not a published release", async () => {
+    const display = document.createElement("div");
+    const props: Record<string, unknown>[] = [];
+    const extension = new SaccadeExtension(makeJsPsych(display, props));
+    await extension.initialize();
+    await extension.start();
+    // The tracker the extension built is the most recent stub instance.
+    const built = SaccadeTracker.instances.at(-1)!;
+    expect(built).toBeDefined();
+    props.length = 0;
+
+    // A second extension, handed a tracker running someone else's weights.
+    const custom = new SaccadeTracker();
+    custom.modelIdentity = {
+      sha256: "f4669a8398d940f89a907e57df68332ad71647749e6b6d1e7c80ea174191d281",
+      version: null,
+      contract: null,
+      url: "https://example.org/my-model.onnx",
+      resolvedFrom: "hash-only",
+    };
+    await custom.init();
+    const ext2 = new SaccadeExtension(makeJsPsych(display, props));
+    await ext2.initialize({ tracker: custom });
+
+    expect(props).toEqual([{ saccade_model: "sha256:f4669a8398d9" }]);
+  });
+
+  it("never lets a data-write failure end the run", async () => {
+    const display = document.createElement("div");
+    const broken = { getDisplayElement: () => display } as unknown as JsPsych; // no .data
+    const extension = new SaccadeExtension(broken);
+    await extension.initialize();
+    await expect(extension.start()).resolves.toBeUndefined();
   });
 });

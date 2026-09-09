@@ -36,18 +36,34 @@ anything that happens here.
 
 ## Recording which model you used
 
-Whatever you pin, write it into your data. A version string and a hash cost nothing now and
-are the only thing that can answer "did the model change between cohorts?" later:
+The extension does this for you. When the tracker loads the model it hashes the bytes it
+actually received, looks that hash up in the registry that ships with `@saccadejs/core`, and
+adds a single `saccade_model` column to your data:
+
+| value                 | meaning                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `eye-embedding@1.0.0` | the loaded bytes hash-matched this published release                                                                            |
+| `sha256:f4669a8398d9` | a model that is not a published release, identified by its hash                                                                 |
+| `unverified`          | the hash could not be computed (not reachable in a working experiment — the camera needs the same secure context the hash does) |
+
+A version here is not copied from a URL or a filename: it is recorded **because the bytes
+matched**. That is why one column is enough, and why a custom model still identifies itself
+rather than reading `unknown`.
+
+Only trials that run after the model loads carry it — the camera, and so the model, is not
+touched until your first `saccade-preview` trial or your own `start()` call. Trials before
+that have no gaze data either.
+
+If you want the full detail — hash, contract, and the URL it came from — ask the tracker:
 
 ```js
-jsPsych.data.addProperties({
-  saccade_model: "eye-embedding@1.0.0",
-  saccade_model_sha256: "c323131f766097194503fc048c4a64c5ac771f8dd281eefd07239ee89fcaebf7",
-});
+const id = jsPsych.extensions.saccade.getTracker().getModelIdentity();
+// { sha256: "c323131f…", version: "1.0.0", contract: 1, url: "…", resolvedFrom: "registry" }
 ```
 
-You can verify a downloaded file against the hash below with `shasum -a 256 eye_embedding.onnx`
-(macOS/Linux) or `Get-FileHash eye_embedding.onnx -Algorithm SHA256` (PowerShell).
+To check a file you downloaded yourself, compare it against the hash in the table below with
+`shasum -a 256 eye_embedding.onnx` (macOS/Linux) or
+`Get-FileHash eye_embedding.onnx -Algorithm SHA256` (PowerShell).
 
 ## Versions
 

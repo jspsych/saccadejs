@@ -1,5 +1,10 @@
 import { JsPsych, JsPsychExtension, JsPsychExtensionInfo, ParameterType } from "jspsych";
-import { DEFAULT_FRAME_TIMEOUT_MS, SaccadeTracker, withFrameTimeout } from "@saccadejs/core";
+import {
+  DEFAULT_FRAME_TIMEOUT_MS,
+  SaccadeTracker,
+  formatModelIdentity,
+  withFrameTimeout,
+} from "@saccadejs/core";
 import type {
   CalPoint,
   FrameTime,
@@ -211,6 +216,7 @@ class SaccadeExtension implements JsPsychExtension {
 
   // ---- tracker state -------------------------------------------------------------------------
   private tracker: SaccadeTracker | null = null;
+  private modelRecorded = false;
   /** False for a tracker handed in through the `tracker` parameter: `dispose()` leaves it alone. */
   private ownsTracker = false;
   private initialized = false;
@@ -270,6 +276,10 @@ class SaccadeExtension implements JsPsychExtension {
       this.ownsTracker = false;
       this.parkVideo();
       this.watchFrames();
+      // A supplied tracker may already be initialised, and an experiment driving it itself
+      // need never call start(). Stamp the model now in that case, so the identity does not
+      // depend on which entry point the experiment happens to use.
+      if (tracker.initialized) this.recordModel(tracker);
     }
 
     if (typeof MutationObserver !== "undefined") {
@@ -351,6 +361,7 @@ class SaccadeExtension implements JsPsychExtension {
       const tracker = this.getTracker();
       const { ep } = await tracker.init();
       this.backend = ep;
+      this.recordModel(tracker);
       this.watchFrames();
       tracker.start();
       this.initialized = true;
@@ -361,6 +372,26 @@ class SaccadeExtension implements JsPsychExtension {
     });
     return this.starting;
   };
+
+  /**
+   * Stamp which model produced the gaze onto every trial, once, as `saccade_model`.
+   *
+   * A value like `"eye-embedding@1.0.0"` means the loaded bytes hash-matched that published
+   * release; anything else is reported as `"sha256:<prefix>"`, so a custom model still
+   * identifies itself. Written with `addProperties` rather than into each trial's own data
+   * because it is one fact about the session, not a per-trial measurement -- but note that
+   * only trials run *after* the model loads carry it. Those before it have no gaze data
+   * anyway: the camera is not touched until the first `saccade-preview` or `start()`.
+   */
+  private recordModel(tracker: SaccadeTracker): void {
+    if (this.modelRecorded) return;
+    this.modelRecorded = true;
+    // Optional-chained on purpose: this is metadata about the session, and no failure to
+    // record it is worth ending a participant's run over.
+    this.jsPsych?.data?.addProperties?.({
+      saccade_model: formatModelIdentity(tracker.getModelIdentity()),
+    });
+  }
 
   /** Stop processing camera frames. The camera stream stays open. */
   pause = (): void => {

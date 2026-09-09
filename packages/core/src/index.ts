@@ -24,9 +24,10 @@ export type {
   EyeCrop,
   Gaze,
   Landmark,
+  ModelIdentity,
   RidgeRow,
 } from "./types";
-export { EMB_DIM, EYE_H, EYE_W } from "./types";
+export { EMB_DIM, EYE_H, EYE_W, formatModelIdentity } from "./types";
 
 // ---- load progress -----------------------------------------------------------
 export type { SaccadeProgress, SaccadeProgressCallback, SaccadeProgressStage } from "./progress";

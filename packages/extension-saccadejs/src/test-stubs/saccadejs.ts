@@ -64,7 +64,13 @@ export class SaccadeTracker {
     embeddings: Float32Array[];
     meanEmbedding: Float32Array;
   }> = [];
-  init = jest.fn(async () => ({ ep: "webgpu" as const, videoWidth: 640, videoHeight: 480 }));
+  /** Mirrors the real tracker's `initialized` getter, which gates the handed-tracker path. */
+  initialized = false;
+
+  init = jest.fn(async () => {
+    this.initialized = true;
+    return { ep: "webgpu" as const, videoWidth: 640, videoHeight: 480 };
+  });
   nextEmbedding = jest.fn(async () => new Float32Array(128));
 
   private callbacks = new Set<(f: StubFrame) => void>();
@@ -82,6 +88,25 @@ export class SaccadeTracker {
 
   stop() {
     this.running = false;
+  }
+
+  /** Overridable per test: what `getModelIdentity()` should report. */
+  modelIdentity: {
+    sha256: string | null;
+    version: string | null;
+    contract: number | null;
+    url: string | null;
+    resolvedFrom: "registry" | "hash-only" | "unverified";
+  } | null = {
+    sha256: "c323131f766097194503fc048c4a64c5ac771f8dd281eefd07239ee89fcaebf7",
+    version: "1.0.0",
+    contract: 1,
+    url: "/models/eye-embedding/1.0.0/eye_embedding.onnx",
+    resolvedFrom: "registry",
+  };
+
+  getModelIdentity() {
+    return this.modelIdentity;
   }
 
   dispose() {
@@ -173,3 +198,13 @@ export const trainingGrid20 = () => [];
 export const validationGrid9 = () => [];
 export const lambdaFor = (n: number) => (n <= 9 ? 3 : 1);
 export const version = "0.0.0-stub";
+
+/** Mirrors the real implementation in core's types.ts -- kept in step by a test there. */
+export function formatModelIdentity(
+  id: { version: string | null; sha256: string | null } | null | undefined,
+): string {
+  if (!id) return "unverified";
+  if (id.version) return `eye-embedding@${id.version}`;
+  if (id.sha256) return `sha256:${id.sha256.slice(0, 12)}`;
+  return "unverified";
+}

@@ -5,7 +5,8 @@ import { fetchModelBytes, loadOrt, modelUrl } from "./assets";
 import manifest from "./generated/export_manifest.json";
 import type { SaccadeProgressCallback } from "./progress";
 import { reportProgress } from "./progress";
-import type { EmbeddingModel } from "./types";
+import type { EmbeddingModel, ModelIdentity } from "./types";
+import releases from "../models/releases.json";
 import { EMB_DIM, EYE_H, EYE_W } from "./types";
 
 export interface OrtModelOptions {
@@ -16,6 +17,40 @@ export interface OrtModelOptions {
 }
 
 const CROP_LEN = EYE_H * EYE_W;
+
+/**
+ * sha256 of the loaded model, as lowercase hex.
+ *
+ * `crypto.subtle` needs a secure context -- but so does `getUserMedia`, so any page that can
+ * reach a camera can also hash. The null path is therefore unreachable in a working
+ * experiment; it exists so a test double or an odd embedding host degrades instead of
+ * throwing.
+ */
+async function sha256Hex(bytes: Uint8Array): Promise<string | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return null;
+  try {
+    const view = new Uint8Array(bytes); // a fresh, non-shared buffer for digest()
+    const digest = await subtle.digest("SHA-256", view);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
+}
+
+/** Look a hash up in the shipped registry: the hash is the identity, the registry names it. */
+function identify(sha256: string | null, url: string): ModelIdentity {
+  if (!sha256)
+    return { sha256: null, version: null, contract: null, url, resolvedFrom: "unverified" };
+  const known = releases.releases.find((r) => r.sha256 === sha256);
+  return {
+    sha256,
+    version: known?.version ?? null,
+    contract: known?.contract ?? null,
+    url,
+    resolvedFrom: known ? "registry" : "hash-only",
+  };
+}
 
 const manifestIo = manifest as unknown as {
   model?: { input?: { name?: string }; output?: { name?: string } };
@@ -37,6 +72,7 @@ export class OrtEmbeddingModel implements EmbeddingModel {
   private inputName = INPUT_NAME;
   private outputName = OUTPUT_NAME;
   private ep: "webgpu" | "wasm" = "wasm";
+  private modelIdentity: ModelIdentity | null = null;
   private onProgress?: SaccadeProgressCallback;
 
   constructor(opts: OrtModelOptions = {}) {
@@ -69,6 +105,10 @@ export class OrtEmbeddingModel implements EmbeddingModel {
       reportProgress(this.onProgress, { stage: "model", loaded, total }),
     );
 
+    // The bytes are already contiguous in memory for the progress reporting above, so this
+    // costs one pass over ~20 MB, once, off the main thread.
+    this.modelIdentity = identify(await sha256Hex(bytes), this.modelPath);
+
     reportProgress(this.onProgress, { stage: "session" });
     let lastErr: unknown = null;
     for (const ep of this.eps) {
@@ -98,6 +138,19 @@ export class OrtEmbeddingModel implements EmbeddingModel {
     }
     if (!this.session) throw lastErr ?? new Error("no execution provider available");
     return { ep: this.ep };
+  }
+
+  /** What actually loaded. Available after `init()`; null before it. */
+  identity(): ModelIdentity {
+    return (
+      this.modelIdentity ?? {
+        sha256: null,
+        version: null,
+        contract: null,
+        url: this.modelPath,
+        resolvedFrom: "unverified",
+      }
+    );
   }
 
   private bindNames(): void {

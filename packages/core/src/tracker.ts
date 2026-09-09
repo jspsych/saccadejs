@@ -6,7 +6,7 @@ import type { FrameTime, TrackerFrame } from "./pipeline";
 import { Pipeline } from "./pipeline";
 import type { SaccadeProgressCallback } from "./progress";
 import { reportProgress } from "./progress";
-import type { CalPoint, EmbeddingModel, Gaze } from "./types";
+import type { CalPoint, EmbeddingModel, Gaze, ModelIdentity } from "./types";
 
 export interface SaccadeTrackerOptions {
   assets?: SaccadeAssets;
@@ -246,6 +246,14 @@ export class SaccadeTracker {
   }
 
   /** Stop everything and release the camera. The tracker cannot be re-initialised after this. */
+  /**
+   * What model actually ran, derived from the loaded bytes -- see {@link ModelIdentity}.
+   * Null before `init()`, and null for a substituted model that does not report one.
+   */
+  getModelIdentity(): ModelIdentity | null {
+    return this.model?.identity?.() ?? null;
+  }
+
   dispose(): void {
     this.disposed = true;
     this.stop();
