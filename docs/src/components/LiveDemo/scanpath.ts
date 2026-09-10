@@ -1,5 +1,5 @@
 /**
- * The scanpath figure the live demo shows after the free-viewing trial.
+ * The scanpath figures the live demo shows after its two viewing trials.
  *
  * Nothing here is part of saccade.js. It is the analysis an experimenter would write over a
  * trial's `saccade_data`: group the per-frame samples into fixations, then draw them over the
@@ -142,11 +142,12 @@ function rampColor(u: number, alpha = 1): string {
 
 /**
  * Radii and line weight as fractions of the stimulus's shorter side, so the figure looks the
- * same on a laptop and on a 27-inch monitor.
+ * same on a laptop and on a 27-inch monitor — and the same again at the half size the two
+ * figures on the comparison screen are drawn at.
  *
- * Deliberately small. Fifteen seconds of free viewing is thirty-odd fixations, and at any radius
- * large enough to carry a number inside it the figure stops being a picture of a painting and
- * becomes a picture of circles. The order is carried by colour instead.
+ * Deliberately small. Ten seconds of viewing is twenty-odd fixations, and at any radius large
+ * enough to carry a number inside it the figure stops being a picture of a painting and becomes
+ * a picture of circles. The order is carried by colour instead.
  */
 const RADIUS_MIN = 0.011;
 const RADIUS_MAX = 0.032;

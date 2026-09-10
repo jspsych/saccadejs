@@ -43,8 +43,8 @@ import styles from "./styles.module.css";
  * `import()` from inside a callback, never at module scope.
  */
 
-/** How long the painting stays on screen. Long enough for a scanpath with a shape to it. */
-const SCENE_MS = 15000;
+/** How long the painting stays on screen per view. Two of these, so twice as long in total. */
+const SCENE_MS = 10000;
 
 /** A fixation has to last at least this long. Four or five frames at a webcam's 30 Hz. */
 const FIXATION_MIN_MS = 150;
@@ -125,79 +125,57 @@ const VALIDATE_INSTRUCTIONS = instructions(
 );
 
 /**
- * The seven questions Yarbus put to viewers of this painting.
+ * The two questions this demo puts to the viewer, and why these two.
  *
- * The picture is Repin's *They Did Not Expect Him* (1884–88), and it is here for one reason:
- * it is the stimulus from the best-known result in the field. Yarbus (*Eye Movements and
- * Vision*, 1967) recorded the same viewer examining it seven times, with a different question
- * each time, and got seven visibly different scanpaths from one unchanging picture. Where
- * someone looks is not a property of the image.
+ * The picture is Repin's *They Did Not Expect Him* (1884–88), and it is here for one reason: it
+ * is the stimulus from the best-known result in the field. Yarbus (*Eye Movements and Vision*,
+ * 1967) recorded the same viewer examining it seven times under seven different questions, and
+ * got seven visibly different scanpaths from one unchanging picture. Where someone looks is not
+ * a property of the image.
  *
- * So the demo does not offer a choice of question — it hands out the next one each time the
- * activity is run, starting where Yarbus started, with free examination. A visitor who runs it
- * twice has done the experiment, and has their own two scanpaths to compare.
+ * Two of his seven are enough to show that, and only if they pull in opposite directions: ages
+ * drives gaze onto the faces and nothing else, while material circumstances sends it around the
+ * room — the furniture, the walls, the floor. Put those two side by side and the result is
+ * legible in a glance, which seven small figures would not be.
+ *
+ * The order is fixed rather than counterbalanced. A study comparing these conditions would have
+ * to counterbalance them; a demo showing one person their own two scanpaths has nothing to
+ * confound.
  */
 interface ViewingTask {
   /** Short name for the results card. */
   label: string;
   /** The question, as the participant is given it before the picture appears. */
   prompt: string;
-  /** The same question, named back to them under their scanpath. */
-  recap: string;
 }
 
-const VIEWING_TASKS: ViewingTask[] = [
-  {
-    label: "Free examination",
-    prompt: "Look at it however you like — there is nothing in particular to find.",
-    recap: "look at it however you liked",
-  },
-  {
-    label: "Their circumstances",
-    prompt: "Estimate the material circumstances of the family — how well off they are.",
-    recap: "estimate the material circumstances of the family",
-  },
+const VIEWING_TASKS: [ViewingTask, ViewingTask] = [
   {
     label: "Their ages",
     prompt: "Give the ages of the people.",
-    recap: "give the ages of the people",
   },
   {
-    label: "What just happened",
-    prompt: "Surmise what the family had been doing before the unexpected visitor arrived.",
-    recap: "surmise what the family had been doing before the visitor arrived",
-  },
-  {
-    label: "Their clothes",
-    prompt: "Remember the clothes worn by the people.",
-    recap: "remember the clothes worn by the people",
-  },
-  {
-    label: "Where things are",
-    prompt: "Remember the position of the people and the objects in the room.",
-    recap: "remember the position of the people and the objects in the room",
-  },
-  {
-    label: "How long he was away",
-    prompt: "Estimate how long the unexpected visitor had been away from the family.",
-    recap: "estimate how long the visitor had been away",
+    label: "How well off they are",
+    prompt: "Estimate the material circumstances of the family — how well off they are.",
   },
 ];
 
-/** The screen before the picture. `index` is the question's place in Yarbus's seven. */
+/** The screen before each view. `index` is 0 for the first question, 1 for the second. */
 function sceneInstructions(task: ViewingTask, index: number): string {
   return instructions(
-    "Image scanpath",
-    `<p>You will see a painting for about fifteen seconds. While it is on screen:</p>
+    index === 0 ? "First view" : "Second view",
+    `<p>${
+      index === 0
+        ? "You will see a painting for ten seconds. While it is on screen:"
+        : "The same painting again, for another ten seconds. This time:"
+    }</p>
     <p class="demo-task"><strong>${task.prompt}</strong></p>
     <p>There is nothing to press. Keep your head still, as you did for the dots.</p>
     <p class="demo-credit">${
       index === 0
-        ? `This is Yarbus's experiment, and that is the question he started with. He put seven
-           different ones to viewers of this painting and got seven different scanpaths out of
-           it — run this again for the next of them.`
-        : `Question ${index + 1} of Yarbus's seven. Compare the scanpath you get with the last
-           one: the picture has not changed.`
+        ? `This is Yarbus's experiment: one picture, two questions, and — if it works on you as
+           it worked on his viewers — two different scanpaths.`
+        : `Nothing about the picture has changed. Only the question has.`
     }</p>`,
   );
 }
@@ -216,16 +194,30 @@ function sceneStimulus(src: string): string {
   </div>`;
 }
 
-function scanpathStimulus(src: string, task: ViewingTask): string {
-  return `<div class="demo-figure demo-figure-stacked">
-    <img id="scanpath-scene" class="demo-scene" src="${src}" alt="" />
-    <canvas id="scanpath-canvas" class="demo-overlay"></canvas>
+/** One of the two figures on the comparison screen: the picture, the overlay, the question. */
+function comparisonPanel(src: string, task: ViewingTask, index: number): string {
+  return `<figure class="demo-compare-item">
+    <div class="demo-figure demo-figure-stacked">
+      <img id="scanpath-scene-${index}" class="demo-scene demo-scene-compare" src="${src}" alt="" />
+      <canvas id="scanpath-canvas-${index}" class="demo-overlay"></canvas>
+    </div>
+    <figcaption class="demo-compare-caption">
+      <span class="demo-compare-question">${task.prompt}</span>
+      <span class="demo-note" id="scanpath-note-${index}"></span>
+    </figcaption>
+  </figure>`;
+}
+
+function comparisonStimulus(src: string): string {
+  return `<div class="demo-compare">
+    ${comparisonPanel(src, VIEWING_TASKS[0], 0)}
+    ${comparisonPanel(src, VIEWING_TASKS[1], 1)}
   </div>
   <div class="demo-caption">
-    <p class="demo-task">You were asked to ${task.recap}.</p>
     <p class="demo-explain">Each circle is a fixation — somewhere your gaze stayed put — and the
-    bigger ones are the ones you held longer. The lines between them are your saccades.</p>
-    <p class="demo-legend"><span>start of the trial</span><i></i><span>end</span></p>
+    bigger ones are the ones you held longer. The lines between them are your saccades. Same
+    picture, same eyes, ten seconds each: what changed was the question.</p>
+    <p class="demo-legend"><span>start of the view</span><i></i><span>end</span></p>
     <p class="demo-credit">Ilya Repin, <i>They Did Not Expect Him</i> (1884–88), the painting
     Yarbus used.</p>
   </div>`;
@@ -282,21 +274,20 @@ function mountScanpath(
   display: HTMLElement,
   scene: SceneTrial,
   precisionPx: number | null,
+  index: number,
 ): { fixations: Fixation[]; teardown: () => void } {
-  const img = display.querySelector<HTMLImageElement>("#scanpath-scene");
-  const canvas = display.querySelector<HTMLCanvasElement>("#scanpath-canvas");
+  const img = display.querySelector<HTMLImageElement>(`#scanpath-scene-${index}`);
+  const canvas = display.querySelector<HTMLCanvasElement>(`#scanpath-canvas-${index}`);
   const samples = scene.saccade_data ?? [];
   const from = scene.saccade_targets?.["#scene"];
 
   // Without a rect for the picture there is no way to map the samples onto it, and without
-  // samples there is nothing to map. Say so rather than leaving an unmarked painting on screen
-  // looking like a scanpath with nothing in it.
+  // samples there is nothing to map. Say so under that figure rather than leaving an unmarked
+  // painting on screen looking like a scanpath with nothing in it — and say it under that one
+  // only, because the other view may have recorded perfectly well.
   if (!img || !canvas || !from || !from.width || !from.height || samples.length === 0) {
-    const caption = display.querySelector(".demo-explain");
-    if (caption) {
-      caption.textContent =
-        "No gaze was recorded while the painting was on screen, so there is no scanpath to draw.";
-    }
+    const note = display.querySelector(`#scanpath-note-${index}`);
+    if (note) note.textContent = "No gaze was recorded for this view.";
     return { fixations: [], teardown: () => {} };
   }
 
@@ -344,21 +335,23 @@ interface ValidationResult {
   precisionPx: number | null;
 }
 
-interface ScanpathResult {
-  samples: number;
-  hz: number | null;
-  fixations: number;
-  medianFixationMs: number | null;
-  /** Which of Yarbus's questions this scanpath was recorded under. */
+/** One of the two views: the question it was recorded under, and what came out of it. */
+interface ScanpathView {
   task: string;
+  fixations: number;
+  samples: number;
+}
+
+interface ScanpathResult {
+  views: ScanpathView[];
+  /** Samples per second over both views together — the rate a study would record at. */
+  hz: number | null;
 }
 
 interface Session {
   calibration: CalibrationState;
   validation: ValidationResult | null;
   scanpath: ScanpathResult | null;
-  /** How many scanpaths have been recorded, which is also the next question to hand out. */
-  scanpathRuns: number;
   /** Facts about this machine, filled in as the activities that measure them run. */
   backend: string | null;
   fps: number | null;
@@ -373,7 +366,6 @@ const EMPTY_SESSION: Session = {
   calibration: "none",
   validation: null,
   scanpath: null,
-  scanpathRuns: 0,
   backend: null,
   fps: null,
   clock: null,
@@ -399,8 +391,7 @@ function absorb(
   prev: Session,
   activity: Activity,
   jsPsych: JsPsych,
-  fixations: Fixation[],
-  task: ViewingTask,
+  fixations: Fixation[][],
 ): Session {
   const data = jsPsych.data.get();
   const first = (trial_type: string): any => data.filter({ trial_type }).values()[0] ?? {};
@@ -431,20 +422,22 @@ function absorb(
   }
 
   if (activity === "scanpath") {
-    // By `demo_step` rather than by `trial_type`, so it keeps finding the free-viewing trial if
-    // that is ever rebuilt on a different plugin.
-    const scene = data.filter({ demo_step: "scene" }).values()[0] ?? ({} as any);
-    const samples: Sample[] = scene.saccade_data ?? [];
+    // By `demo_step` rather than by `trial_type`, so it keeps finding the viewing trials if
+    // they are ever rebuilt on a different plugin. Two rows, in the order they were shown.
+    const scenes = data.filter({ demo_step: "scene" }).values();
+    const views = scenes.map((scene: any, i: number) => ({
+      task: scene.viewing_task ?? VIEWING_TASKS[i]?.label ?? "",
+      fixations: fixations[i]?.length ?? 0,
+      samples: (scene.saccade_data ?? []).length,
+    }));
+    const samples = views.reduce((total, view) => total + view.samples, 0);
     next.scanpath = {
-      samples: samples.length,
-      hz: samples.length ? samples.length / (SCENE_MS / 1000) : null,
-      fixations: fixations.length,
-      medianFixationMs: median(fixations.map((f) => f.duration)),
-      task: task.label,
+      views,
+      hz: samples ? samples / ((scenes.length * SCENE_MS) / 1000) : null,
     };
-    next.scanpathRuns = prev.scanpathRuns + 1;
-    if (scene.saccade_timing?.clock) next.clock = scene.saccade_timing.clock;
-    if (Number.isFinite(scene.saccade_timing?.fps)) next.fps = scene.saccade_timing.fps;
+    const last = scenes[scenes.length - 1] ?? ({} as any);
+    if (last.saccade_timing?.clock) next.clock = last.saccade_timing.clock;
+    if (Number.isFinite(last.saccade_timing?.fps)) next.fps = last.saccade_timing.fps;
   }
 
   return next;
@@ -620,13 +613,9 @@ function Demo() {
         jsPsychRef.current = jsPsych;
         extensionRef.current = jsPsych.extensions.saccade as unknown as SaccadeExtension;
 
-        // Set by the scanpath trial and read once the run is over: the figure the participant
-        // saw and the fixation count in the summary have to be the same fixations.
-        let fixations: Fixation[] = [];
-
-        // Yarbus's questions, in his order, wrapping round for anyone who runs all seven.
-        const taskIndex = session.scanpathRuns % VIEWING_TASKS.length;
-        const task = VIEWING_TASKS[taskIndex];
+        // Set by the comparison screen and read once the run is over, one list per view: the
+        // figures the participant saw and the counts on the results card have to agree.
+        let fixations: Fixation[][] = [];
 
         // Camera permission, the model download with its progress bar, and head positioning.
         // Only on the first activity of the session: after that the camera is already open, and
@@ -654,39 +643,42 @@ function Demo() {
           ],
           scanpath: [
             ...setup,
+            // One view per question: an instruction screen, then ten seconds of the picture.
+            // The viewing trial is an ordinary jsPsych trial; `extensions` is what turns
+            // recording on, and `targets` records where the picture was, which is what the
+            // scanpath is drawn against.
+            ...VIEWING_TASKS.flatMap((task, index) => [
+              {
+                type: m.button,
+                stimulus: sceneInstructions(task, index),
+                choices: [index === 0 ? "Begin" : "Begin the second view"],
+              },
+              {
+                type: m.keyboard,
+                stimulus: sceneStimulus(sceneUrl),
+                choices: "NO_KEYS",
+                trial_duration: SCENE_MS,
+                // The question goes into the data, because it is the manipulation: the two
+                // viewing trials differ in nothing else.
+                data: { demo_step: "scene", viewing_task: task.label },
+                extensions: [{ type: m.extension, params: { targets: ["#scene"] } }],
+              },
+            ]),
+            // Both recordings, given back side by side. Drawn from the same fixations the
+            // results card then counts.
             {
               type: m.button,
-              stimulus: sceneInstructions(task, taskIndex),
-              choices: ["Begin"],
-            },
-            // An ordinary jsPsych trial; `extensions` is what turns recording on, and `targets`
-            // records where the picture was, which is what the scanpath is drawn against.
-            {
-              type: m.keyboard,
-              stimulus: sceneStimulus(sceneUrl),
-              choices: "NO_KEYS",
-              trial_duration: SCENE_MS,
-              // The question goes into the data, because it is the manipulation: two of these
-              // trials differ in nothing else.
-              data: { demo_step: "scene", viewing_task: task.label },
-              extensions: [{ type: m.extension, params: { targets: ["#scene"] } }],
-            },
-            // The recorded trial, given back as a picture.
-            {
-              type: m.button,
-              stimulus: scanpathStimulus(sceneUrl, task),
+              stimulus: comparisonStimulus(sceneUrl),
               choices: ["Back to the menu"],
               data: { demo_step: "scanpath" },
               on_load: () => {
-                const scene = jsPsych.data.get().filter({ demo_step: "scene" }).values()[0] ?? {};
+                const scenes = jsPsych.data.get().filter({ demo_step: "scene" }).values();
                 scanpathTeardownRef.current();
-                const mounted = mountScanpath(
-                  display,
-                  scene,
-                  session.validation?.precisionPx ?? null,
+                const mounted = scenes.map((scene: any, index: number) =>
+                  mountScanpath(display, scene, session.validation?.precisionPx ?? null, index),
                 );
-                fixations = mounted.fixations;
-                scanpathTeardownRef.current = mounted.teardown;
+                fixations = mounted.map((view) => view.fixations);
+                scanpathTeardownRef.current = () => mounted.forEach((view) => view.teardown());
               },
               on_finish: () => {
                 scanpathTeardownRef.current();
@@ -699,7 +691,7 @@ function Demo() {
         await jsPsych.run(timelines[activity]);
         if (!mountedRef.current || jsPsychRef.current !== jsPsych) return;
 
-        setSession((prev) => absorb(prev, activity, jsPsych, fixations, task));
+        setSession((prev) => absorb(prev, activity, jsPsych, fixations));
         endActivity();
         setRunning(null);
         setPhase("menu");
@@ -711,7 +703,7 @@ function Demo() {
         endActivity();
       }
     },
-    [endActivity, modelUrl, sceneUrl, session.scanpathRuns, session.validation],
+    [endActivity, modelUrl, sceneUrl, session.validation],
   );
 
   const setSmoothing = useCallback((smoothingFrames: number) => {
@@ -919,30 +911,27 @@ function Menu({
 
         <Card
           title="Image scanpath"
-          cost="about 20 seconds"
+          cost="about a minute"
           blurb={
             <>
-              Fifteen seconds of Repin's painting, with one of Yarbus's seven questions to answer
-              while you look, and then your own fixations and saccades drawn back over it. Ask a
-              different question and the scanpath changes.
+              Repin's painting twice, ten seconds each, with a different question to answer each
+              time — then your two scanpaths side by side. Yarbus's result, on your own eyes: the
+              picture does not change, and the scanpath does.
             </>
           }
           result={
             scanpath ? (
               <>
-                {scanpath.fixations} fixations
-                <span className={styles.cardAside}>
-                  {scanpath.samples} samples
-                  {scanpath.hz === null ? null : ` · ${scanpath.hz.toFixed(1)} Hz`}
-                  {scanpath.medianFixationMs === null
-                    ? null
-                    : ` · ${scanpath.medianFixationMs.toFixed(0)} ms median`}
-                </span>
-                <span className={styles.cardAside}>Question: {scanpath.task}</span>
+                Two scanpaths
+                {scanpath.views.map((view) => (
+                  <span className={styles.cardAside} key={view.task}>
+                    {view.task}: {view.fixations} fixations
+                  </span>
+                ))}
               </>
             ) : null
           }
-          cta={scanpath ? "Ask the next question" : "Record a scanpath"}
+          cta={scanpath ? "Do it again" : "Record two scanpaths"}
           disabled={!calibrated || !supported}
           onRun={() => onRun("scanpath")}
         />

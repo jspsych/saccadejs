@@ -487,12 +487,13 @@
   line-height: 1.65;
 }
 
-/* The stimulus. Two sizes, both chosen so that the picture and whatever is under it together
-   fit the fixed stage without scrolling: `demo-scene` leaves room for a caption, and
-   `demo-scene-full` is the free-viewing trial, which has nothing under it and every reason to be
-   as large as the screen allows. `demo-figure-stacked` is the scanpath, where the canvas lies
-   exactly over the picture and so needs an inline-block wrapper shrink-wrapped to the rendered
-   image rather than to the stage. */
+/* The stimulus, at three sizes, each chosen so that the picture and whatever sits under it fit
+   the fixed stage without scrolling: `demo-scene-full` is a viewing trial, which has nothing
+   under it and every reason to be as large as the screen allows; `demo-scene-compare` is one of
+   the two figures on the comparison screen, where two pictures, two questions and the key all
+   share the stage; `demo-scene` alone is the base. `demo-figure-stacked` is a scanpath figure,
+   where the canvas lies exactly over the picture and so needs an inline-block wrapper
+   shrink-wrapped to the rendered image rather than to the stage. */
 .stage :global(.demo-figure) {
   line-height: 0;
 }
@@ -532,6 +533,48 @@
   margin: 0;
 }
 
+/* The two scanpaths, side by side — the whole point of that screen, so they sit on one row and
+   only drop to two rows when the window is too narrow to hold them. Each picture is small: two
+   of them, their questions and the key underneath all have to fit the stage without scrolling. */
+.stage :global(.demo-compare) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  justify-content: center;
+}
+
+.stage :global(.demo-compare-item) {
+  flex: 1 1 16rem;
+  margin: 0;
+  max-width: 24rem;
+  text-align: center;
+}
+
+.stage :global(.demo-scene-compare) {
+  max-height: clamp(9rem, 34vh, 20rem);
+}
+
+.stage :global(.demo-compare-caption) {
+  line-height: 1.5;
+  margin-top: 0.6rem;
+}
+
+/* The question, quoted under its own figure. This is the label that makes the comparison read:
+   it has to be legible at a glance, next to a picture, without competing with it. */
+.stage :global(.demo-compare-question) {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+/* Set only when a view recorded no gaze at all. Empty the rest of the time. */
+.stage :global(.demo-note) {
+  color: var(--ifm-color-emphasis-600);
+  display: block;
+  font-size: 0.82rem;
+  margin-top: 0.25rem;
+}
+
 /* The question the participant was given: the manipulation, on the instruction screen and again
    under the scanpath they produced under it. Set apart from the surrounding prose, because on
    the instruction screen it is the one line that has to be read. */
@@ -541,10 +584,6 @@
   line-height: 1.6;
   margin: 1.1rem 0 !important;
   padding-left: 0.9rem;
-}
-
-.stage :global(.demo-caption .demo-task) {
-  margin-top: 0 !important;
 }
 
 /* Where the picture and the questions come from. Quiet: a citation, not an instruction. */
