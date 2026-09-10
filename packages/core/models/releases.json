@@ -19,13 +19,13 @@
   "releases": [
     {
       "version": "1.0.0",
-      "date": "2026-09-05",
+      "date": "2026-09-09",
       "served": true,
       "file": "eye_embedding.onnx",
-      "sha256": "c323131f766097194503fc048c4a64c5ac771f8dd281eefd07239ee89fcaebf7",
-      "bytes": 20635318,
+      "sha256": "5a1a111e37f97bd50fcffccbf6498bf377700d27cd4e3ea5bc5d237541a3c73a",
+      "bytes": 20626568,
       "contract": 1,
-      "contractHash": "sha256:3d8321123a6a3e37b4e93484c30a031bdfd63c161bf74ac50cc3757bc992323c",
+      "contractHash": "sha256:7b5b781d45f7e666a5ed02968bad3854d4910dccc4039b55f1c59f6fe1047799",
       "io": {
         "input": {
           "name": "eye_image",
@@ -38,12 +38,19 @@
           "dtype": "float32"
         },
         "inputRange": "uint8_0_255",
-        "opset": 17
+        "opset": 17,
+        "weightOutput": {
+          "name": "cal_weight",
+          "shape": [1, 1],
+          "dtype": "float32",
+          "range": "sigmoid_0_1",
+          "granularity": "per_image"
+        }
       },
       "provenance": {
         "wandb": "vassar-cogsci-lab/eye-tracking-multiframe/kwppnkuj",
         "checkpoint": "multiframe_random_s42_ext70.weights.h5",
-        "exportedAt": "2026-09-05T12:54:51Z",
+        "exportedAt": "2026-09-09T20:02:34Z",
         "toolchain": {
           "keras": "3.14.1",
           "tensorflow": "2.20.0",
@@ -51,7 +58,7 @@
           "onnx": "1.17.0"
         }
       },
-      "notes": "First public model. Hybrid backbone, embedding_dim 128, token_pool_extra 1."
+      "notes": "First public model. Hybrid backbone, embedding_dim 128, token_pool_extra 1. Two outputs: the embedding, and a per-frame calibration weight (sigmoid, [0,1]) from the trained Calibration_Weights head. The embedding is bit-identical to the pre-release export that carried only one output."
     }
   ]
 }

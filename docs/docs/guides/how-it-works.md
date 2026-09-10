@@ -23,12 +23,15 @@ method in a paper, or work out why something is behaving the way it is.
    what makes ordinary room lighting workable; it cannot rescue backlighting, where the eyes are
    in shadow to begin with.
 4. **The embedding.** The strip goes through a small convolutional network (about 20 MB, ONNX,
-   run on WebGPU or WebAssembly) that returns 128 numbers describing the appearance of the eyes.
-   This model is trained once, on a large webcam dataset, and is the same for everybody.
+   run on WebGPU or WebAssembly) that returns 128 numbers describing the appearance of the eyes,
+   plus one more, between 0 and 1, rating how usable this frame is. A blink scores low. This
+   model is trained once, on a large webcam dataset, and is the same for everybody.
 5. **Smoothing.** Embeddings can be averaged over several frames before predicting, which is
-   much less jumpy than a single frame. The number averaged is the `smoothing_frames` setting,
-   1 by default — the newest frame alone. Above 1 the estimate comes from several frames, so its
-   timestamp is the mean of their capture times and it lags the display.
+   much less jumpy than a single frame. The average is weighted by that rating, so a blink
+   counts for little instead of pulling the estimate with it. The number averaged is the
+   `smoothing_frames` setting, 1 by default — the newest frame alone. Above 1 the estimate comes
+   from several frames, so its timestamp is the mean of their capture times and it lags the
+   display.
 6. **The ridge.** A ridge regression maps the averaged embedding to a point on the screen. This
    is the only part fitted per participant, which is why calibration takes twenty seconds rather
    than several minutes.
@@ -39,9 +42,15 @@ Calibration shows a target, waits a settle interval for the eyes to arrive, then
 embeddings for a capture interval and averages them into one observation. Thirteen points at
 1.5 s each is the default.
 
-The regression has 128 coefficients and a dozen or so observations, so it needs the ridge
-penalty to keep it from chasing noise in a few points. The penalty is chosen from the number of
-points unless you set `lambda` yourself.
+The rating is used twice: once inside that average, and again to set how much the finished
+point counts toward the fit. A point the participant blinked through counts for less than a
+clean one. The calibration trial records which weighting ran, in a `weighting` column, because
+a weighted fit and an unweighted one are different analyses and nothing else in the data tells
+them apart.
+
+The regression has one coefficient per embedding dimension — 128 with the shipped model — and
+a dozen or so observations, so it needs the ridge penalty to keep it from chasing noise in a
+few points. The number of points sets the penalty unless you set `lambda` yourself.
 
 Validation uses a different grid, inset from the calibration grid. Scoring on the points you
 fitted measures the fit rather than the participant, and flatters you by a wide margin, so the

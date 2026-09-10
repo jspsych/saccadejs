@@ -1,7 +1,7 @@
 # @saccadejs/core
 
 Webcam eye tracking in the browser: MediaPipe face landmarks → a 36×144 eye crop →
-a 128-dimensional ONNX embedding → a ridge map from embeddings to screen position, fit from
+an ONNX embedding → a ridge map from embeddings to screen position, fit from
 your own calibration points. Plus a screen-to-webcam timing loopback that measures the one lag
 JavaScript cannot see.
 
@@ -16,7 +16,10 @@ npm install @saccadejs/core
 ```
 
 The package ships `models/eye_embedding.onnx` (opset 17, input `eye_image` float32
-`[1,36,144,1]` in 0–255, output `embedding` float32 `[1,128]`). `onnxruntime-web` and
+`[1,36,144,1]` in 0–255; outputs `embedding` float32 `[1,128]` and `cal_weight` float32
+`[1,1]`, that frame's quality score in [0, 1]). The embedding width is not fixed at 128 —
+the fit takes its width from the model — but the crop and its preprocessing are exact; see
+[Model releases](https://saccade.jspsych.org/models/). `onnxruntime-web` and
 `@mediapipe/tasks-vision` are dependencies of this package; the `<script>` build loads them
 from a CDN instead (see [Asset hosting](#asset-hosting)).
 
@@ -28,18 +31,23 @@ from a CDN instead (see [Asset hosting](#asset-hosting)).
 import { SaccadeTracker, defaultGrid13, runCalibration, runValidation } from "@saccadejs/core";
 
 const tracker = new SaccadeTracker({ smoothingFrames: 1 });
-await tracker.init();                 // camera prompt + model load
+await tracker.init(); // camera prompt + model load
 tracker.start();
 
 // Show each target yourself; the driver owns the timing.
-await runCalibration(tracker, defaultGrid13(), { settleMs: 1000, captureMs: 500 }, {
-  showTarget(target, phase) {
-    // target is {x, y} in viewport fractions, or null when the run is over.
-    // phase is "settle" (eye still moving) or "capture" (samples being collected).
-    draw(target, phase);
+await runCalibration(
+  tracker,
+  defaultGrid13(),
+  { settleMs: 1000, captureMs: 500 },
+  {
+    showTarget(target, phase) {
+      // target is {x, y} in viewport fractions, or null when the run is over.
+      // phase is "settle" (eye still moving) or "capture" (samples being collected).
+      draw(target, phase);
+    },
   },
-});
-tracker.fitCalibration();             // lambda defaults to lambdaFor(nPoints)
+);
+tracker.fitCalibration(); // lambda defaults to lambdaFor(nPoints)
 
 tracker.onFrame((f) => {
   if (f.gaze) console.log(f.gaze.x, f.gaze.y, f.time.capture);
@@ -102,23 +110,24 @@ See the [documentation site](https://saccade.jspsych.org/) for the extension and
 
 ## API sketch
 
-| | |
-|---|---|
-| `new SaccadeTracker(opts)` | `assets`, `video: {width, height}`, `smoothingFrames` (default 1), `executionProviders` (default `["webgpu", "wasm"]`), `onFrame`, `onProgress` |
-| `init()` | camera + MediaPipe + ONNX, warmed up. Idempotent. Resolves `{ep, videoWidth, videoHeight}` |
-| `start()` / `stop()` / `dispose()` / `running` | the frame loop |
-| `video` | the live, **unmirrored** camera element — display it if you like (CSS-mirror the preview, never the pixels the model sees) |
-| `onFrame(cb)` | returns an unsubscribe function |
-| `nextFrame()` / `nextEmbedding()` | one-shot promises |
-| `addCalibrationPoint(target, embeddings)`, `clearCalibration()`, `getCalibrationPoints()` | calibration set |
-| `fitCalibration({lambda, center})` | solves the ridge map, returns `{lambda, nPoints}` |
-| `getCurrentGaze()` | latest `{gaze, time}` or null |
-| `sampleLuminance()` | whole-frame mean luminance, what the loopback correlates |
-| `defaultGrid13()`, `trainingGrid20()`, `validationGrid9()`, `lambdaFor(n)` | grids and the ridge penalty (3 at ≤ 9 points, else 1) |
-| `runCalibration`, `runValidation`, `runLoopback` | drivers |
-| `extractEyeCrop`, `clahe`, `resizeBilinearCv`, `rgbaToGray`, `cropBBox` | the preprocessing, exported for testing |
-| `solveRidge`, `predict`, `calWeight`, `fitRidge` | the ridge fit |
-| `estimateLagEdges`, `estimateLag`, `sparseSchedule`, `seededRandom`, `splitHalves`, `intervalStats` | pure loopback analysis |
+|                                                                                                     |                                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new SaccadeTracker(opts)`                                                                          | `assets`, `video: {width, height}`, `smoothingFrames` (default 1), `executionProviders` (default `["webgpu", "wasm"]`), `onFrame`, `onProgress` |
+| `init()`                                                                                            | camera + MediaPipe + ONNX, warmed up. Idempotent. Resolves `{ep, videoWidth, videoHeight}`                                                      |
+| `start()` / `stop()` / `dispose()` / `running`                                                      | the frame loop                                                                                                                                  |
+| `video`                                                                                             | the live, **unmirrored** camera element — display it if you like (CSS-mirror the preview, never the pixels the model sees)                      |
+| `onFrame(cb)`                                                                                       | returns an unsubscribe function                                                                                                                 |
+| `nextFrame()` / `nextEmbedding()` / `nextSample()`                                                  | one-shot promises; `nextSample()` pairs the embedding with the model's weight for it                                                            |
+| `addCalibrationPoint(target, embeddings, weights?)`, `clearCalibration()`, `getCalibrationPoints()` | calibration set                                                                                                                                 |
+| `fitCalibration({lambda, center, calHead})`                                                         | solves the ridge map, returns `{lambda, nPoints, weighting}`                                                                                    |
+| `getCalWeighting()`                                                                                 | how the last fit weighted its rows: `"model"`, `"head"` or `"uniform"`                                                                          |
+| `getCurrentGaze()`                                                                                  | latest `{gaze, time}` or null                                                                                                                   |
+| `sampleLuminance()`                                                                                 | whole-frame mean luminance, what the loopback correlates                                                                                        |
+| `defaultGrid13()`, `trainingGrid20()`, `validationGrid9()`, `lambdaFor(n)`                          | grids and the ridge penalty (3 at ≤ 9 points, else 1)                                                                                           |
+| `runCalibration`, `runValidation`, `runLoopback`                                                    | drivers                                                                                                                                         |
+| `extractEyeCrop`, `clahe`, `resizeBilinearCv`, `rgbaToGray`, `cropBBox`                             | the preprocessing, exported for testing                                                                                                         |
+| `solveRidge`, `predict`, `calWeight`, `fitRidge`                                                    | the ridge fit                                                                                                                                   |
+| `estimateLagEdges`, `estimateLag`, `sparseSchedule`, `seededRandom`, `splitHalves`, `intervalStats` | pure loopback analysis                                                                                                                          |
 
 ### Keep `tracker.video` in the document
 
@@ -155,8 +164,8 @@ yourself (offline labs, or to avoid a third-party request), pass `assets`:
 new SaccadeTracker({
   assets: {
     modelUrl: "/static/eye_embedding.onnx",
-    ortWasmUrl: "/static/ort/",                       // directory with ort's .wasm/.mjs
-    mediapipeWasmUrl: "/static/mediapipe/wasm",       // directory
+    ortWasmUrl: "/static/ort/", // directory with ort's .wasm/.mjs
+    mediapipeWasmUrl: "/static/mediapipe/wasm", // directory
     faceLandmarkerUrl: "/static/face_landmarker.task",
   },
 });
@@ -179,7 +188,7 @@ Every frame carries a `time: FrameTime`, all on the `performance.now()` clock:
   which). This is the timestamp to record with a gaze sample, not the time the prediction
   became available.
 - **`meanCapture`** — because gaze is computed from a ring buffer of the last `smoothingFrames`
-  embeddings, the smoothed estimate refers to the *mean* capture time of that buffer, not to the
+  embeddings, the smoothed estimate refers to the _mean_ capture time of that buffer, not to the
   newest frame. At the default of 1 it equals `capture`; with `smoothingFrames: 5` at 30 fps it is
   ≈ 67 ms before `capture`.
 - **`emit`** — when the frame reached your callback. `emit - capture` is pipeline latency, and

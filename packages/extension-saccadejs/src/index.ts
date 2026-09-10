@@ -7,6 +7,7 @@ import {
 } from "@saccadejs/core";
 import type {
   CalPoint,
+  CalWeighting,
   FrameTime,
   LoopbackResult,
   SaccadeAssets,
@@ -476,16 +477,24 @@ class SaccadeExtension implements JsPsychExtension {
     };
 
     let collected = embeddings;
+    // Only frames this call collected have weights to go with them; embeddings handed in by
+    // the caller come with none, and are fitted unweighted.
+    let weights: number[] | null = null;
     if (!collected) {
       collected = [];
+      const w: number[] = [];
       const until = performance.now() + captureMs;
       while (performance.now() < until) {
-        const e = await withFrameTimeout(tracker.nextEmbedding(), timeoutMs);
-        if (e) collected.push(e);
+        const s = await withFrameTimeout(tracker.nextSample(), timeoutMs);
+        if (s) {
+          collected.push(s.embedding);
+          if (s.weight != null) w.push(s.weight);
+        }
       }
+      if (w.length === collected.length) weights = w;
     }
     if (collected.length === 0) return 0;
-    tracker.addCalibrationPoint(target, collected);
+    tracker.addCalibrationPoint(target, collected, weights);
     return collected.length;
   };
 
@@ -494,7 +503,9 @@ class SaccadeExtension implements JsPsychExtension {
    *
    * @param lambda Ridge penalty. Omit to let the core pick one with `lambdaFor(nPoints)`.
    */
-  fitCalibration = (lambda?: number): { lambda: number; nPoints: number } | null => {
+  fitCalibration = (
+    lambda?: number,
+  ): { lambda: number; nPoints: number; weighting: CalWeighting } | null => {
     const tracker = this.getTracker();
     return tracker.fitCalibration(lambda === undefined || lambda === null ? undefined : { lambda });
   };
@@ -843,5 +854,7 @@ class SaccadeExtension implements JsPsychExtension {
     return window.innerHeight || document.documentElement.clientHeight || 1;
   }
 }
+
+export type { CalWeighting } from "@saccadejs/core";
 
 export default SaccadeExtension;

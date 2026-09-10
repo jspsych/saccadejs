@@ -75,13 +75,23 @@ export async function runCalibration(
     await sleep(opts.settleMs);
     ui.showTarget(target, "capture");
     const embeddings: Float32Array[] = [];
+    const weights: number[] = [];
     const until = performance.now() + opts.captureMs;
     while (performance.now() < until) {
-      const e = await withFrameTimeout(tracker.nextEmbedding(), timeoutMs);
-      if (e) embeddings.push(e);
+      const s = await withFrameTimeout(tracker.nextSample(), timeoutMs);
+      if (s) {
+        embeddings.push(s.embedding);
+        if (s.weight != null) weights.push(s.weight);
+      }
     }
     if (embeddings.length === 0) continue;
-    tracker.addCalibrationPoint(target, embeddings);
+    // Only a complete set of weights goes on: a partial one would quietly mean "the frames we
+    // happened to score", which is not a weighting anyone chose.
+    tracker.addCalibrationPoint(
+      target,
+      embeddings,
+      weights.length === embeddings.length ? weights : null,
+    );
     const points = tracker.getCalibrationPoints();
     out.push(points[points.length - 1]);
   }

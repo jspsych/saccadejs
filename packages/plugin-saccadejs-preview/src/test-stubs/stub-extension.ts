@@ -32,6 +32,10 @@ export class StubTracker {
   running = false;
   init = jest.fn(async () => ({ ep: "webgpu" as const, videoWidth: 640, videoHeight: 480 }));
   nextEmbedding = jest.fn(async () => new Float32Array(128));
+  nextSample = jest.fn(async () => ({
+    embedding: new Float32Array(128),
+    weight: null as number | null,
+  }));
 
   private callbacks = new Set<(f: StubFrame) => void>();
 
@@ -128,6 +132,7 @@ export class StubSaccadeExtension implements JsPsychExtension {
   fitCalibration = jest.fn((lambda?: number) => ({
     lambda: lambda ?? 1,
     nPoints: this.calibrationCalls.length,
+    weighting: "uniform" as const,
   }));
 
   getCalibrationPoints = () => [];

@@ -1,9 +1,8 @@
-import { CENTER } from "./grids";
+import { CENTER, meanEmbedding as weightedMean } from "./grids";
 import { extractEyeCrop } from "./crop";
 import type { Landmarker } from "./landmarker";
 import { predict } from "./ridge";
-import type { EmbeddingModel, Gaze } from "./types";
-import { EMB_DIM } from "./types";
+import type { EmbedResult, EmbeddingModel, Gaze } from "./types";
 
 export interface TrackerTimings {
   landmark: number;
@@ -49,6 +48,8 @@ export interface TrackerFrame {
   faceFound: boolean;
   crop: Uint8Array | null;
   embedding: Float32Array | null;
+  /** The model's own quality score for this frame, in [0, 1]; null if it emits none. */
+  weight: number | null;
   meanEmbedding: Float32Array | null;
   timings: TrackerTimings;
   time: FrameTime;
@@ -87,6 +88,7 @@ interface Stage {
 interface RingEntry {
   e: Float32Array;
   t: number;
+  w: number | null;
 }
 
 /**
@@ -101,7 +103,7 @@ interface InFlight {
   started: number;
   finished: number;
   epoch: number;
-  promise: Promise<Float32Array>;
+  promise: Promise<EmbedResult>;
 }
 
 /**
@@ -351,6 +353,7 @@ export class Pipeline {
         faceFound: stage.faceFound,
         crop: null,
         embedding: null,
+        weight: null,
         meanEmbedding: null,
         timings: {
           landmark: stage.landmark,
@@ -424,9 +427,12 @@ export class Pipeline {
   private async retire(p: InFlight): Promise<TrackerFrame | null> {
     const tw = performance.now();
     let embedding: Float32Array | null = null;
+    let weight: number | null = null;
     let error = p.stage.error;
     try {
-      embedding = await p.promise;
+      const r = await p.promise;
+      embedding = r.embedding;
+      weight = r.weight;
     } catch (err) {
       error = this.describe(err);
     }
@@ -438,7 +444,7 @@ export class Pipeline {
     let gaze: Gaze | null = null;
     let meanCapture: number | null = null;
     if (embedding) {
-      this.ring.push({ e: embedding, t: p.stage.time.capture });
+      this.ring.push({ e: embedding, t: p.stage.time.capture, w: weight });
       while (this.ring.length > this.smoothingFrames) this.ring.shift();
       mean = this.meanEmbedding();
       meanCapture = this.meanCaptureTime();
@@ -449,6 +455,7 @@ export class Pipeline {
       faceFound: p.stage.faceFound,
       crop: p.stage.eye,
       embedding,
+      weight,
       meanEmbedding: mean,
       timings: {
         landmark: p.stage.landmark,
@@ -471,12 +478,20 @@ export class Pipeline {
     return err instanceof Error ? err.message : String(err);
   }
 
+  /**
+   * The smoothing mean over the ring buffer, weighted by the model's per-frame weights when it
+   * emits them -- the rule calibration uses, so a smoothed live gaze and a calibration point
+   * are built the same way.
+   */
   private meanEmbedding(): Float32Array | null {
     if (this.ring.length === 0) return null;
-    const mean = new Float32Array(EMB_DIM);
-    for (const { e } of this.ring) for (let i = 0; i < EMB_DIM; i++) mean[i] += e[i];
-    for (let i = 0; i < EMB_DIM; i++) mean[i] /= this.ring.length;
-    return mean;
+    const weights = this.ring.every((r) => r.w != null)
+      ? this.ring.map((r) => r.w as number)
+      : null;
+    return weightedMean(
+      this.ring.map((r) => r.e),
+      weights,
+    );
   }
 
   private meanCaptureTime(): number | null {

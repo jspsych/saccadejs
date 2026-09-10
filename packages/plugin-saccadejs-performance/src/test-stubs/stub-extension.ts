@@ -34,6 +34,10 @@ export class StubTracker {
   running = false;
   init = jest.fn(async () => ({ ep: "webgpu" as const, videoWidth: 640, videoHeight: 480 }));
   nextEmbedding = jest.fn(async () => new Float32Array(128));
+  nextSample = jest.fn(async () => ({
+    embedding: new Float32Array(128),
+    weight: null as number | null,
+  }));
 
   private callbacks = new Set<(f: StubFrame) => void>();
 

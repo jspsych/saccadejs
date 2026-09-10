@@ -55,7 +55,7 @@ describe("SaccadeTracker", () => {
     expect(p.meanEmbedding[0]).toBeCloseTo((embedding(0)[0] + embedding(0.5)[0]) / 2, 6);
 
     const fit = t.fitCalibration();
-    expect(fit).toEqual({ lambda: 1, nPoints: 13 });
+    expect(fit).toEqual({ lambda: 1, nPoints: 13, weighting: "uniform" });
     expect(t.calibrated).toBe(true);
     expect(t.getKernel()!.length).toBe(256);
 
