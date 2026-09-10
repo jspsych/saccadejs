@@ -16,8 +16,8 @@ Hashing costs one pass over the already-fetched bytes at startup. `crypto.subtle
 secure context, but so does `getUserMedia` — any page that can reach a camera can hash.
 
 New in core: `SaccadeTracker.getModelIdentity()` returns the full picture
-(`{ sha256, version, contract, url, resolvedFrom }`), plus the `ModelIdentity` type and the
-`formatModelIdentity()` helper the extension uses. The data column stays deliberately
+(`{ sha256, version, contract, url, resolvedFrom, dim, emitsWeight }`), plus the
+`ModelIdentity` type and the `formatModelIdentity()` helper the extension uses. The data column stays deliberately
 minimal; the API is where to go for detail.
 
 Only trials after the model loads carry the column — the camera is not touched until the

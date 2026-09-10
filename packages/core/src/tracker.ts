@@ -1,12 +1,12 @@
 import type { SaccadeAssets } from "./assets";
-import { CAL_HEAD, CENTER, fitRidge, lambdaFor, meanEmbedding } from "./grids";
+import { CENTER, fitRidge, lambdaFor, meanEmbedding } from "./grids";
 import { Landmarker } from "./landmarker";
 import { OrtEmbeddingModel } from "./model";
 import type { FrameTime, TrackerFrame } from "./pipeline";
 import { Pipeline } from "./pipeline";
 import type { SaccadeProgressCallback } from "./progress";
 import { reportProgress } from "./progress";
-import type { CalPoint, EmbeddingModel, Gaze, ModelIdentity } from "./types";
+import type { CalHead, CalPoint, CalWeighting, EmbeddingModel, Gaze, ModelIdentity } from "./types";
 
 export interface SaccadeTrackerOptions {
   assets?: SaccadeAssets;
@@ -35,6 +35,15 @@ export interface SaccadeTrackerOptions {
   stream?: MediaStream;
   /** Extension: substitute the embedding model (tests, or a pre-warmed session). */
   model?: EmbeddingModel;
+  /**
+   * Weight calibration rows with this logistic head over the embedding.
+   *
+   * Off by default: a head is trained against one model's embedding space and produces
+   * meaningless scores on another model's embeddings. Pass `CAL_HEAD` to reproduce how
+   * eye-embedding 1.0.0 weighted its rows. A model that emits its own weights needs nothing
+   * here -- that path is automatic, and this option overrides it when both are present.
+   */
+  calHead?: CalHead | null;
 }
 
 export interface InitResult {
@@ -77,6 +86,7 @@ export class SaccadeTracker {
   private initResult: InitResult | null = null;
   private cal: CalPoint[] = [];
   private kernel: Float32Array | null = null;
+  private weighting: CalWeighting | null = null;
   private lastGaze: { gaze: Gaze; time: FrameTime } | null = null;
   private subscribers = new Set<(f: TrackerFrame) => void>();
   private smoothingFrames: number;
@@ -297,6 +307,16 @@ export class SaccadeTracker {
     return (await this.nextFrame()).embedding;
   }
 
+  /**
+   * The next frame's embedding together with the model's weight for it. Calibration collects
+   * through this rather than `nextEmbedding()`, keeping the weight paired with the embedding
+   * it describes.
+   */
+  async nextSample(): Promise<{ embedding: Float32Array; weight: number | null } | null> {
+    const f = await this.nextFrame();
+    return f.embedding ? { embedding: f.embedding, weight: f.weight } : null;
+  }
+
   async nextGaze(): Promise<Gaze | null> {
     return (await this.nextFrame()).gaze;
   }
@@ -309,14 +329,23 @@ export class SaccadeTracker {
 
   // ---------------------------------------------------------------- calibration
 
-  addCalibrationPoint(target: Gaze, embeddings: Float32Array[]): void {
+  /**
+   * Add one calibration target and the embeddings collected while the subject looked at it.
+   *
+   * `weights` are the model's per-frame scores for those embeddings, when it emits any. They
+   * weight the point's mean embedding and, averaged, become its row weight in the fit. Pass
+   * nothing and the point goes in unweighted.
+   */
+  addCalibrationPoint(target: Gaze, embeddings: Float32Array[], weights?: number[] | null): void {
     if (embeddings.length === 0) return;
-    this.cal.push({ target, embeddings, meanEmbedding: meanEmbedding(embeddings) });
+    const w = weights ?? null;
+    this.cal.push({ target, embeddings, weights: w, meanEmbedding: meanEmbedding(embeddings, w) });
   }
 
   clearCalibration(): void {
     this.cal = [];
     this.kernel = null;
+    this.weighting = null;
     this.lastGaze = null;
     this.pipeline?.setKernel(null);
   }
@@ -326,24 +355,33 @@ export class SaccadeTracker {
   }
 
   /** Solve the ridge map from the points added so far. Null when there is nothing to fit. */
-  fitCalibration(opts: { lambda?: number; center?: number } = {}): {
+  fitCalibration(opts: { lambda?: number; center?: number; calHead?: CalHead | null } = {}): {
     lambda: number;
     nPoints: number;
+    weighting: CalWeighting;
   } | null {
     if (this.cal.length === 0) return null;
     const lambda = opts.lambda ?? lambdaFor(this.cal.length);
     const center = opts.center ?? CENTER;
-    this.kernel = fitRidge(this.cal, CAL_HEAD, lambda, center);
+    const head = opts.calHead !== undefined ? opts.calHead : (this.opts.calHead ?? null);
+    const { kernel, weighting } = fitRidge(this.cal, head, lambda, center);
+    this.kernel = kernel;
+    this.weighting = weighting;
     this.pipeline?.setCenter(center);
     this.pipeline?.setKernel(this.kernel);
-    return { lambda, nPoints: this.cal.length };
+    return { lambda, nPoints: this.cal.length, weighting };
+  }
+
+  /** How the last fit weighted its rows, or null before one has run. */
+  getCalWeighting(): CalWeighting | null {
+    return this.weighting;
   }
 
   get calibrated(): boolean {
     return this.kernel != null;
   }
 
-  /** The fitted 256-long kernel (x and y interleaved), or null. */
+  /** The fitted kernel, `2 * d` long (x and y interleaved), or null. */
   getKernel(): Float32Array | null {
     return this.kernel;
   }

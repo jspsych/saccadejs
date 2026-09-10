@@ -88,9 +88,11 @@ describe("fitRidge", () => {
     const cal = c.embeddings.slice(0, 8).map((e, i) => ({
       target: { x: c.coords[i][0], y: c.coords[i][1] },
       embeddings: [Float32Array.from(e)],
+      weights: null,
       meanEmbedding: Float32Array.from(e),
     }));
-    const k = fitRidge(cal, c.head, c.lambda, c.center);
+    const { kernel: k, weighting } = fitRidge(cal, c.head, c.lambda, c.center);
+    expect(weighting).toBe("head");
     const manual = solveRidge(
       cal.map((p) => ({
         e: p.meanEmbedding,

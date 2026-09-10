@@ -44,6 +44,7 @@ timeline.push({ type: jsPsychSaccadeCalibrate });
 | `n_points` | `number` | The number of distinct targets used. |
 | `repetitions_per_point` | `number` | How many times the sequence was repeated. |
 | `lambda` | `number` | The ridge penalty the fit used, or `null` if the fit failed. |
+| `weighting` | `string` | How the fit weighted its rows: `"model"` (the model's own per-frame weights), `"head"` (a `calHead` given to the tracker), or `"uniform"` (unweighted). `null` if the fit failed. |
 | `rt` | `number` | Milliseconds from trial start to the end of calibration. |
 
 ## Example

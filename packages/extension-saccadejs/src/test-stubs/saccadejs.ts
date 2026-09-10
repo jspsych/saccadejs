@@ -11,6 +11,7 @@ export interface StubFrame {
   faceFound: boolean;
   crop: Uint8Array | null;
   embedding: Float32Array | null;
+  weight: number | null;
   meanEmbedding: Float32Array | null;
   timings: { landmark: number; crop: number; embed: number; total: number };
   time: {
@@ -35,6 +36,7 @@ export function makeFrame(overrides: Partial<StubFrame> = {}): StubFrame {
     faceFound: true,
     crop: null,
     embedding: new Float32Array(128),
+    weight: null,
     meanEmbedding: new Float32Array(128),
     timings: { landmark: 1, crop: 1, embed: 1, total: 3 },
     fps: 30,
@@ -62,6 +64,7 @@ export class SaccadeTracker {
   calibrationPoints: Array<{
     target: { x: number; y: number };
     embeddings: Float32Array[];
+    weights: number[] | null;
     meanEmbedding: Float32Array;
   }> = [];
   /** Mirrors the real tracker's `initialized` getter, which gates the handed-tracker path. */
@@ -72,6 +75,10 @@ export class SaccadeTracker {
     return { ep: "webgpu" as const, videoWidth: 640, videoHeight: 480 };
   });
   nextEmbedding = jest.fn(async () => new Float32Array(128));
+  nextSample = jest.fn(async () => ({
+    embedding: new Float32Array(128),
+    weight: null as number | null,
+  }));
 
   private callbacks = new Set<(f: StubFrame) => void>();
 
@@ -97,12 +104,16 @@ export class SaccadeTracker {
     contract: number | null;
     url: string | null;
     resolvedFrom: "registry" | "hash-only" | "unverified";
+    dim: number | null;
+    emitsWeight: boolean;
   } | null = {
-    sha256: "c323131f766097194503fc048c4a64c5ac771f8dd281eefd07239ee89fcaebf7",
+    sha256: "5a1a111e37f97bd50fcffccbf6498bf377700d27cd4e3ea5bc5d237541a3c73a",
     version: "1.0.0",
     contract: 1,
     url: "/models/eye-embedding/1.0.0/eye_embedding.onnx",
     resolvedFrom: "registry",
+    dim: 128,
+    emitsWeight: true,
   };
 
   getModelIdentity() {
@@ -134,8 +145,17 @@ export class SaccadeTracker {
     return makeFrame();
   }
 
-  addCalibrationPoint(target: { x: number; y: number }, embeddings: Float32Array[]) {
-    this.calibrationPoints.push({ target, embeddings, meanEmbedding: embeddings[0] });
+  addCalibrationPoint(
+    target: { x: number; y: number },
+    embeddings: Float32Array[],
+    weights?: number[] | null,
+  ) {
+    this.calibrationPoints.push({
+      target,
+      embeddings,
+      weights: weights ?? null,
+      meanEmbedding: embeddings[0],
+    });
   }
 
   clearCalibration() {
@@ -148,7 +168,11 @@ export class SaccadeTracker {
 
   fitCalibration(opts?: { lambda?: number }) {
     if (this.calibrationPoints.length === 0) return null;
-    return { lambda: opts?.lambda ?? 1, nPoints: this.calibrationPoints.length };
+    return {
+      lambda: opts?.lambda ?? 1,
+      nPoints: this.calibrationPoints.length,
+      weighting: "uniform" as const,
+    };
   }
 
   get calibrated() {

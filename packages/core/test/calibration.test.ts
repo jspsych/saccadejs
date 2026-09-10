@@ -32,6 +32,7 @@ function stubTracker(
       faceFound: true,
       crop: null,
       embedding: opts.blind ? null : e,
+      weight: null,
       meanEmbedding: null,
       timings: { landmark: 0, crop: 0, embed: 0, total: 0 },
       time: {
@@ -51,6 +52,10 @@ function stubTracker(
   const tracker = {
     nextFrame: async () => frame(),
     nextEmbedding: async () => frame().embedding,
+    nextSample: async () => {
+      const f = frame();
+      return f.embedding ? { embedding: f.embedding, weight: f.weight } : null;
+    },
     addCalibrationPoint: (t: Gaze, embeddings: Float32Array[]) =>
       points.push({ target: t, embeddings }),
     getCalibrationPoints: () =>
@@ -168,6 +173,7 @@ function stalledTracker(): SaccadeTracker {
   return {
     nextFrame: never,
     nextEmbedding: never,
+    nextSample: never,
     addCalibrationPoint: () => undefined,
     getCalibrationPoints: () => [],
   } as unknown as SaccadeTracker;

@@ -236,7 +236,9 @@ describe("OrtEmbeddingModel progress", () => {
 
     const quiet = new OrtEmbeddingModel({ assets: { modelUrl: "/m.onnx" } });
     expect(await quiet.init()).toEqual({ ep: "webgpu" });
-    expect((await quiet.embed(new Uint8Array(36 * 144))).length).toBe(128);
+    const out = await quiet.embed(new Uint8Array(36 * 144));
+    expect(out.embedding.length).toBe(128);
+    expect(out.weight).toBeNull();
     quiet.dispose();
 
     resetModules();

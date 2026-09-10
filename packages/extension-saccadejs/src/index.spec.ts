@@ -412,7 +412,7 @@ describe("SaccadeExtension public API", () => {
     const { extension, tracker } = await makeExtension(display);
     const n = await extension.calibratePoint(10, 10, undefined, 5);
     expect(n).toBeGreaterThan(0);
-    expect(tracker.nextEmbedding).toHaveBeenCalled();
+    expect(tracker.nextSample).toHaveBeenCalled();
   });
 
   it("passes lambda through to the tracker's fit", async () => {
@@ -420,8 +420,12 @@ describe("SaccadeExtension public API", () => {
     expect(extension.fitCalibration()).toBeNull();
 
     await extension.calibratePoint(0, 0, [new Float32Array(128)]);
-    expect(extension.fitCalibration(2.5)).toEqual({ lambda: 2.5, nPoints: 1 });
-    expect(extension.fitCalibration()).toEqual({ lambda: 1, nPoints: 1 });
+    expect(extension.fitCalibration(2.5)).toEqual({
+      lambda: 2.5,
+      nPoints: 1,
+      weighting: "uniform",
+    });
+    expect(extension.fitCalibration()).toEqual({ lambda: 1, nPoints: 1, weighting: "uniform" });
   });
 
   it("notifies gaze subscribers and exposes the current prediction", async () => {
@@ -494,7 +498,7 @@ describe("SaccadeExtension public API", () => {
 
   it("gives up on a dead frame source instead of collecting forever", async () => {
     const { extension, tracker } = await makeExtension(display);
-    tracker.nextEmbedding.mockImplementation(() => new Promise(() => undefined) as any);
+    tracker.nextSample.mockImplementation(() => new Promise(() => undefined) as any);
 
     await expect(extension.calibratePoint(0, 0, undefined, 1000, 20)).rejects.toThrow(
       /no camera frames for 20 ms/,
@@ -610,6 +614,10 @@ describe("recording which model produced the gaze", () => {
       contract: null,
       url: "https://example.org/my-model.onnx",
       resolvedFrom: "hash-only",
+      // Not a published release, and a different width — which the tracker reports honestly
+      // rather than assuming the shipped model's shape.
+      dim: 64,
+      emitsWeight: false,
     };
     await custom.init();
     const ext2 = new SaccadeExtension(makeJsPsych(display, props));

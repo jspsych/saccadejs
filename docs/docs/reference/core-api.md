@@ -53,12 +53,14 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `nextFrame` | `(): Promise<TrackerFrame>` | |
 | `nextEmbedding` | `(): Promise<Float32Array \| null>` | |
 | `nextGaze` | `(): Promise<Gaze \| null>` | |
-| `addCalibrationPoint` | `(target: Gaze, embeddings: Float32Array[]): void` | Adds one observation. Does not fit. |
+| `nextSample` | `(): Promise<{ embedding, weight } \| null>` | The next embedding with the model's per-frame weight for it; `weight` is `null` for a model that emits none. What calibration collects through. |
+| `addCalibrationPoint` | `(target: Gaze, embeddings: Float32Array[], weights?: number[] \| null): void` | Adds one observation. Does not fit. `weights` are the model's per-frame scores; they weight the point's mean embedding and, averaged, its row in the fit. |
 | `clearCalibration` | `(): void` | |
 | `getCalibrationPoints` | `(): CalPoint[]` | |
-| `fitCalibration` | `(opts?: { lambda?, center? }) => { lambda, nPoints } \| null` | Solves the ridge map from the points added so far. `null` when there is nothing to fit. |
+| `fitCalibration` | `(opts?: { lambda?, center?, calHead? }) => { lambda, nPoints, weighting } \| null` | Solves the ridge map from the points added so far. `null` when there is nothing to fit. |
 | `calibrated` | `boolean` (getter) | `gaze` stays `null` until this is true. |
-| `getKernel` | `(): Float32Array \| null` | The fitted 256-long kernel, x and y interleaved. |
+| `getKernel` | `(): Float32Array \| null` | The fitted kernel, `2 * d` long for a `d`-dimensional embedding, x and y interleaved. |
+| `getCalWeighting` | `(): CalWeighting \| null` | How the last fit weighted its rows; `null` before one has run. |
 | `setSmoothingFrames` / `getSmoothingFrames` | `(n: number): void` / `(): number` | Changeable while running. |
 | `getCurrentGaze` | `(): { gaze: Gaze; time: FrameTime } \| null` | |
 | `sampleLuminance` | `(): number` | Mean luminance of the current camera frame. |
@@ -80,7 +82,8 @@ interface TrackerFrame {
   gaze: Gaze | null;                   // viewport fractions; null until calibrated
   faceFound: boolean;
   crop: Uint8Array | null;             // 144 x 36 grayscale, row-major
-  embedding: Float32Array | null;      // 128 values, this frame only
+  embedding: Float32Array | null;      // the model's width (128 for eye-embedding 1.0.0)
+  weight: number | null;               // the model's score for this frame, [0, 1]; null if none
   meanEmbedding: Float32Array | null;  // the smoothing mean, which `gaze` came from
   timings: { landmark: number; crop: number; embed: number; total: number; wait?: number };
   time: FrameTime;
@@ -129,7 +132,12 @@ forever on a target that never moves. The plugins put that message on screen.
 ```ts
 runCalibration(tracker, targets: Gaze[], opts: CollectOptions, ui: TargetUi): Promise<CalPoint[]>
 
-interface CalPoint { target: Gaze; embeddings: Float32Array[]; meanEmbedding: Float32Array }
+interface CalPoint {
+  target: Gaze;
+  embeddings: Float32Array[];
+  weights: number[] | null;     // the model's per-frame scores, when it emits them
+  meanEmbedding: Float32Array;  // already weighted by them
+}
 ```
 
 `runCalibration` collects embeddings and adds them to the tracker. It does not fit: call
@@ -171,6 +179,46 @@ lambdaFor(nPoints: number): number   // 3 when nPoints <= 9, else 1
 ```
 
 Validate on `validationGrid9()`, not on the calibration points.
+
+### Row weighting
+
+Each calibration point contributes one weighted row to the ridge fit. The weight comes from the
+first of these that applies:
+
+| Source | When | `weighting` |
+| --- | --- | --- |
+| A `CalHead` you supply | `SaccadeTrackerOptions.calHead`, or `fitCalibration({ calHead })`. An explicit argument wins. | `"head"` |
+| The model's second output | The loaded model emits a per-frame weight, averaged over the point's capture window. | `"model"` |
+| Nothing | Neither of the above. Every row at 1, which is plain unweighted ridge. | `"uniform"` |
+
+`fitCalibration()` returns which one ran, and `getCalWeighting()` reports it afterwards. Record
+it: a weighted fit and an unweighted one are different analyses, and nothing else in the data
+tells them apart. `saccade-calibrate` writes the `weighting` column for you.
+
+Weights apply **before** the mean, so a low-scoring frame drops out of the point's embedding
+instead of only discounting the finished point. The live smoothing ring uses the same weights,
+so a smoothed gaze and a calibration point are computed the same way.
+
+`CAL_HEAD` — the logistic head exported alongside eye-embedding 1.0.0 — is off by default. A
+head is trained against one model's embedding space and produces meaningless scores on another
+model's embeddings. eye-embedding 1.0.0 now carries its weighting in the graph, so most
+experiments do not need this option.
+
+### Embedding width
+
+The fit is not fixed at 128. The ridge solve and both mean-embedding paths read their width
+from the embeddings they are handed, so a model of any output length works, provided that
+length is the same on every frame of a session. `EMB_DIM` is the shipped model's width, useful
+for sizing a buffer, and is not a limit.
+
+The solve costs O(d²) in memory and O(d³) to factorise, once, when calibration ends. At 128
+that is negligible; at a few thousand it would not be.
+
+Five conditions throw rather than continue with bad numbers: an embedding whose width changes
+mid-session, a ragged set of calibration rows, a `CalHead` whose length does not match the
+embedding, a half-weighted calibration set, and a weight output that is not a finite number in
+`[0, 1]`. The last throws at `init()`, on the warm-up inference, before any participant data
+exists.
 
 ## `runLoopback`
 
@@ -217,7 +265,7 @@ The estimator is exported so stored `flips` and `samples` can be re-analyzed off
 
 ```ts
 interface SaccadeAssets {
-  modelUrl?: string;             // eye_embedding.onnx
+  modelUrl?: string;             // eye_embedding.onnx (see Model releases for the requirements)
   ortWasmUrl?: string;           // directory URL for onnxruntime-web's .wasm/.mjs
   mediapipeWasmUrl?: string;     // directory URL for @mediapipe/tasks-vision wasm
   faceLandmarkerUrl?: string;    // face_landmarker.task
@@ -243,7 +291,7 @@ versions and default URLs are exported as `ORT_VERSION`, `MEDIAPIPE_VERSION`,
 | `OrtEmbeddingModel`, `StubEmbeddingModel` | The ONNX model, and a stub for tests. |
 | `Pipeline` | The frame loop without camera management. |
 | `loadOrt`, `loadVision`, `presetModules`, `modelUrl` | Asset loading, and a way to inject already-loaded modules. |
-| `EYE_W` (144), `EYE_H` (36), `EMB_DIM` (128), `CENTER`, `CAL_HEAD` | Constants. |
+| `EYE_W` (144), `EYE_H` (36), `EMB_DIM` (128), `CENTER`, `CAL_HEAD` | Constants. `EMB_DIM` is the shipped model's width, not a limit. |
 | `DEFAULT_SETTLE_MS` (1000), `DEFAULT_CAPTURE_MS` (500) | Calibration timing defaults. |
 | `median`, `meanEmbedding` | Small helpers. |
 | `version` | The package version, as published. |

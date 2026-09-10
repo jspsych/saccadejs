@@ -5,7 +5,7 @@ import { fetchModelBytes, loadOrt, modelUrl } from "./assets";
 import manifest from "./generated/export_manifest.json";
 import type { SaccadeProgressCallback } from "./progress";
 import { reportProgress } from "./progress";
-import type { EmbeddingModel, ModelIdentity } from "./types";
+import type { EmbedResult, EmbeddingModel, ModelIdentity } from "./types";
 import releases from "../models/releases.json";
 import { EMB_DIM, EYE_H, EYE_W } from "./types";
 
@@ -40,10 +40,19 @@ async function sha256Hex(bytes: Uint8Array): Promise<string | null> {
 
 /** Look a hash up in the shipped registry: the hash is the identity, the registry names it. */
 function identify(sha256: string | null, url: string): ModelIdentity {
+  const base = { dim: null, emitsWeight: false };
   if (!sha256)
-    return { sha256: null, version: null, contract: null, url, resolvedFrom: "unverified" };
+    return {
+      ...base,
+      sha256: null,
+      version: null,
+      contract: null,
+      url,
+      resolvedFrom: "unverified",
+    };
   const known = releases.releases.find((r) => r.sha256 === sha256);
   return {
+    ...base,
     sha256,
     version: known?.version ?? null,
     contract: known?.contract ?? null,
@@ -60,6 +69,12 @@ const manifestIo = manifest as unknown as {
 const INPUT_NAME = manifestIo.model?.input?.name ?? manifestIo.input_name ?? "eye_image";
 const OUTPUT_NAME = manifestIo.model?.output?.name ?? manifestIo.output_name ?? "embedding";
 
+/**
+ * Output names that mean "per-frame quality weight". Checked before the shape heuristic below,
+ * so a model that names its output is taken at its word rather than inspected.
+ */
+const WEIGHT_NAMES = new Set(["cal_weight", "weight", "quality"]);
+
 /** The eye-embedding model on ONNX Runtime Web: WebGPU when it works, wasm otherwise. */
 export class OrtEmbeddingModel implements EmbeddingModel {
   readonly modelPath: string;
@@ -71,6 +86,10 @@ export class OrtEmbeddingModel implements EmbeddingModel {
   private inputData!: Float32Array;
   private inputName = INPUT_NAME;
   private outputName = OUTPUT_NAME;
+  /** Name of the second output that carries the per-frame weight, once resolved. */
+  private weightName: string | null = null;
+  /** Embedding length, fixed by the first run and enforced on every run after it. */
+  private dim: number | null = null;
   private ep: "webgpu" | "wasm" = "wasm";
   private modelIdentity: ModelIdentity | null = null;
   private onProgress?: SaccadeProgressCallback;
@@ -137,7 +156,21 @@ export class OrtEmbeddingModel implements EmbeddingModel {
       if (this.session) break;
     }
     if (!this.session) throw lastErr ?? new Error("no execution provider available");
+    // The warm-up above ran a real inference, so the model's shape is known now rather than
+    // assumed from the registry. Record what it produced.
+    if (this.modelIdentity) {
+      this.modelIdentity = {
+        ...this.modelIdentity,
+        dim: this.dim,
+        emitsWeight: this.weightName != null,
+      };
+    }
     return { ep: this.ep };
+  }
+
+  /** Embedding length this model produces, known after `init()`. */
+  get embeddingDim(): number | null {
+    return this.dim;
   }
 
   /** What actually loaded. Available after `init()`; null before it. */
@@ -149,6 +182,8 @@ export class OrtEmbeddingModel implements EmbeddingModel {
         contract: null,
         url: this.modelPath,
         resolvedFrom: "unverified",
+        dim: this.dim,
+        emitsWeight: this.weightName != null,
       }
     );
   }
@@ -159,15 +194,65 @@ export class OrtEmbeddingModel implements EmbeddingModel {
     if (names.length > 0 && !names.includes(this.inputName)) this.inputName = names[0];
     const outs = this.session.outputNames;
     if (outs.length > 0 && !outs.includes(this.outputName)) this.outputName = outs[0];
+    this.weightName = outs.find((n) => n !== this.outputName && WEIGHT_NAMES.has(n)) ?? null;
   }
 
-  async embed(crop: Uint8Array): Promise<Float32Array> {
+  /**
+   * A model may carry its own per-frame quality weight as a second output. `bindNames` matches
+   * named outputs; this is the fallback for a graph exporting an unrecognised name, and it
+   * accepts only the unambiguous case -- exactly one other output, holding exactly one number.
+   * Anything less clear-cut it leaves alone, since guessing wrong would silently reweight
+   * someone's calibration.
+   */
+  private resolveWeightOutput(out: OrtNS.InferenceSession.OnnxValueMapType): void {
+    if (this.weightName || !this.session) return;
+    const others = this.session.outputNames.filter((n) => n !== this.outputName);
+    if (others.length !== 1) return;
+    const t = out[others[0]] as OrtNS.Tensor | undefined;
+    if (t && (t.data as ArrayLike<number>).length === 1) this.weightName = others[0];
+  }
+
+  /**
+   * The weight scales calibration evidence, so a value outside [0, 1] means a broken model
+   * rather than one bad frame. It throws -- and since `init()` warms the model up with one real
+   * inference, such a model fails at load, before any participant data exists, rather than
+   * midway through a session.
+   */
+  private readWeight(out: OrtNS.InferenceSession.OnnxValueMapType): number | null {
+    if (!this.weightName) return null;
+    const t = out[this.weightName] as OrtNS.Tensor | undefined;
+    const w = t ? (t.data as ArrayLike<number>)[0] : undefined;
+    if (typeof w !== "number" || !Number.isFinite(w) || w < 0 || w > 1) {
+      throw new Error(
+        `model output "${this.weightName}" is ${String(w)}; a per-frame calibration weight ` +
+          "must be a finite number in [0, 1].",
+      );
+    }
+    return w;
+  }
+
+  async embed(crop: Uint8Array): Promise<EmbedResult> {
     if (!this.session) throw new Error("model not initialized");
     if (crop.length !== CROP_LEN) throw new Error(`crop length ${crop.length} != ${CROP_LEN}`);
     for (let i = 0; i < CROP_LEN; i++) this.inputData[i] = crop[i];
     const out = await this.session.run({ [this.inputName]: this.input });
     const t = out[this.outputName];
-    return Float32Array.from(t.data as Float32Array);
+    const embedding = Float32Array.from(t.data as Float32Array);
+
+    // The embedding length is whatever this model produces, but it must hold for every frame:
+    // the ridge fit mixes embeddings from the whole calibration, and a width that moved
+    // partway through would corrupt it rather than fail.
+    if (this.dim == null) this.dim = embedding.length;
+    else if (embedding.length !== this.dim) {
+      throw new Error(
+        `model produced a ${embedding.length}-d embedding after ${this.dim}-d; the output ` +
+          "length must be stable.",
+      );
+    }
+    if (embedding.length === 0) throw new Error("model produced an empty embedding");
+
+    this.resolveWeightOutput(out);
+    return { embedding, weight: this.readWeight(out) };
   }
 
   dispose(): void {
@@ -200,7 +285,7 @@ export class StubEmbeddingModel implements EmbeddingModel {
     return Promise.resolve({ ep: "wasm" });
   }
 
-  embed(crop: Uint8Array): Promise<Float32Array> {
+  embed(crop: Uint8Array): Promise<EmbedResult> {
     const bx = StubEmbeddingModel.BLOCKS_X;
     const by = StubEmbeddingModel.BLOCKS_Y;
     const nb = bx * by;
@@ -223,6 +308,8 @@ export class StubEmbeddingModel implements EmbeddingModel {
       for (let i = 0; i < nb; i++) acc += this.weights[j * nb + i] * means[i];
       out[j] = Math.tanh(acc);
     }
-    return Promise.resolve(out);
+    // No weight: the stub does not score frame quality, so calibration from it runs unweighted,
+    // the same as any model without the second output.
+    return Promise.resolve({ embedding: out, weight: null });
   }
 }

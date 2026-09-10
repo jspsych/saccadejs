@@ -1,4 +1,5 @@
 import type SaccadeExtension from "@saccadejs/extension";
+import type { CalWeighting } from "@saccadejs/extension";
 import { JsPsych, JsPsychPlugin, ParameterType, TrialType } from "jspsych";
 
 import { version } from "../package.json";
@@ -104,6 +105,14 @@ const info = <const>{
     lambda: {
       type: ParameterType.FLOAT,
     },
+    /** How the fit weighted its calibration rows: `"model"` (per-frame weights from the
+     * model's own second output), `"head"` (a `calHead` supplied to the tracker), or
+     * `"uniform"` (unweighted). `null` if the fit failed. Recorded because a weighted and an
+     * unweighted fit are different analyses, and nothing else in the data distinguishes
+     * them. */
+    weighting: {
+      type: ParameterType.STRING,
+    },
     /** Time in milliseconds from the start of the trial until calibration finished. */
     rt: {
       type: ParameterType.INT,
@@ -155,7 +164,9 @@ class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
         ui.element.addEventListener("click", handler);
       });
 
-    const end_trial = (fit: { lambda: number; nPoints: number } | null) => {
+    const end_trial = (
+      fit: { lambda: number; nPoints: number; weighting: CalWeighting } | null,
+    ) => {
       ui.destroy();
       extension.hidePredictions();
       display_element.innerHTML = "";
@@ -167,6 +178,7 @@ class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
         n_points: distinct.size,
         repetitions_per_point: trial.repetitions_per_point,
         lambda: fit ? fit.lambda : null,
+        weighting: fit ? fit.weighting : null,
         rt: Math.round(performance.now() - start_time),
       });
     };

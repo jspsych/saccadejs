@@ -30,6 +30,13 @@ The core is a port of `web/demo/src/` in the `eye-tracking` repo at commit `a660
 `[1,36,144,1]` 0–255, output `embedding` float32 `[1,128]`), with
 `src/generated/cal_weights.json` (`{kernel: number[128], bias}`) and `export_manifest.json`.
 
+The 128 is the shipped model's width, not a requirement: the ridge fit and the smoothing mean
+take their width from the embeddings they are handed, so a model with a different output
+length works as long as it is consistent within a session. The crop side is still exact --
+36x144 gray from the preprocessing in `crop.ts`. A model may also carry its own per-frame
+calibration weight as a second scalar output; `cal_weights.json` is the 1.0.0 model's
+equivalent, and is applied only when a caller passes it as `calHead`.
+
 ## Core: `@saccadejs/core`
 
 All times are `performance.now()` milliseconds unless stated. Coordinates are viewport
@@ -60,7 +67,8 @@ export interface TrackerFrame {
   gaze: Gaze | null;                 // null until calibrated
   faceFound: boolean;
   crop: Uint8Array | null;           // 36x144 gray, row-major
-  embedding: Float32Array | null;    // 128
+  embedding: Float32Array | null;    // the model's width; 128 for eye-embedding 1.0.0
+  weight: number | null;             // the model's own [0,1] score for this frame, if it emits one
   meanEmbedding: Float32Array | null;
   timings: { landmark: number; crop: number; embed: number; total: number; wait?: number };
   time: FrameTime;
@@ -73,6 +81,7 @@ export interface SaccadeTrackerOptions {
   smoothingFrames?: number;                      // frames averaged per estimate, default 1
   executionProviders?: ("webgpu" | "wasm")[];    // default ["webgpu", "wasm"]
   onFrame?: (f: TrackerFrame) => void;
+  calHead?: CalHead | null;                      // opt-in row weighting; default none
 }
 export class SaccadeTracker {
   constructor(opts?: SaccadeTrackerOptions);
@@ -84,11 +93,14 @@ export class SaccadeTracker {
   onFrame(cb: (f: TrackerFrame) => void): () => void;   // returns unsubscribe
   nextFrame(): Promise<TrackerFrame>;
   nextEmbedding(): Promise<Float32Array | null>;
+  nextSample(): Promise<{ embedding: Float32Array; weight: number | null } | null>;
   // calibration
-  addCalibrationPoint(target: Gaze, embeddings: Float32Array[]): void;
+  addCalibrationPoint(target: Gaze, embeddings: Float32Array[], weights?: number[] | null): void;
   clearCalibration(): void;
   getCalibrationPoints(): CalPoint[];
-  fitCalibration(opts?: { lambda?: number; center?: number }): { lambda: number; nPoints: number } | null;
+  fitCalibration(opts?: { lambda?: number; center?: number; calHead?: CalHead | null }):
+    { lambda: number; nPoints: number; weighting: CalWeighting } | null;
+  getCalWeighting(): CalWeighting | null;
   get calibrated(): boolean;
   setSmoothingFrames(n: number): void;
   /** Latest gaze (viewport fractions) and its capture time, or null. */
@@ -96,7 +108,11 @@ export class SaccadeTracker {
   /** The whole-frame luminance sampler the loopback needs, exposed so plugins can reuse the video. */
   sampleLuminance(): number;
 }
-export interface CalPoint { target: Gaze; embeddings: Float32Array[]; meanEmbedding: Float32Array }
+export interface CalPoint { target: Gaze; embeddings: Float32Array[];
+  weights: number[] | null; meanEmbedding: Float32Array }
+/** Where a fit's row weights came from. Row weighting is off unless the model emits weights
+ *  or the caller passes a CalHead. */
+export type CalWeighting = "model" | "head" | "uniform";
 export function defaultGrid13(): Gaze[]; export function trainingGrid20(): Gaze[]; export function validationGrid9(): Gaze[];
 export function lambdaFor(nPoints: number): number;   // 3 when <= 9 points else 1
 
@@ -105,7 +121,7 @@ export interface CollectOptions { settleMs: number; captureMs: number;
   /** Reject with `no camera frames for <ms> ms` if one frame takes longer. 0 = wait forever. Default 5000. */
   timeoutMs?: number }
 /** Drives a point sequence: for each target, calls showTarget(target,"settle"), waits settleMs,
- *  showTarget(target,"capture"), collects embeddings for captureMs via nextEmbedding, then
+ *  showTarget(target,"capture"), collects embeddings for captureMs via nextSample, then
  *  addCalibrationPoint. Resolves with the points. */
 export function runCalibration(tracker: SaccadeTracker, targets: Gaze[], opts: CollectOptions,
   ui: { showTarget: (t: Gaze | null, phase: "settle" | "capture") => void }): Promise<CalPoint[]>;
@@ -248,7 +264,7 @@ The core landed with these additive deviations; the extension, plugins and docs 
 - `LoopbackResult.verdict` is the enum (`"OK" | "INCONCLUSIVE" | "UNRELIABLE"`) with a separate `reason` (`null` only when OK).
 - `runValidation` reports `percentInRoi` on a **0–100** scale (per point and aggregate); points with no gaze are kept with `NaN` errors. `ValidationSample.time` is `meanCapture ?? capture`.
 - The browser global `Saccade` is a namespace of named exports (`Saccade.SaccadeTracker`, `Saccade.runLoopback`, …), not a default export.
-- Extra optional inputs: `SaccadeAssets.ortModuleUrl` / `mediapipeModuleUrl`; `SaccadeTrackerOptions.stream` (an existing `MediaStream`) and `.model`. Extra members: `tracker.nextGaze()`, `getSmoothingFrames()`, `getKernel()`, `initialized`. Extra exports: `Pipeline`, `Landmarker`, `OrtEmbeddingModel`, `StubEmbeddingModel`, `fitRidge`, `CENTER`, `CAL_HEAD`, `mSequence`, `stimulusAt`, `refineLag`, `modelUrl`, `loadOrt`, `loadVision`, `DEFAULT_*_URL`.
+- Extra optional inputs: `SaccadeAssets.ortModuleUrl` / `mediapipeModuleUrl`; `SaccadeTrackerOptions.stream` (an existing `MediaStream`), `.model` and `.calHead`. Extra members: `tracker.nextGaze()`, `getSmoothingFrames()`, `getKernel()`, `initialized`. Extra exports: `Pipeline`, `Landmarker`, `OrtEmbeddingModel`, `StubEmbeddingModel`, `fitRidge`, `CENTER`, `CAL_HEAD`, `mSequence`, `stimulusAt`, `refineLag`, `modelUrl`, `loadOrt`, `loadVision`, `DEFAULT_*_URL`.
 
 ## Decisions on ambiguities raised by the docs build (2026-09-05)
 

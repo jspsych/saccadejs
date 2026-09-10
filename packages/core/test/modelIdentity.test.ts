@@ -8,6 +8,8 @@ const id = (over: Partial<ModelIdentity> = {}): ModelIdentity => ({
   contract: null,
   url: null,
   resolvedFrom: "unverified",
+  dim: null,
+  emitsWeight: false,
   ...over,
 });
 

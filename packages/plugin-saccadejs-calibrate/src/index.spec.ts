@@ -44,13 +44,14 @@ describe("saccade-calibrate info", () => {
     expect(p.clear_previous.default).toBe(true);
   });
 
-  it("documents the calibration_points, n_points and lambda fields", () => {
+  it("documents the calibration_points, n_points, lambda and weighting fields", () => {
     expect(Object.keys(SaccadeCalibratePlugin.info.data).sort()).toEqual([
       "calibration_points_px",
       "lambda",
       "n_points",
       "repetitions_per_point",
       "rt",
+      "weighting",
     ]);
   });
 });
@@ -93,6 +94,9 @@ describe("saccade-calibrate trial", () => {
     expect(data.n_points).toBe(13);
     expect(data.repetitions_per_point).toBe(1);
     expect(data.lambda).toBe(1);
+    // The trial records how the fit weighted its rows: a weighted and an unweighted
+    // calibration are different analyses, and nothing else in the data says which ran.
+    expect(data.weighting).toBe("uniform");
     expect(typeof data.rt).toBe("number");
   });
 
@@ -194,6 +198,7 @@ describe("saccade-calibrate trial", () => {
     await finished;
 
     expect(getData().values()[0].lambda).toBeNull();
+    expect(getData().values()[0].weighting).toBeNull();
     expect(document.querySelector(".saccade-target-overlay")).toBeNull();
     errorSpy.mockRestore();
   });
