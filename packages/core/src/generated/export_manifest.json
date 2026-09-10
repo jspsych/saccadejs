@@ -25,6 +25,16 @@
       ],
       "dtype": "float32"
     },
+    "weight_output": {
+      "name": "cal_weight",
+      "shape": [
+        1,
+        1
+      ],
+      "dtype": "float32",
+      "range": "sigmoid_0_1",
+      "granularity": "per_image"
+    },
     "input_range": "uint8_0_255",
     "embedding_dim": 128,
     "opset": 17,
@@ -37,13 +47,14 @@
       "Add": 29,
       "Conv": 15,
       "Gelu": 4,
-      "Gemm": 14,
+      "Gemm": 15,
       "LayerNormalization": 25,
       "MatMul": 24,
       "MaxPool": 3,
       "Mul": 6,
       "Relu": 13,
       "Reshape": 71,
+      "Sigmoid": 1,
       "Softmax": 5,
       "Tanh": 1,
       "Transpose": 58,
@@ -97,5 +108,5 @@
     "tf2onnx": "1.16.1",
     "onnx": "1.17.0"
   },
-  "exported_at": "2026-09-05T12:54:51.291356+00:00"
+  "exported_at": "2026-09-09T20:02:34.598673+00:00"
 }

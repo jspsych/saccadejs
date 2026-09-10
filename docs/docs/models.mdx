@@ -9,9 +9,9 @@ import ModelReleases from "@site/src/components/ModelReleases";
 
 # Model releases
 
-saccade.js turns an eye image into a 128-dimensional embedding with a small ONNX model, and
-your calibration turns that embedding into a gaze point. The model is the part that stays
-fixed across participants, so it is the part a study needs to be able to name.
+saccade.js turns an eye image into an embedding with a small ONNX model, and your calibration
+turns that embedding into a gaze point. The model is the part that stays fixed across
+participants, so it is the part a study needs to be able to name.
 
 Every version below is served from this site at a **versioned URL**. Use it.
 
@@ -54,12 +54,25 @@ Only trials that run after the model loads carry it — the camera, and so the m
 touched until your first `saccade-preview` trial or your own `start()` call. Trials before
 that have no gaze data either.
 
-If you want the full detail — hash, contract, and the URL it came from — ask the tracker:
+If you want the full detail — hash, contract, the URL it came from, and what the model
+actually turned out to be — ask the tracker:
 
 ```js
 const id = jsPsych.extensions.saccade.getTracker().getModelIdentity();
-// { sha256: "c323131f…", version: "1.0.0", contract: 1, url: "…", resolvedFrom: "registry" }
+// {
+//   sha256: "5a1a111e…", version: "1.0.0", contract: 1, url: "…",
+//   resolvedFrom: "registry",
+//   dim: 128,          // the embedding width this model produced
+//   emitsWeight: true  // whether it carries a per-frame calibration weight
+// }
 ```
+
+`dim` and `emitsWeight` come from a real inference at load rather than from the registry, so
+they are correct for an unrecognised model as well as a published one.
+
+How your calibration was weighted belongs to the _fit_, not to the model, so it is recorded
+separately. `saccade-calibrate` writes a `weighting` column — `"model"`, `"head"` or
+`"uniform"` — and `fitCalibration()` returns the same value.
 
 To check a file you downloaded yourself, compare it against the hash in the table below with
 `shasum -a 256 eye_embedding.onnx` (macOS/Linux) or
@@ -69,18 +82,42 @@ To check a file you downloaded yourself, compare it against the hash in the tabl
 
 <ModelReleases />
 
+## What a model has to be
+
+`modelUrl` selects a build of the eye-embedding model. A replacement must take the same eye
+crop, built the same way. Its embedding can be any length.
+
+**The input is exact.** The model receives a 144 × 36 grayscale strip spanning both eyes, as
+float32 `[1, 36, 144, 1]` with values 0–255. Those pixels come from one pipeline: a crop from
+fixed MediaPipe landmarks, BT.601 grayscale, an OpenCV-compatible bilinear resize, then CLAHE
+at clip 2.0 with 8 × 8 tiles, in that order. A model expecting a different shape fails to
+load. A model trained on differently built crops of the same shape loads and returns
+nonsense, and saccade.js has no way to detect it.
+
+**The outputs are not.** The first is the embedding. Its length is whatever your model
+produces — the ridge fit and the smoothing mean read the width from the embeddings — and it
+must be the same on every frame of a session.
+
+The second output is optional. Name it `cal_weight` and shape it `[1, 1]`, and saccade.js
+reads it as that frame's quality score in [0, 1], then weights the smoothing mean and the
+calibration fit by it. A model without one is calibrated unweighted.
+
+Three things throw at load, before any participant data exists: an input shape saccade.js
+cannot feed, an embedding width that changes mid-session, and a `cal_weight` outside [0, 1].
+Two things do not. saccade.js cannot tell what preprocessing your model saw in training, and
+it does not compare the `contract` number in the table against the one it implements — that
+number is recorded, not checked.
+
 ## How versions are numbered
 
 The model version is **independent of the `@saccadejs/core` package version** — they change
 for different reasons, and one does not imply the other.
 
 - **Patch/minor** — new weights, identical interface. Drop-in: the same crop, the same input
-  range, the same embedding size. Accuracy may differ; nothing else does.
-- **Major** — the preprocessing contract or the model's input/output changed. A library
-  version that implements an older contract will refuse to load it rather than produce
-  quietly wrong gaze.
-
-The `contract` number in the table is what the library actually checks.
+  range, the same outputs. Accuracy may differ; nothing else does.
+- **Major** — the preprocessing contract or the model's inputs and outputs changed. Gaining
+  or losing the `cal_weight` output counts, because it flips every calibration between
+  weighted and unweighted without saying so.
 
 ## How long a URL lasts
 

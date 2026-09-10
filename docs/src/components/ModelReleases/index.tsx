@@ -76,6 +76,15 @@ export default function ModelReleases(): React.ReactElement {
                   {r.io.output.dtype}
                 </td>
               </tr>
+              {"weightOutput" in r.io && r.io.weightOutput ? (
+                <tr>
+                  <th>Calibration weight</th>
+                  <td>
+                    <code>{r.io.weightOutput.name}</code> {JSON.stringify(r.io.weightOutput.shape)}{" "}
+                    {r.io.weightOutput.dtype}, one per frame, in [0, 1]
+                  </td>
+                </tr>
+              ) : null}
               <tr>
                 <th>ONNX opset</th>
                 <td>{r.io.opset}</td>
