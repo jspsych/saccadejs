@@ -343,25 +343,15 @@ interface Session {
   calibration: CalibrationState;
   validation: ValidationResult | null;
   scanpath: ScanpathResult | null;
-  /** Facts about this machine, filled in as the activities that measure them run. */
-  backend: string | null;
-  fps: number | null;
-  clock: string | null;
   /** Frames averaged per estimate: the tracker's own default until free viewing changes it. */
   smoothingFrames: number;
-  /** Every trial from every activity so far, in the order they ran. */
-  rows: any[];
 }
 
 const EMPTY_SESSION: Session = {
   calibration: "none",
   validation: null,
   scanpath: null,
-  backend: null,
-  fps: null,
-  clock: null,
   smoothingFrames: 1,
-  rows: [],
 };
 
 function median(values: number[]): number | null {
@@ -386,11 +376,7 @@ function absorb(
 ): Session {
   const data = jsPsych.data.get();
   const first = (trial_type: string): any => data.filter({ trial_type }).values()[0] ?? {};
-  const next: Session = { ...prev, rows: [...prev.rows, ...data.values()] };
-
-  const preview = first("saccade-preview");
-  if (preview.backend) next.backend = preview.backend;
-  if (Number.isFinite(preview.fps)) next.fps = preview.fps;
+  const next: Session = { ...prev };
 
   if (activity === "calibrate") {
     // `lambda` is the ridge penalty the fit used, and the plugin records it as `null` when
@@ -426,9 +412,6 @@ function absorb(
       views,
       hz: samples ? samples / ((scenes.length * SCENE_MS) / 1000) : null,
     };
-    const last = scenes[scenes.length - 1] ?? ({} as any);
-    if (last.saccade_timing?.clock) next.clock = last.saccade_timing.clock;
-    if (Number.isFinite(last.saccade_timing?.fps)) next.fps = last.saccade_timing.fps;
   }
 
   return next;
@@ -762,10 +745,9 @@ function Demo() {
 /**
  * What a visitor needs to know before they press anything, above the menu rather than on a
  * screen of its own: a click-through that only says "this is about to use your camera" is a
- * click-through, and the camera prompt itself says that better. The setting-up advice is worth
- * reading, so it stays until it has been acted on, and goes once the calibration exists.
+ * click-through, and the camera prompt itself says that better.
  */
-function Preamble({ supported, calibrated }: { supported: boolean; calibrated: boolean }) {
+function Preamble({ supported }: { supported: boolean }) {
   return (
     <div className={styles.preamble}>
       <p className={styles.lead}>
@@ -778,13 +760,7 @@ function Preamble({ supported, calibrated }: { supported: boolean; calibrated: b
           The camera needs a secure connection, so open this page over <code>https://</code> or on{" "}
           <code>localhost</code>.
         </p>
-      ) : calibrated ? null : (
-        <ul className={styles.requirements}>
-          <li>Chrome or Edge, with a webcam</li>
-          <li>Light on your face, about an arm's length from the screen</li>
-          <li>Keep your head still once calibration starts</li>
-        </ul>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -835,7 +811,7 @@ function Menu({
 
   return (
     <div className={styles.menu}>
-      <Preamble supported={supported} calibrated={calibrated} />
+      <Preamble supported={supported} />
 
       <div className={styles.cards}>
         <Card
@@ -912,57 +888,13 @@ function Menu({
         />
       </div>
 
-      {session.rows.length > 0 ? <SessionData session={session} onReset={onReset} /> : null}
-    </div>
-  );
-}
-
-function SessionData({ session, onReset }: { session: Session; onReset: () => void }) {
-  const highError = session.validation?.errorPercent;
-
-  return (
-    <div className={styles.panel}>
-      {highError !== null && highError !== undefined && highError >= 12 ? (
-        <p className={styles.note}>
-          At {highError.toFixed(1)}% error, only large areas of the screen can be told apart. More
-          light on your face and a stiller head should help, so try calibrating again.
-        </p>
+      {calibration !== "none" ? (
+        <div className={styles.buttonRow}>
+          <button className={styles.abandon} onClick={onReset}>
+            Stop the camera and reset calibration
+          </button>
+        </div>
       ) : null}
-
-      <details className={styles.details}>
-        <summary className={styles.detailsSummary}>Details for developers</summary>
-        <dl className={styles.detailsBody}>
-          <div>
-            <dt className={styles.detailsKey}>Backend</dt>
-            <dd className={styles.detailsValue}>{session.backend ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className={styles.detailsKey}>Frame rate</dt>
-            <dd className={styles.detailsValue}>
-              {session.fps === null ? "—" : `${session.fps.toFixed(0)} fps`}
-            </dd>
-          </div>
-          <div>
-            <dt className={styles.detailsKey}>Frame clock</dt>
-            <dd className={styles.detailsValue}>{session.clock ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className={styles.detailsKey}>smoothing_frames</dt>
-            <dd className={styles.detailsValue}>{session.smoothingFrames}</dd>
-          </div>
-        </dl>
-        <p className={styles.detailsNote}>
-          Every trial so far, exactly as <code>jsPsych.data.get().json()</code> returns it. Free
-          viewing isn't a trial, so it isn't included.
-        </p>
-        <pre className={styles.json}>{JSON.stringify(session.rows, null, 2)}</pre>
-      </details>
-
-      <div className={styles.buttonRow}>
-        <button className={styles.abandon} onClick={onReset}>
-          Close the camera and start over
-        </button>
-      </div>
     </div>
   );
 }

@@ -30,17 +30,8 @@
   padding: 0;
 }
 
-/* ------------------------------------------------------------------ panels ---------- */
-
-.panel {
-  border: 1px solid var(--ifm-color-emphasis-200);
-  border-radius: 12px;
-  padding: 1.4rem 1.5rem;
-}
-
-/* The copy above the cards: what the demo is, what it does with the camera, and — until there
-   is a calibration — how to sit for it. Not a panel: it introduces the cards rather than
-   competing with them, so it carries no border of its own. */
+/* The copy above the cards: what the demo is and what it does with the camera. Not a panel: it
+   introduces the cards rather than competing with them, so it carries no border of its own. */
 .preamble {
   display: flex;
   flex-direction: column;
@@ -51,15 +42,6 @@
   line-height: 1.6;
   margin: 0;
   max-width: 42rem;
-}
-
-.requirements {
-  color: var(--ifm-color-emphasis-800);
-  font-size: 0.92rem;
-  line-height: 1.7;
-  margin: 0;
-  max-width: 42rem;
-  padding-left: 1.2rem;
 }
 
 .status {
@@ -154,14 +136,6 @@
   margin-top: 0.2rem;
 }
 
-.note {
-  color: var(--ifm-color-emphasis-800);
-  font-size: 0.92rem;
-  line-height: 1.6;
-  margin: 1.25rem 0 0;
-  max-width: 42rem;
-}
-
 /* ------------------------------------------------------------------ buttons --------- */
 
 .buttonRow {
@@ -231,53 +205,6 @@
   line-height: 1.6;
   margin: 0;
   max-width: 42rem;
-}
-
-/* ------------------------------------------------------------------ details --------- */
-
-.details {
-  color: var(--ifm-color-emphasis-700);
-  font-size: 0.85rem;
-  margin-top: 1.5rem;
-}
-
-.detailsSummary {
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.detailsBody {
-  display: grid;
-  gap: 0.35rem 1.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  margin: 0.75rem 0 0;
-}
-
-.detailsBody div {
-  display: flex;
-  flex-direction: column;
-}
-
-.detailsKey {
-  color: var(--ifm-color-emphasis-600);
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.detailsValue {
-  font-family: var(--ifm-font-family-monospace);
-}
-
-.detailsNote {
-  margin: 0.9rem 0 0.4rem;
-}
-
-.json {
-  font-size: 0.75rem;
-  margin: 0;
-  max-height: 22rem;
-  overflow: auto;
 }
 
 /* ------------------------------------------------------------------ abandon --------- */
