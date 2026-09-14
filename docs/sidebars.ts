@@ -13,7 +13,7 @@ const sidebars: SidebarsConfig = {
     "guides/how-it-works",
   ],
   reference: [
-    "models",
+    "reference/core-api",
     "reference/extension",
     {
       type: "category",
@@ -27,7 +27,7 @@ const sidebars: SidebarsConfig = {
         "reference/plugin-validate",
       ],
     },
-    "reference/core-api",
+    "models",
   ],
 };
 

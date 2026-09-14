@@ -265,7 +265,7 @@ The estimator is exported so stored `flips` and `samples` can be re-analyzed off
 
 ```ts
 interface SaccadeAssets {
-  modelUrl?: string;             // eye_embedding.onnx (see Model releases for the requirements)
+  modelUrl?: string;             // eye_embedding.onnx (see The model for the requirements)
   ortWasmUrl?: string;           // directory URL for onnxruntime-web's .wasm/.mjs
   mediapipeWasmUrl?: string;     // directory URL for @mediapipe/tasks-vision wasm
   faceLandmarkerUrl?: string;    // face_landmarker.task

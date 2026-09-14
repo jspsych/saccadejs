@@ -444,8 +444,7 @@ function explain(err: unknown): string {
 type Phase = "menu" | "running" | "explore" | "error";
 
 function Demo() {
-  // Deliberately the *versioned* path, not /models/eye_embedding.onnx: the demo should
-  // model the practice we ask of everyone else, and using it here means the versioned URL
+  // The versioned path, which is the only one the site serves: using it here means that URL
   // is exercised on every deploy instead of being a link nobody walks.
   const current = releases.releases.filter((r) => r.served).at(-1)!;
   const modelUrl = useBaseUrl(`/models/${releases.id}/${current.version}/${current.file}`);

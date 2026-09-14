@@ -19,7 +19,7 @@ The package ships `models/eye_embedding.onnx` (opset 17, input `eye_image` float
 `[1,36,144,1]` in 0–255; outputs `embedding` float32 `[1,128]` and `cal_weight` float32
 `[1,1]`, that frame's quality score in [0, 1]). The embedding width is not fixed at 128 —
 the fit takes its width from the model — but the crop and its preprocessing are exact; see
-[Model releases](https://saccade.jspsych.org/models/). `onnxruntime-web` and
+[The model](https://saccade.jspsych.org/models/). `onnxruntime-web` and
 `@mediapipe/tasks-vision` are dependencies of this package; the `<script>` build loads them
 from a CDN instead (see [Asset hosting](#asset-hosting)).
 

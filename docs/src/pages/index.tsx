@@ -123,11 +123,8 @@ function Hero(): React.ReactElement {
                 the estimate move as you look around.
               </p>
               <div className={styles.pathCardActions}>
-                <Link className="button button--primary" to="/demo">
-                  Open the live demo
-                </Link>
-                <Link className={styles.pathLink} to="/guides/how-it-works">
-                  How it works →
+                <Link className={styles.pathLink} to="/demo">
+                  Open the live demo →
                 </Link>
               </div>
             </div>
@@ -138,8 +135,8 @@ function Hero(): React.ReactElement {
                 <h2 className={styles.pathCardTitle}>Integrates with jsPsych</h2>
               </div>
               <p className={styles.pathCardDesc}>
-                saccade.js is a jsPsych extension: attach it to any trial to
-                record gaze during it. One plugin handles each setup step:
+                saccade.js ships a jsPsych extension: attach it to any trial
+                and that trial records gaze. One plugin handles each setup step:
                 camera, calibration, validation and timing.
               </p>
               <div className={styles.pathCardActions}>

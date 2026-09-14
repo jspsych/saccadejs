@@ -1,21 +1,25 @@
 ---
 id: models
-title: Model releases
-sidebar_label: Model releases
-description: Every published version of the saccade.js eye-embedding model, with its URL, hash and provenance.
+title: The model
+sidebar_label: The model
+description: The eye-embedding model behind saccade.js — its published releases, how a run records which model it used, and what a replacement model must provide.
 ---
 
 import ModelReleases from "@site/src/components/ModelReleases";
 
-# Model releases
+# The model
 
 saccade.js turns an eye image into an embedding with a small ONNX model, and your calibration
 turns that embedding into a gaze point. The model is the part that stays fixed across
 participants, so it is the part a study needs to be able to name.
 
-Every version below is served from this site at a **versioned URL**. Use it.
+## Releases
 
-## Pin a version
+<ModelReleases />
+
+Every version above is served from this site at a versioned URL. That URL is the one worth
+citing in a methods section and the one worth pointing a running study at, because it resolves
+to the same bytes tomorrow as it does today.
 
 ```js
 const tracker = new SaccadeTracker({
@@ -25,14 +29,40 @@ const tracker = new SaccadeTracker({
 });
 ```
 
-There is also an unversioned path, `/models/eye_embedding.onnx`. **Do not use it for data
-collection.** It always holds whatever the most recent deploy put there, so a model update
-would change your measurements partway through a study — and nothing in your data would
-record that it happened. It exists only so older links keep working.
+For real studies, [hosting the model yourself](/guides/hosting-the-assets) is safer still:
+download the versioned file once and serve it from your own origin, and nothing that happens
+here can affect your study.
 
-For real studies, [host the model yourself](/guides/hosting-the-assets): download the
-versioned file once, serve it from your own origin, and your study cannot be affected by
-anything that happens here.
+To check a file you downloaded yourself, compare it against the hash in the table above with
+`shasum -a 256 eye_embedding.onnx` (macOS/Linux) or
+`Get-FileHash eye_embedding.onnx -Algorithm SHA256` (PowerShell).
+
+### How versions are numbered
+
+The model version is **independent of the `@saccadejs/core` package version** — they change
+for different reasons, and one does not imply the other.
+
+- **Patch/minor** — new weights, identical interface. Drop-in: the same crop, the same input
+  range, the same outputs. Accuracy may differ; nothing else does.
+- **Major** — the preprocessing contract or the model's inputs and outputs changed. Gaining
+  or losing the `cal_weight` output counts, because it flips every calibration between
+  weighted and unweighted without saying so.
+
+### How long a URL lasts
+
+Every version listed here stays up. Once a versioned URL is published we keep serving it, on
+the assumption that it is already written into someone's methods section. The files are ~20 MB
+each and sit on GitHub's infrastructure alongside this site, so there is no pressure to prune
+them, and the build fails if a published version ever goes missing.
+
+That is a statement of intent rather than a guarantee. A study that must still resolve its
+model in ten years is better served by infrastructure its authors control: download the
+versioned file, serve it from your own origin, and record the hash. The same would be true of
+any host.
+
+Models are built and gated in the
+[eye-tracking](https://github.com/jspsych/eye-tracking) repository, which trains the network
+and exports the ONNX; this repository ships the result.
 
 ## Recording which model you used
 
@@ -74,15 +104,7 @@ How your calibration was weighted belongs to the _fit_, not to the model, so it 
 separately. `saccade-calibrate` writes a `weighting` column — `"model"`, `"head"` or
 `"uniform"` — and `fitCalibration()` returns the same value.
 
-To check a file you downloaded yourself, compare it against the hash in the table below with
-`shasum -a 256 eye_embedding.onnx` (macOS/Linux) or
-`Get-FileHash eye_embedding.onnx -Algorithm SHA256` (PowerShell).
-
-## Versions
-
-<ModelReleases />
-
-## What a model has to be
+## Using your own model
 
 `modelUrl` selects a build of the eye-embedding model. A replacement must take the same eye
 crop, built the same way. Its embedding can be any length.
@@ -107,31 +129,3 @@ cannot feed, an embedding width that changes mid-session, and a `cal_weight` out
 Two things do not. saccade.js cannot tell what preprocessing your model saw in training, and
 it does not compare the `contract` number in the table against the one it implements — that
 number is recorded, not checked.
-
-## How versions are numbered
-
-The model version is **independent of the `@saccadejs/core` package version** — they change
-for different reasons, and one does not imply the other.
-
-- **Patch/minor** — new weights, identical interface. Drop-in: the same crop, the same input
-  range, the same outputs. Accuracy may differ; nothing else does.
-- **Major** — the preprocessing contract or the model's inputs and outputs changed. Gaining
-  or losing the `cal_weight` output counts, because it flips every calibration between
-  weighted and unweighted without saying so.
-
-## How long a URL lasts
-
-**Every version listed here stays up.** Once a versioned URL is published we keep serving it,
-because by the time anyone asks the question it is already written into a methods section
-somewhere. The files are ~20 MB each and sit on GitHub's infrastructure alongside this site,
-so there is no pressure to prune them, and the build fails if a published version ever goes
-missing.
-
-That is a promise about intent, not a guarantee about the universe. If your study must still
-resolve its model in ten years, do not depend on infrastructure you do not control — download
-the versioned file, serve it from your own origin, and record the hash. That advice would be
-the same for any host.
-
-Models are built and gated in the
-[eye-tracking](https://github.com/jspsych/eye-tracking) repository, which trains the network
-and exports the ONNX; this repository ships the result.

@@ -108,11 +108,5 @@ timeline.push({
 });
 ```
 
-## Trial order
-
-```js
-timeline.push({ type: jsPsychSaccadePreview });    // camera and model
-timeline.push({ type: jsPsychSaccadeTimeSync });   // needs a camera
-timeline.push({ type: jsPsychSaccadeCalibrate });  // needs a camera
-timeline.push({ type: jsPsychSaccadeValidate });   // needs a fitted calibration
-```
+The setup trials this assumes — camera, lag, calibration, validation — are introduced in the
+order they belong in a timeline in [Getting started](/getting-started).

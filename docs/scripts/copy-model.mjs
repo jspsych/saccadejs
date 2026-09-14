@@ -4,17 +4,15 @@
  *
  *   /models/eye-embedding/<version>/eye_embedding.onnx  (every published version)
  *   /models/eye-embedding/<version>/model.json          (that version's registry entry)
- *   /models/eye_embedding.onnx                          (the newest, unversioned; legacy)
  *
  * **Every** served release is staged, not just the newest: a versioned URL that stops
  * resolving is worse than never having published it, because it is already written into
  * someone's methods section. Model files are ~20 MB on GitHub's own infrastructure, so
  * keeping them all is cheap; policy is to keep every version up indefinitely.
  *
- * The versioned path is the one to hand anyone. The unversioned path is whatever the last
- * deploy put there -- the "resolve latest at runtime" trap, where a model that changes under
- * a running study splits the dataset silently. It stays only so links already in the wild
- * keep working.
+ * Only versioned paths are served. An unversioned "latest" URL is the resolve-at-runtime
+ * trap, where a model that changes under a running study splits the dataset silently, so the
+ * site does not offer one.
  *
  * Layout in `packages/core/models/`: the current model sits at the top level as
  * `eye_embedding.onnx`, because `packageModelUrl()` in assets.ts resolves exactly that path
@@ -108,9 +106,8 @@ for (const release of served) {
   const versionDir = resolve(staticDir, registry.id, release.version);
   mkdirSync(versionDir, { recursive: true });
 
-  // Every version gets its versioned path; only the newest also takes the legacy one.
+  // Every version is served from its versioned path, and only from there.
   const targets = [resolve(versionDir, "eye_embedding.onnx")];
-  if (release === newest) targets.push(resolve(staticDir, "eye_embedding.onnx"));
 
   for (const dest of targets) {
     if (existsSync(dest)) {
