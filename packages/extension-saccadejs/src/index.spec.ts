@@ -69,7 +69,28 @@ describe("SaccadeExtension lifecycle", () => {
       dropped_frames: 0,
       fps: 30,
       smoothing_frames: 1,
+      trial_start: expect.any(Number),
     });
+  });
+
+  it("reports the unrounded trial start that t is measured from", async () => {
+    // A plugin logging its own performance.now() timestamps needs this exact zero to line them
+    // up with saccade_data.
+    const now = jest.spyOn(performance, "now").mockReturnValue(1234.5);
+    const { extension, tracker } = await makeExtension(display);
+    extension.setTimingOffset(20);
+    extension.on_start({ targets: [] });
+    extension.on_load();
+    now.mockReturnValue(9999); // later clock readings must not move it
+
+    const capture = 1354.5;
+    tracker.emit(makeFrame({ time: { capture } as any }));
+    const data = extension.on_finish();
+
+    expect(data.saccade_timing.trial_start).toBe(1234.5);
+    expect(data.saccade_data[0].t).toBe(
+      Math.round(capture - data.saccade_timing.trial_start - data.saccade_timing.offset_ms!),
+    );
   });
 
   it("feeds the prediction API from a supplied tracker without start()", async () => {
@@ -635,7 +656,7 @@ describe("recording which model produced the gaze", () => {
     const tracker = new SaccadeTracker();
     await tracker.init();
     const extension = new SaccadeExtension(makeJsPsych(display, props));
-    await extension.initialize({ tracker });
+    await extension.initialize({ tracker: tracker as any });
 
     expect(props).toEqual([{ saccade_model: "eye-embedding@1.0.0" }]);
   });
@@ -666,7 +687,7 @@ describe("recording which model produced the gaze", () => {
     };
     await custom.init();
     const ext2 = new SaccadeExtension(makeJsPsych(display, props));
-    await ext2.initialize({ tracker: custom });
+    await ext2.initialize({ tracker: custom as any });
 
     expect(props).toEqual([{ saccade_model: "sha256:f4669a8398d9" }]);
   });

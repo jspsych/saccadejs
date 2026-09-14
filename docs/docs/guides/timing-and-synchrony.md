@@ -44,6 +44,7 @@ Each trial also carries a `saccade_timing` object recording what was applied:
 | `dropped_frames` | Camera frames the browser reported dropping during the trial. |
 | `fps` | Frame rate at the end of the trial. |
 | `smoothing_frames` | Frames averaged per estimate. |
+| `trial_start` | The `performance.now()` value `t` counts from. Subtract it from your own timestamps to put them on the same axis. |
 
 **Do not correct twice.** `lag_ms` already contains the display latency, so do not also subtract
 a display latency from a spec sheet or your own measurement. Processing time is already excluded
@@ -73,6 +74,51 @@ const bad = (d) =>
   d.saccade_timing.fps < 20 ||
   d.saccade_timing.dropped_frames > 0.05 * d.saccade_data.length;
 ```
+
+## Timing your own events
+
+`t` counts from `saccade_timing.trial_start`, a `performance.now()` value stamped when the trial's
+display loads. A stimulus the plugin draws at the start of the trial is at `t` ≈ 0.
+
+For anything later in the trial, such as a spoken word or a second display change, take
+`performance.now()` at the moment you make the change. Record it in the trial's own data,
+relative to `trial_start`:
+
+```js
+const word = new Audio("word.mp3");
+let wordOnset = null;
+
+timeline.push({
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: "<img id='scene' src='scene.png'>",
+  extensions: [{ type: jsPsychExtensionSaccade }],
+  on_load: () => {
+    jsPsych.pluginAPI.setTimeout(() => {
+      word.play();
+      wordOnset = performance.now();
+    }, 1000);
+  },
+  on_finish: (data) => {
+    data.word_onset = wordOnset === null ? null : wordOnset - data.saccade_timing.trial_start;
+  },
+});
+```
+
+`word_onset` and every `t` in `saccade_data` are now on one axis.
+
+**Record the time, not the delay.** `data: { word_onset: 1000 }` records the plan. A timer can
+fire late while the tracker is busy with a camera frame, and the data would not show it.
+
+**Do not subtract `offset_ms`.** It moves gaze back to when the screen changed. Your events
+already happened at that time.
+
+**Sound has its own latency.** The time-sync trial measures the display and the camera, not the
+speakers. If audio timing matters, record `AudioContext.outputLatency` beside the onset. Bluetooth
+output commonly adds 100 ms or more.
+
+**Expect about a frame of slack.** A display change reaches the screen on a later frame, so an
+onset stamped this way is good to about one refresh, 17 ms at 60 Hz. That is finer than the 33 ms
+between gaze samples at 30 fps.
 
 ## Gaze-contingent designs
 

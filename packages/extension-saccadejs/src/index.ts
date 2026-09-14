@@ -52,6 +52,7 @@ export interface SaccadeTimingInfo {
   dropped_frames: number;
   fps: number | null;
   smoothing_frames: number;
+  trial_start: number;
 }
 
 export interface InitializeParameters {
@@ -197,7 +198,10 @@ class SaccadeExtension implements JsPsychExtension {
        * number of camera frames the browser reported dropping during the trial, `fps` is the
        * frame rate of the tracker at the end of the trial, and `smoothing_frames` is the
        * number of camera frames each prediction was actually averaged over — the tracker's own
-       * setting, which need not be the `smoothing_frames` parameter.
+       * setting, which need not be the `smoothing_frames` parameter. `trial_start` is the
+       * unrounded `performance.now()` value that `t` is measured from: subtract it from a
+       * timestamp you record yourself on the same clock, such as a mid-trial sound's onset, to
+       * put that event on the same axis as the gaze.
        */
       saccade_timing: {
         type: ParameterType.COMPLEX,
@@ -208,6 +212,7 @@ class SaccadeExtension implements JsPsychExtension {
           dropped_frames: { type: ParameterType.INT },
           fps: { type: ParameterType.FLOAT },
           smoothing_frames: { type: ParameterType.INT },
+          trial_start: { type: ParameterType.FLOAT },
         },
       },
     },
@@ -246,7 +251,6 @@ class SaccadeExtension implements JsPsychExtension {
   private currentTrialStart = 0;
   private trialUnsubscribe: (() => void) | null = null;
   private trialDroppedFrames = 0;
-  private activeTrial = false;
   private domObserver: MutationObserver | null = null;
   /** True while some requested target still has no rect worth recording. See `recordTargets`. */
   private targetsPending = false;
@@ -307,7 +311,6 @@ class SaccadeExtension implements JsPsychExtension {
 
   on_load = (): void => {
     this.currentTrialStart = performance.now();
-    this.activeTrial = true;
 
     // Record whatever targets are already in the DOM at load time; the observer picks up the rest.
     this.recordTargets();
@@ -336,8 +339,6 @@ class SaccadeExtension implements JsPsychExtension {
     // Everything must have been recorded while the trial was on screen.
     this.domObserver?.disconnect();
 
-    this.activeTrial = false;
-
     return {
       saccade_data: this.currentTrialData,
       saccade_targets: this.currentTrialTargets,
@@ -351,6 +352,7 @@ class SaccadeExtension implements JsPsychExtension {
         // a tracker supplied through the `tracker` parameter carries its own setting, and it
         // can be changed at any time with `setSmoothingFrames`.
         smoothing_frames: this.tracker?.getSmoothingFrames() ?? this.smoothing_frames,
+        trial_start: this.currentTrialStart,
       },
     };
   };

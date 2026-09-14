@@ -197,7 +197,10 @@ Trial data:
   `t` = `FrameTime.capture` minus the trial start time, **minus the timing offset** (see below)
   when one has been measured, else uncorrected. One row per camera frame while a face is found.
 - `saccade_targets: { [selector]: { x, y, width, height, top, bottom, left, right } }`.
-- `saccade_timing: { offset_ms: number | null, corrected: boolean, clock: FrameTime["source"], dropped_frames: number, fps: number }`.
+- `saccade_timing: { offset_ms: number | null, corrected: boolean, clock: FrameTime["source"], dropped_frames: number, fps: number, trial_start: number }`.
+  `trial_start` is the unrounded `performance.now()` stamped in `on_load` that `t` is measured from.
+  The extension has no event API: a mid-trial event is recorded in the trial's own data, as a
+  `performance.now()` taken at the change minus `trial_start`.
 
 Methods (all public):
 `start(): Promise<void>` (init tracker + start), `pause()`, `resume()`, `isInitialized()`,

@@ -71,7 +71,7 @@ Pass these on a trial as `extensions: [{ type: jsPsychExtensionSaccade, params: 
 | ----------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `saccade_data`    | array  | One object per camera frame in which a face was found and a calibrated prediction was available: `{x, y, t}`. `x` and `y` are **pixels** relative to the top-left of the viewport; `t` is the time the prediction refers to, in ms since the start of the trial, with the timing offset already subtracted (see below). |
 | `saccade_targets` | object | One key per selector in `targets`, whose value is `{x, y, width, height, top, bottom, left, right}` — the element's [bounding rectangle](https://developer.mozilla.org/en-US/docs/Web/API/Element/getBoundingClientRect) in viewport pixels.                                                                            |
-| `saccade_timing`  | object | `{offset_ms, corrected, clock, dropped_frames, fps, smoothing_frames}`. See below.                                                                                                                                                                                                                                                   |
+| `saccade_timing`  | object | `{offset_ms, corrected, clock, dropped_frames, fps, smoothing_frames, trial_start}`. See below.                                                                                                                                                                                                                                                   |
 
 ### What `t` means
 
@@ -95,7 +95,9 @@ is uncorrected, and `saccade_timing.corrected` is `false` so you know.
 `saccade_timing.smoothing_frames` records the smoothing window the samples were actually averaged
 over — the tracker's own setting, which is not necessarily the parameter if you supplied a
 `tracker` or called `setSmoothingFrames` during the experiment. `dropped_frames` records
-how many camera frames the browser reported dropping during the trial.
+how many camera frames the browser reported dropping during the trial. `trial_start` is the
+unrounded `performance.now()` value `t` counts from: subtract it from timestamps you log yourself
+(a mid-trial sound's onset, say) to put them on the same axis.
 
 ## Methods
 

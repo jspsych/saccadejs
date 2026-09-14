@@ -45,7 +45,7 @@ that records gaze. Nothing stops you from calling
 | --- | --- | --- |
 | `saccade_data` | `{x, y, t}[]` | One row per camera frame in which a face was found and a calibrated prediction was available. `x` and `y` are viewport pixels; `t` is ms since the trial started. |
 | `saccade_targets` | `{ [selector]: {x, y, width, height, top, bottom, left, right} }` | Bounding rectangle of each `targets` element, in viewport pixels. |
-| `saccade_timing` | `{offset_ms, corrected, clock, dropped_frames, fps, smoothing_frames}` | What timing correction was applied, and camera health. See [Timing and synchrony](../guides/timing-and-synchrony). |
+| `saccade_timing` | `{offset_ms, corrected, clock, dropped_frames, fps, smoothing_frames, trial_start}` | What timing correction was applied, and camera health. `trial_start` is the `performance.now()` value `t` counts from. See [Timing and synchrony](../guides/timing-and-synchrony). |
 
 `t` is `(time.meanCapture ?? time.capture) - trialStart - (offset ?? 0)`: the camera's own
 capture stamp, averaged over the `smoothing_frames` frames the estimate came from, with the
@@ -84,6 +84,15 @@ Reached as `jsPsych.extensions.saccade`.
 | `onSetupProgress(cb)` | `() => void` | Subscribe to `start()`'s load progress — see [`SaccadeProgress`](core-api). The most recent report is replayed on subscribe; the returned function unsubscribes. Nothing is reported for a tracker supplied through the `tracker` parameter. |
 | `getSetupProgress()` | `SaccadeProgress \| null` | The most recent progress report. |
 | `dispose()` | `void` | End the frame subscriptions, remove the camera preview and gaze dot, and dispose the tracker (releasing the camera) unless it was supplied through the `tracker` parameter. jsPsych has no extension teardown hook, so a page that runs more than one experiment has to call this between them. |
+
+## Timing your own events
+
+`t` in `saccade_data` counts from `saccade_timing.trial_start`. To line up an event of your own,
+such as a sound played partway through the trial, take `performance.now()` when it happens and
+store it in the trial's data minus `trial_start`. jsPsych adds the extension's data before a
+trial's `on_finish` runs, so `data.saccade_timing` is already there. See
+[Timing your own events](../guides/timing-and-synchrony#timing-your-own-events) for an example
+and the caveats.
 
 ## Example
 
