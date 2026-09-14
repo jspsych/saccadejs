@@ -107,21 +107,19 @@ function instructions(heading: string, body: string): string {
   return `<div class="demo-prose"><h2>${heading}</h2>${body}</div>`;
 }
 
+const PREVIEW_INSTRUCTIONS = `<p>Center your face in the preview, and continue once the face
+  indicator turns green.</p>`;
+
 const CALIBRATE_INSTRUCTIONS = instructions(
   "Calibration",
-  `<p>A dot will appear on the screen, hold for a moment, then jump somewhere else — thirteen
-  dots in all, about twenty seconds.</p>
-  <ul>
-    <li>Look straight at each dot as soon as it appears, and keep looking until it moves.</li>
-    <li>Move your eyes, not your head. Hold your head still from here on.</li>
-  </ul>`,
+  `<p>Thirteen dots will appear one at a time. Look at each one until it moves, keeping your head
+  still and moving only your eyes.</p>`,
 );
 
 const VALIDATE_INSTRUCTIONS = instructions(
   "Accuracy check",
-  `<p>Nine more dots, none of them in the places you calibrated on: look straight at each one as
-  it appears, and keep your head still.</p>
-  <p>Afterwards you will see where the tracker thought you were looking, point by point.</p>`,
+  `<p>Look at each of nine new dots, just as before. Afterwards you'll see where the tracker
+  thought you were looking.</p>`,
 );
 
 /**
@@ -156,7 +154,7 @@ const VIEWING_TASKS: [ViewingTask, ViewingTask] = [
   },
   {
     label: "How well off they are",
-    prompt: "Estimate the material circumstances of the family — how well off they are.",
+    prompt: "Estimate how well off the family is.",
   },
 ];
 
@@ -166,17 +164,10 @@ function sceneInstructions(task: ViewingTask, index: number): string {
     index === 0 ? "First view" : "Second view",
     `<p>${
       index === 0
-        ? "You will see a painting for ten seconds. While it is on screen:"
-        : "The same painting again, for another ten seconds. This time:"
+        ? "A painting will appear for ten seconds. While you look at it:"
+        : "Now the same painting again, with a new task:"
     }</p>
-    <p class="demo-task"><strong>${task.prompt}</strong></p>
-    <p>There is nothing to press. Keep your head still, as you did for the dots.</p>
-    <p class="demo-credit">${
-      index === 0
-        ? `This is Yarbus's experiment: one picture, two questions, and — if it works on you as
-           it worked on his viewers — two different scanpaths.`
-        : `Nothing about the picture has changed. Only the question has.`
-    }</p>`,
+    <p class="demo-task"><strong>${task.prompt}</strong></p>`,
   );
 }
 
@@ -214,9 +205,9 @@ function comparisonStimulus(src: string): string {
     ${comparisonPanel(src, VIEWING_TASKS[1], 1)}
   </div>
   <div class="demo-caption">
-    <p class="demo-explain">Each circle is a fixation — somewhere your gaze stayed put — and the
-    bigger ones are the ones you held longer. The lines between them are your saccades. Same
-    picture, same eyes, ten seconds each: what changed was the question.</p>
+    <p class="demo-explain">Each circle is a place your gaze rested, larger the longer it stayed,
+    and the lines are the jumps between them. The picture was the same both times; only the
+    question changed.</p>
     <p class="demo-legend"><span>start of the view</span><i></i><span>end</span></p>
     <p class="demo-credit">Ilya Repin, <i>They Did Not Expect Him</i> (1884–88), the painting
     Yarbus used.</p>
@@ -450,16 +441,16 @@ function absorb(
 function explain(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
   if (/NotAllowed|Permission denied/i.test(message)) {
-    return "The browser blocked access to the camera. Allow the camera for this site — the icon at the left of the address bar — and then try again. Nothing is uploaded; frames are processed and discarded on your computer.";
+    return "The browser blocked the camera. Allow it using the icon in the address bar, then try again.";
   }
   if (/NotFound|NotReadable|Device|Overconstrained/i.test(message)) {
-    return "No usable camera was found. Connect a webcam, close any other program that might be using it, and try again.";
+    return "No camera was found. Connect a webcam or close other apps that are using it, then try again.";
   }
   if (/no camera frames/i.test(message)) {
-    return "The camera stopped sending frames part way through. Close anything else that might be using it, then try again.";
+    return "The camera stopped sending frames. Close other apps that are using it, then try again.";
   }
   if (/eye_embedding|onnx|fetch|network|404|Failed to load/i.test(message)) {
-    return "The eye-tracking model could not be downloaded. Check your internet connection and try again.";
+    return "The eye-tracking model couldn't be downloaded. Check your connection and try again.";
   }
   return `Something went wrong: ${message}`;
 }
@@ -491,7 +482,6 @@ function Demo() {
     () => window.isSecureContext && !!navigator.mediaDevices?.getUserMedia,
   );
   const [phase, setPhase] = useState<Phase>("menu");
-  const [running, setRunning] = useState<Activity | null>(null);
   const [session, setSession] = useState<Session>(EMPTY_SESSION);
   const [error, setError] = useState<string | null>(null);
 
@@ -559,7 +549,6 @@ function Demo() {
     releaseCamera();
     setSession(EMPTY_SESSION);
     setError(null);
-    setRunning(null);
     setPhase("menu");
   }, [releaseCamera]);
 
@@ -567,7 +556,6 @@ function Demo() {
   const abandon = useCallback(() => {
     endActivity();
     setError(null);
-    setRunning(null);
     setPhase("menu");
   }, [endActivity]);
 
@@ -582,7 +570,6 @@ function Demo() {
 
       endActivity();
       setError(null);
-      setRunning(activity);
       setPhase("running");
 
       // Start the painting downloading as soon as it might be wanted, so the trial that needs
@@ -620,7 +607,9 @@ function Demo() {
         // Camera permission, the model download with its progress bar, and head positioning.
         // Only on the first activity of the session: after that the camera is already open, and
         // making somebody sit through a preview screen to recalibrate is friction for nothing.
-        const setup = tracker.initialized ? [] : [{ type: m.preview }];
+        const setup = tracker.initialized
+          ? []
+          : [{ type: m.preview, instructions: PREVIEW_INSTRUCTIONS }];
 
         const timelines: Record<Exclude<Activity, "explore">, any[]> = {
           calibrate: [
@@ -693,12 +682,10 @@ function Demo() {
 
         setSession((prev) => absorb(prev, activity, jsPsych, fixations));
         endActivity();
-        setRunning(null);
         setPhase("menu");
       } catch (err) {
         if (!mountedRef.current) return;
         setError(explain(err));
-        setRunning(null);
         setPhase("error");
         endActivity();
       }
@@ -752,7 +739,7 @@ function Demo() {
       {phase === "running" ? (
         <p className={styles.abandonRow}>
           <button className={styles.abandon} onClick={abandon}>
-            Stop {running === "calibrate" ? "calibrating" : "this"} and go back
+            Stop and go back
           </button>
         </p>
       ) : null}
@@ -782,26 +769,20 @@ function Preamble({ supported, calibrated }: { supported: boolean; calibrated: b
   return (
     <div className={styles.preamble}>
       <p className={styles.lead}>
-        Your webcam watches your eyes while you look at a handful of dots, and from that the page
-        learns to guess where on the screen you are looking. Calibrating takes about a minute; after
-        that you can check how accurate it is, record your own scanpath over a painting, or just
-        watch the estimate move, in any order and as often as you like.{" "}
-        <strong>
-          Every camera frame is used and discarded on your own computer. Nothing is uploaded.
-        </strong>
+        Look at a few dots and this page learns where on the screen you're looking. Then you can
+        check its accuracy, trace your gaze over a painting, or watch it live.{" "}
+        <strong>Everything runs on your computer, and nothing is uploaded.</strong>
       </p>
       {!supported ? (
         <p className={styles.status}>
-          This browser cannot open a camera on this page. Cameras need a secure connection — open
-          the page over <code>https://</code> or on <code>localhost</code>.
+          The camera needs a secure connection, so open this page over <code>https://</code> or on{" "}
+          <code>localhost</code>.
         </p>
       ) : calibrated ? null : (
         <ul className={styles.requirements}>
-          <li>Chrome or Edge on a laptop or desktop</li>
-          <li>A webcam, and permission to use it when the browser asks</li>
-          <li>Sit about an arm's length from the screen</li>
-          <li>Light on your face, not behind you — avoid sitting with a window at your back</li>
-          <li>Keep your head still once calibration starts; move your eyes, not your head</li>
+          <li>Chrome or Edge, with a webcam</li>
+          <li>Light on your face, about an arm's length from the screen</li>
+          <li>Keep your head still once calibration starts</li>
         </ul>
       )}
     </div>
@@ -860,18 +841,13 @@ function Menu({
         <Card
           title="Calibration"
           cost="about a minute"
-          blurb={
-            <>
-              Thirteen dots, one after another. The page fits a ridge regression from what your eyes
-              look like to where you are looking — the only part of the model that is yours.
-            </>
-          }
+          blurb="Look at thirteen dots so the tracker can learn how your eyes move."
           result={
             calibration === "ok" ? (
               "Calibration complete"
             ) : calibration === "failed" ? (
               <span className={styles.cardPending}>
-                That calibration did not take. Try it again, with more light on your face.
+                That calibration didn't work. Try again with more light on your face.
               </span>
             ) : null
           }
@@ -883,12 +859,7 @@ function Menu({
         <Card
           title="Accuracy check"
           cost="about 40 seconds"
-          blurb={
-            <>
-              Nine points you did not calibrate on, and a scatter of every sample taken at each one.
-              This is how you tell a usable calibration from a hopeful one.
-            </>
-          }
+          blurb="Nine new dots measure how far off the tracker is."
           result={
             validation ? (
               <>
@@ -904,7 +875,7 @@ function Menu({
               </>
             ) : null
           }
-          cta={validation ? "Check again" : "Check the accuracy"}
+          cta={!calibrated ? "Calibrate first" : validation ? "Check again" : "Check the accuracy"}
           disabled={!calibrated || !supported}
           onRun={() => onRun("validate")}
         />
@@ -912,13 +883,7 @@ function Menu({
         <Card
           title="Image scanpath"
           cost="about a minute"
-          blurb={
-            <>
-              Repin's painting twice, ten seconds each, with a different question to answer each
-              time — then your two scanpaths side by side. Yarbus's result, on your own eyes: the
-              picture does not change, and the scanpath does.
-            </>
-          }
+          blurb="One painting, two questions, and where your eyes went for each."
           result={
             scanpath ? (
               <>
@@ -931,7 +896,7 @@ function Menu({
               </>
             ) : null
           }
-          cta={scanpath ? "Do it again" : "Record two scanpaths"}
+          cta={!calibrated ? "Calibrate first" : scanpath ? "Do it again" : "Record two scanpaths"}
           disabled={!calibrated || !supported}
           onRun={() => onRun("scanpath")}
         />
@@ -939,26 +904,13 @@ function Menu({
         <Card
           title="Free viewing"
           cost="as long as you like"
-          blurb={
-            <>
-              The estimate live on the page, with the numbers behind it: how fast your camera runs,
-              how often the tracker guesses, and a slider that trades a steadier dot against one
-              that keeps up.
-            </>
-          }
+          blurb="Watch a dot follow your gaze around the page."
           result={<span className={styles.cardPending}>Nothing is recorded</span>}
-          cta="Look around"
+          cta={!calibrated ? "Calibrate first" : "Look around"}
           disabled={!calibrated || !supported}
           onRun={() => onRun("explore")}
         />
       </div>
-
-      {!calibrated ? (
-        <p className={styles.hint}>
-          Calibration comes first: until the model has been fitted to your eyes there is no estimate
-          for the other three to show.
-        </p>
-      ) : null}
 
       {session.rows.length > 0 ? <SessionData session={session} onReset={onReset} /> : null}
     </div>
@@ -972,8 +924,8 @@ function SessionData({ session, onReset }: { session: Session; onReset: () => vo
     <div className={styles.panel}>
       {highError !== null && highError !== undefined && highError >= 12 ? (
         <p className={styles.note}>
-          At {highError.toFixed(1)}% error only large, well-separated regions are distinguishable.
-          More light on your face and a still head usually bring it down — calibrate again and see.
+          At {highError.toFixed(1)}% error, only large areas of the screen can be told apart. More
+          light on your face and a stiller head should help, so try calibrating again.
         </p>
       ) : null}
 
@@ -1000,16 +952,15 @@ function SessionData({ session, onReset }: { session: Session; onReset: () => vo
           </div>
         </dl>
         <p className={styles.detailsNote}>
-          Every trial you have run this session, in order, exactly as{" "}
-          <code>jsPsych.data.get().json()</code> returns it. Free viewing is not in here: it is not
-          a trial, and it records nothing.
+          Every trial so far, exactly as <code>jsPsych.data.get().json()</code> returns it. Free
+          viewing isn't a trial, so it isn't included.
         </p>
         <pre className={styles.json}>{JSON.stringify(session.rows, null, 2)}</pre>
       </details>
 
       <div className={styles.buttonRow}>
         <button className={styles.abandon} onClick={onReset}>
-          Close the camera and clear this session
+          Close the camera and start over
         </button>
       </div>
     </div>

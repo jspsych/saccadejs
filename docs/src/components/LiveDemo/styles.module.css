@@ -154,13 +154,6 @@
   margin-top: 0.2rem;
 }
 
-.hint {
-  color: var(--ifm-color-emphasis-700);
-  font-size: 0.9rem;
-  line-height: 1.6;
-  margin: 0;
-}
-
 .note {
   color: var(--ifm-color-emphasis-800);
   font-size: 0.92rem;

@@ -219,9 +219,8 @@ export default function FreeViewing({
         <div className={styles.exploreHead}>
           <h3 className={styles.exploreTitle}>Free viewing</h3>
           <p className={styles.exploreLead}>
-            Nothing is being recorded. Look around the page — at this panel, at the words above it,
-            out at the corners of the screen — and the dot follows. Keep your head where it was when
-            you calibrated; move it and the estimate drifts.
+            Nothing is recorded. Look around the page and the dot will follow, as long as your head
+            stays where it was during calibration.
           </p>
         </div>
 
@@ -276,10 +275,8 @@ export default function FreeViewing({
             onChange={(e) => changeSmoothing(Number(e.target.value))}
           />
           <p className={styles.controlHelp}>
-            How many consecutive camera frames are averaged into one estimate. At 1 — the default —
-            the dot is jumpy but current. Drag it up and the dot steadies and starts arriving late:
-            that lag is the number above, and it is the reason a gaze-contingent design leaves this
-            alone.
+            The number of camera frames averaged into each estimate. Raising it steadies the dot but
+            makes it lag behind your eyes.
           </p>
         </div>
 
