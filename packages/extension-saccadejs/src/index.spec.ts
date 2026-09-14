@@ -172,6 +172,51 @@ describe("SaccadeExtension lifecycle", () => {
     expect(data.saccade_timing.corrected).toBe(true);
   });
 
+  it("gives the live gaze API the same absolute t inside a recording trial and outside one", async () => {
+    // A subscription outlives trials, and `saccade-validate` subtracts a start time it stamped
+    // itself. The live `t` used to switch to trial-relative while a trial was recording.
+    const now = jest.spyOn(performance, "now").mockReturnValue(1000);
+    const { extension, tracker } = await makeExtension(display);
+    const seen: number[] = [];
+    extension.onGazeUpdate((s) => seen.push(s.t));
+
+    tracker.emit(makeFrame({ time: { capture: 1250 } as any }));
+    expect(extension.getCurrentPrediction().t).toBe(1250);
+
+    now.mockReturnValue(1200);
+    extension.on_start({ targets: [] });
+    extension.on_load(); // trial starts at 1200
+    tracker.emit(makeFrame({ time: { capture: 1250 } as any }));
+    expect(extension.getCurrentPrediction().t).toBe(1250);
+    const { saccade_data } = extension.on_finish();
+
+    tracker.emit(makeFrame({ time: { capture: 1250 } as any }));
+    expect(seen).toEqual([1250, 1250, 1250]);
+    expect(extension.getCurrentPrediction().t).toBe(1250);
+    // ...while the recorded row is still measured from the trial start.
+    expect(saccade_data.map((s) => s.t)).toEqual([50]);
+  });
+
+  it("subtracts the timing offset from the live gaze t in and out of a trial", async () => {
+    jest.spyOn(performance, "now").mockReturnValue(1000);
+    const { extension, tracker } = await makeExtension(display);
+    extension.setTimingOffset(25);
+    const seen: number[] = [];
+    extension.onGazeUpdate((s) => seen.push(s.t));
+
+    tracker.emit(makeFrame({ time: { capture: 1100, meanCapture: 1090 } as any }));
+    expect(extension.getCurrentPrediction().t).toBe(1065);
+
+    extension.on_start({ targets: [] });
+    extension.on_load(); // trial starts at 1000
+    tracker.emit(makeFrame({ time: { capture: 1100, meanCapture: 1090 } as any }));
+    expect(extension.getCurrentPrediction().t).toBe(1065);
+    const { saccade_data } = extension.on_finish();
+
+    expect(seen).toEqual([1065, 1065]);
+    expect(saccade_data[0].t).toBe(65);
+  });
+
   it("records the bounding rectangle of each requested target", async () => {
     display.innerHTML = `<div id="a"></div><div id="b"></div>`;
     const { extension } = await makeExtension(display);

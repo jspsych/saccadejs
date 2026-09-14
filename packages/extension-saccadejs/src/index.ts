@@ -18,7 +18,14 @@ import type {
 
 import { version } from "../package.json";
 
-/** One gaze sample, in **pixels** relative to the viewport, with a trial-relative timestamp. */
+/**
+ * One gaze sample, in **pixels** relative to the viewport, with a timestamp `t` in milliseconds:
+ * the capture time the prediction refers to, minus the timing offset when one is set.
+ *
+ * What `t` is measured from depends on where the sample came from, and not on anything else:
+ * - `saccade_data` rows: from the start of the trial (its `on_load`).
+ * - `getCurrentPrediction()` and `onGazeUpdate`: absolute, on the `performance.now()` scale.
+ */
 export interface SaccadeGazeSample {
   x: number;
   y: number;
@@ -513,11 +520,20 @@ class SaccadeExtension implements JsPsychExtension {
   /** The calibration points collected so far (targets in viewport fractions, 0–1). */
   getCalibrationPoints = (): CalPoint[] => this.tracker?.getCalibrationPoints() ?? [];
 
-  /** The most recent gaze prediction in viewport pixels, or `null` if there isn't one. */
+  /**
+   * The most recent gaze prediction in viewport pixels, or `null` if there isn't one. `t` is
+   * absolute, like `onGazeUpdate`'s: see there.
+   */
   getCurrentPrediction = (): SaccadeGazeSample | null => this.currentGaze;
 
   /**
    * Subscribe to gaze predictions.
+   *
+   * `t` is always absolute: `(time.meanCapture ?? time.capture) − offset`, on the
+   * `performance.now()` scale, whether or not a trial is recording. It is *not* the
+   * trial-relative `t` of `saccade_data`. A subscription outlives trials, and plugins such as
+   * `saccade-validate` subtract a start time they stamped themselves, so an epoch that switched
+   * to the trial start whenever the extension was attached to the current trial was a bug.
    *
    * @returns A function that removes the subscription.
    */
@@ -685,7 +701,7 @@ class SaccadeExtension implements JsPsychExtension {
     this.lastClock = frame.time.source;
     this.lastFps = frame.fps;
 
-    const sample = this.toSample(frame);
+    const sample = this.toSample(frame, 0);
     this.currentGaze = sample;
     this.setGazeDot(sample);
     if (sample) {
@@ -702,19 +718,25 @@ class SaccadeExtension implements JsPsychExtension {
     // the trial. Until then it is the only hook that runs after an image lays out and before
     // jsPsych tears the display down.
     if (this.targetsPending) this.recordTargets();
-    const sample = this.toSample(frame);
+    const sample = this.toSample(frame, this.currentTrialStart);
     if (sample) this.currentTrialData.push(sample);
   };
 
-  /** Convert a tracker frame into a viewport-pixel sample, or `null` if there is no gaze. */
-  private toSample = (frame: TrackerFrame): SaccadeGazeSample | null => {
+  /**
+   * Convert a tracker frame into a viewport-pixel sample, or `null` if there is no gaze.
+   *
+   * @param zero The epoch `t` is measured from: `0` for the absolute time the live API reports,
+   *   the trial start for a `saccade_data` row. Passed by the caller rather than read from trial
+   *   state, so the live API cannot change meaning while a trial is recording.
+   */
+  private toSample = (frame: TrackerFrame, zero: number): SaccadeGazeSample | null => {
     if (!frame.faceFound || !frame.gaze) return null;
     const x = frame.gaze.x * this.viewportWidth();
     const y = frame.gaze.y * this.viewportHeight();
     // The gaze is the mean over the smoothing ring buffer, so it refers to the buffer's mean
     // capture time, not the newest frame's.
     const capture = frame.time.meanCapture ?? frame.time.capture;
-    const t = capture - (this.activeTrial ? this.currentTrialStart : 0) - (this.timingOffset ?? 0);
+    const t = capture - zero - (this.timingOffset ?? 0);
     return {
       x: this.round_predictions ? Math.round(x) : x,
       y: this.round_predictions ? Math.round(y) : y,

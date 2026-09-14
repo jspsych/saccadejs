@@ -76,8 +76,8 @@ Reached as `jsPsych.extensions.saccade`.
 | `calibratePoint(x, y, embeddings?, captureMs?, timeoutMs?)` | `Promise<number>` | Add one point at a viewport pixel location, collecting embeddings for `captureMs` (default `500`) when none are supplied. Rejects with `no camera frames for <ms> ms` if a single frame takes longer than `timeoutMs` (default `5000`). Returns how many were recorded. |
 | `fitCalibration(lambda?)` | `{lambda, nPoints, weighting} \| null` | Fit the ridge map. Required after manual `calibratePoint` calls. `weighting` says how the rows were weighted: `"model"`, `"head"` or `"uniform"`. |
 | `getCalibrationPoints()` | `CalPoint[]` | Targets in viewport fractions, with their embeddings. |
-| `getCurrentPrediction()` | `{x, y, t} \| null` | The latest estimate, in viewport pixels. |
-| `onGazeUpdate(cb)` | `() => void` | Subscribe to every estimate; returns an unsubscribe function. |
+| `getCurrentPrediction()` | `{x, y, t} \| null` | The latest estimate, in viewport pixels. `t` is absolute, as for `onGazeUpdate`. |
+| `onGazeUpdate(cb)` | `() => void` | Subscribe to every estimate; returns an unsubscribe function. `t` is `(time.meanCapture ?? time.capture) - (offset ?? 0)` on the `performance.now()` scale, in every trial, recording or not — unlike `saccade_data`, whose `t` is from the trial start. Subtract your own start time to get a relative one. |
 | `getTimingOffset()` | `number \| null` | The offset currently subtracted from `t`. |
 | `setTimingOffset(ms \| null)` | `void` | Set it manually. `null` turns the correction off. |
 | `getLastLoopback()` | `LoopbackResult \| null` | The full result of the last time-sync run. |

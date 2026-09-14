@@ -98,6 +98,35 @@ describe("saccade-validate trial", () => {
     expect(typeof data.rt).toBe("number");
   });
 
+  it("measures raw_gaze t from the trial start, given the extension's absolute t", async () => {
+    // `onGazeUpdate` reports `t` on the performance.now() scale, recording trial or not. The
+    // stub stands in for the extension, so this pins the plugin's side of that contract: it
+    // subtracts its own start time, and the result is small and non-negative.
+    jest.spyOn(performance, "now").mockReturnValue(1000);
+    try {
+      const jsPsych = setup();
+      const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      extension.gazeSamples = [
+        { x: cx, y: cy, t: 1000 },
+        { x: cx, y: cy, t: 1033 },
+        { x: cx, y: cy, t: 1066 },
+      ];
+
+      const { getData, finished } = await startTimeline(
+        [{ type: SaccadeValidatePlugin, ...FAST, validation_points: [[50, 50]] }],
+        jsPsych,
+      );
+      await finished;
+
+      const { raw_gaze } = getData().values()[0];
+      expect(raw_gaze[0].map((r: { t: number }) => r.t)).toEqual([0, 33, 66]);
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
   it("computes the offset from the target, in pixels and viewport units", async () => {
     const jsPsych = setup();
     const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
