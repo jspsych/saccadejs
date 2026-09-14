@@ -53,12 +53,15 @@ timeline.push({ type: jsPsychSaccadeValidate });
 ```js
 const validate = { type: jsPsychSaccadeValidate };
 
+// A placeholder. Set it from your own pilot data before collecting.
+const maxError = 0.1;
+
 // Recalibrate once if the first validation is poor.
 const recalibrateIfBad = {
   timeline: [{ type: jsPsychSaccadeCalibrate }, validate],
   conditional_function: () => {
     const last = jsPsych.data.get().filter({ trial_type: "saccade-validate" }).last(1).values()[0];
-    return last.median_error_viewport > 0.12;
+    return last.median_error_viewport > maxError;
   },
 };
 
@@ -67,12 +70,9 @@ timeline.push(validate, recalibrateIfBad);
 
 ## Interpreting `median_error_viewport`
 
-| Value | What it supports |
-| --- | --- |
-| under 0.07 | Quadrants and well-separated regions. |
-| 0.07 – 0.12 | Left/right and top/bottom distinctions, large regions of interest. |
-| 0.12 – 0.20 | Coarse. Halves of the screen at best. |
-| above 0.20 | The fit failed, or the participant moved. Recalibrate or exclude. |
+It is the distance from each target to the average gaze there, as a fraction of the viewport,
+so it compares across screen sizes. How large an error a given design can tolerate has not
+been measured for saccade.js, so there is no recommended cutoff. Pilot the study, look at the
+distribution, and fix your exclusion threshold before collecting.
 
-Pick your exclusion threshold before collecting. Validating again at the end of the experiment
-tells you how much the calibration drifted, which is worth reporting.
+Validating again at the end of the experiment measures how far the calibration drifted.

@@ -42,7 +42,7 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-calibrate
 
 | Parameter                     | Type                | Default         | Description                                                                                                                                                                    |
 | ----------------------------- | ------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `calibration_points`          | array of `[x, y]`   | _13-point grid_ | Targets as percentages of the viewport width and height. The default is the grid the model was trained with: a 3×3 grid at 5/50/95 % plus four interior points at 27.5/72.5 %. |
+| `calibration_points`          | array of `[x, y]`   | _13-point grid_ | Targets as percentages of the viewport width and height. The default is a 3×3 grid at 5/50/95 % plus four interior points at 27.5/72.5 %. |
 | `calibration_mode`            | `"view"`\|`"click"` | `"view"`        | `"view"` shows each point for a fixed time; `"click"` leaves it up until the participant clicks it, then captures.                                                             |
 | `repetitions_per_point`       | integer             | `1`             | How many times to repeat the whole sequence.                                                                                                                                   |
 | `randomize_calibration_order` | boolean             | `false`         | Shuffle the order of the targets on each repetition.                                                                                                                           |
@@ -64,10 +64,10 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-calibrate
 
 ## Notes
 
-- **More points is better, up to a point.** The 13-point default is what the model was trained
-  with. The core also provides a 20-point grid; you can pass any list you like.
-- **Recalibrate after a break.** The calibration is tied to the participant's head position; if
-  they move, run this plugin again (with `clear_previous: true`).
+- **The grid is yours to choose.** The default has 13 points; the core also provides a 20-point
+  grid, and you can pass any list you like.
+- **The fit assumes the head pose held during calibration.** If the participant moves, for
+  instance during a break, run this plugin again (with `clear_previous: true`).
 - Follow calibration with [`saccade-validate`](../plugin-saccadejs-validate) to find out how
   accurate the fit actually is before spending the participant's time on the experiment.
 

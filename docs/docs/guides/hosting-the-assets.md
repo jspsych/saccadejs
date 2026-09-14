@@ -93,4 +93,4 @@ returns 200, that `.wasm` carries `Content-Type: application/wasm`, and that not
 from an origin you did not intend.
 
 Then check the [preview trial](../reference/plugin-preview) data. If `backend` is `"wasm"` on a
-machine that should have WebGPU, an asset URL is usually wrong.
+machine that should have WebGPU, check the asset URLs first.

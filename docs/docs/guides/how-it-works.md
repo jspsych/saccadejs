@@ -19,9 +19,9 @@ method in a paper, or work out why something is behaving the way it is.
    produces no gaze estimate, so gaps in `saccade_data` mean something.
 3. **The crop.** The frame is cut to a single strip spanning both eyes, resized to 144 × 36,
    converted to grayscale, and contrast-equalized with CLAHE. That strip is the model's entire
-   input. Everything else, including color and the rest of the face, is discarded. CLAHE is
-   what makes ordinary room lighting workable; it cannot rescue backlighting, where the eyes are
-   in shadow to begin with.
+   input. Everything else, including color and the rest of the face, is discarded. CLAHE evens
+   out differences in lighting, but it cannot recover detail that was never captured, as when a
+   light behind the participant leaves the eyes in shadow.
 4. **The embedding.** The strip goes through a small convolutional network (about 20 MB, ONNX,
    run on WebGPU or WebAssembly) that returns 128 numbers describing the appearance of the eyes,
    plus one more, between 0 and 1, rating how usable this frame is. A blink scores low. This
@@ -53,14 +53,13 @@ a dozen or so observations, so it needs the ridge penalty to keep it from chasin
 few points. The number of points sets the penalty unless you set `lambda` yourself.
 
 Validation uses a different grid, inset from the calibration grid. Scoring on the points you
-fitted measures the fit rather than the participant, and flatters you by a wide margin, so the
-score on the nine held-out points is the number to report.
+fitted measures the fit rather than the participant and flatters the result, so the score on the
+nine held-out points is the number to report.
 
 ## The timing loopback
 
 A camera frame's timestamp is not when the light left the screen. Between the two sit the
-display's own latency and the camera's pipeline, together usually 50 to 150 ms, and neither is
-visible from JavaScript.
+display's own latency and the camera's pipeline, and neither is visible from JavaScript.
 
 The loopback measures the two together. For fifteen seconds the page steps between black and
 white at random intervals of half a second or more, while the camera watches the screen. Each
@@ -75,11 +74,12 @@ far below any photosensitivity threshold.
 
 ## What limits accuracy
 
-The main ones:
+These follow from how the method works. How much each one costs has not been measured.
 
 1. **Head movement after calibration.** The fitted map assumes the head pose that was there
    during calibration.
-2. **Lighting.** Front light is good, side light is workable, backlight is not.
+2. **Lighting.** The model sees only the eye region, so anything that leaves it dark, such as a
+   light behind the participant, removes what it has to work with.
 3. **Glasses.** Reflections can hide the eye region for a range of head angles.
 4. **Camera frame rate.** A 30 fps camera bounds your temporal resolution at 33 ms.
 

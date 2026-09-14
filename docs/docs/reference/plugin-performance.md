@@ -59,9 +59,12 @@ excluded is not first made to sit through thirteen calibration points.
 ## Example
 
 ```js
+// A placeholder. Set it from your own pilot data before collecting.
+const minFps = 15;
+
 timeline.push({
   type: jsPsychSaccadePerformance,
-  inclusion_function: (data) => data.fps_median >= 15,
+  inclusion_function: (data) => data.fps_median >= minFps,
   exclusion_message: (data) =>
     data.backend === "wasm"
       ? `<p>This browser could not use your graphics card for the eye tracker, so it runs too
@@ -87,7 +90,7 @@ const shortVersion = {
       .filter({ trial_type: "saccade-performance" })
       .last(1)
       .values()[0];
-    return last.fps_median < 15;
+    return last.fps_median < minFps;
   },
 };
 ```
@@ -103,17 +106,14 @@ also the rate at which gaze samples land in your data.
 
 ### Pick the threshold from your design
 
-There is no default threshold because there is no design-independent answer.
+There is no default threshold. The rate a measure needs depends on the design, and it has not
+been measured for saccade.js. Pilot without excluding anyone, then choose a threshold from the
+data.
 
-| If the measure is                                                            | Then                                                                                    |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| where someone looked, over seconds — preference, dwell time, AOI proportions | A few frames per second is enough.                                                      |
-| how long someone looked, over hundreds of ms                                 | 10–15 fps is a reasonable floor.                                                        |
-| _when_ someone looked — saccade latency, time-locking to onset               | 30 fps at least, and read [Timing and synchrony](../guides/timing-and-synchrony) first. |
-| gaze-contingent display changes                                              | 30 fps at least, and the pipeline latency matters as much as the rate.                  |
-
-Sampling at _f_ Hz puts a floor of roughly `1000 / f` ms on how precisely any event can be placed
-in time, before any of the other error sources.
+One bound holds regardless: sampling at _f_ Hz puts a floor of roughly `1000 / f` ms on how
+precisely any event can be placed in time, before any of the other error sources. If the design
+depends on _when_ someone looked, read [Timing and synchrony](../guides/timing-and-synchrony)
+too.
 
 ### `fps_p10` catches what the median hides
 
@@ -125,10 +125,10 @@ not fail anybody.
 ### `embed_ms_median` says whose fault a low rate is
 
 A low `fps_median` with a small `embed_ms_median` is a camera that is not delivering frames any
-faster, and no amount of GPU will change it. A large `embed_ms_median` is the model, and usually
-means `backend` is `"wasm"`.
+faster, and no amount of GPU will change it. A large `embed_ms_median` is the model; check
+whether `backend` is `"wasm"`.
 
-`backend: "wasm"` on a machine that should have WebGPU usually means an asset URL is wrong rather
+`backend: "wasm"` on a machine that should have WebGPU can mean an asset URL is wrong rather
 than a machine that cannot do it — see [Hosting the assets](../guides/hosting-the-assets).
 
 ### A machine that could not be measured

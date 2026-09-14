@@ -73,8 +73,8 @@ browser supplying no `captureTime` at all, which shows up as `clock: "callback"`
 
 This is the real difference between browsers today. The eye model runs through onnxruntime-web,
 which tries WebGPU and falls back to WebAssembly (`executionProviders`, default
-`["webgpu", "wasm"]`). The WASM path works, but slowly enough that a study with a frame-rate
-threshold will exclude the participant.
+`["webgpu", "wasm"]`). The WASM path works, but more slowly. How much more depends on the
+machine, so measure it with [`saccade-performance`](../reference/plugin-performance).
 
 | Browser | WebGPU |
 | --- | --- |
@@ -100,8 +100,8 @@ Every run tells you what it got. Read it from the data instead of from the user 
 A frame-rate threshold on `saccade-performance` is a better inclusion criterion than a browser
 check, because it catches the thing you actually care about: a slow machine in Chrome fails a
 study that a fast machine in Firefox would pass. The
-[timing guide](timing-and-synchrony#suggested-exclusion-criteria) has a criterion covering the
-clock and the frame rate together.
+[timing guide](timing-and-synchrony#exclusion-criteria) shows a criterion covering the clock and
+the frame rate together.
 
 ## Why the docs still say Chrome or Edge
 

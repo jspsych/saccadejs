@@ -20,8 +20,7 @@ cross-correlates the two.
 
 **There is no flicker.** The changes are at most one per second — the schedule is sparse, with gaps
 of 0.5–1 s — which is a third of the WCAG 2.3.1 / Harding limit of three per second. The timing
-information is in the edges, not the rate: about 20 edges over 15 seconds pin the lag down to a
-few milliseconds.
+information is in the edges, not the rate, and a 15-second run has about 20 of them.
 
 Requires the [`@saccadejs/extension`](../extension-saccadejs) extension to be registered in
 `initJsPsych`. Run it once, before your gaze-recording trials; put it after
@@ -96,8 +95,8 @@ the experiment can continue.
 | Verdict          | Meaning                                                                                                                                                              |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `"OK"`           | The estimate is well constrained: a strong edge signal (`peak_d ≥ 0.5`), a plateau no wider than one camera frame (≤ 34 ms), and the two halves of the run agreeing. |
-| `"INCONCLUSIVE"` | The signal was too weak or there were too few usable edges. Usually a very dim screen, a camera pointed away from the light, or aggressive auto-exposure.            |
-| `"UNRELIABLE"`   | The run produced an estimate that contradicts itself — typically the two halves disagreeing. Do not use `lag_ms` from such a run.                                    |
+| `"INCONCLUSIVE"` | There was nothing to estimate from: no usable camera samples, or fewer than two luminance edges. |
+| `"UNRELIABLE"`   | An estimate exists but fails at least one of the checks above: a weak edge signal, a plateau wider than a camera frame, or halves that disagree. `reason` says which. `lag_ms` from such a run cannot be trusted. |
 
 `apply_offset` applies whatever was measured, so if your analysis depends on the correction, check
 the verdict yourself:

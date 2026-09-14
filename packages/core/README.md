@@ -197,7 +197,7 @@ Every frame carries a `time: FrameTime`, all on the `performance.now()` clock:
 
 What none of these can see is **display lag + camera lag**: the delay from a `requestAnimationFrame`
 paint to photons leaving the panel, plus photons to `captureTime`. That sum is a per-machine
-constant of typically 50–150 ms, and it is what you must subtract from `capture` to align gaze
+constant, and it is what you must subtract from `capture` to align gaze
 with stimulus onsets. `runLoopback(tracker)` measures it: it flashes a full-viewport panel on a
 sparse schedule (levels held 0.5–1 s — at most one flash per second, well under the WCAG 2.3.1
 limit, and not a flicker), correlates the camera's luminance edges against the flip times, and

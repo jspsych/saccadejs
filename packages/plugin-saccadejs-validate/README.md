@@ -38,8 +38,8 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-validate
       type: jsPsychSaccadeValidate,
       roi_radius: 200,
       on_finish: (data) => {
-        // recalibrate if the fit is poor
-        data.recalibrate = data.median_error_px > 200;
+        // flag a poor fit; 0.1 is a placeholder, so set it from your own pilot data
+        data.recalibrate = data.median_error_viewport > 0.1;
       },
     },
   ]);
@@ -68,20 +68,20 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-validate
 | `average_offset`        | array   | For each point, `{x, y, r}` — the average offset of gaze from the target (accuracy) and the median distance of individual samples from that average (precision). `{x: null, y: null, r: null}` for a point with no samples. |
 | `samples_per_sec`       | float   | Mean sampling rate over the points. `null` if no point collected two samples.                                                                                                                                               |
 | `validation_points`     | array   | The points, in the order they were shown.                                                                                                                                                                                   |
-| `median_error_px`       | float   | Median across points of the distance in pixels between the target and the average gaze for that target. **The headline accuracy number.** `null` if no point collected any samples.                                         |
-| `median_error_viewport` | float   | The same error in viewport units (x divided by viewport width, y by height) — comparable across screen sizes, and the unit the model was evaluated in.                                                                      |
+| `median_error_px`       | float   | Median across points of the distance in pixels between the target and the average gaze for that target. `null` if no point collected any samples. |
+| `median_error_viewport` | float   | The same error in viewport units (x divided by viewport width, y by height), comparable across screen sizes. **The number to report.** |
 | `rt`                    | integer | Time from the start of the trial until validation finished.                                                                                                                                                                 |
 
 ## Interpreting the numbers
 
-`median_error_px` is accuracy: how far the average prediction sits from where the participant was
-actually looking. `average_offset[i].r` is precision: how scattered the samples are around their
-own average. A large `r` with a small offset means a noisy but unbiased estimate — more smoothing
-(the extension's `smoothing_frames`) will help. A small `r` with a large offset means a systematic bias — a
-recalibration will help.
+The median error is accuracy: how far the average prediction sits from where the participant was
+asked to look. `average_offset[i].r` is precision: how scattered the samples are around their own
+average. A large `r` with a small offset is a noisy but unbiased estimate; a small `r` with a
+large offset is a systematic bias.
 
-`median_error_viewport` is the number to compare against published model evaluations, which report
-error in viewport units rather than pixels.
+Report `median_error_viewport` rather than `median_error_px`, because pixels do not compare across
+screen sizes. How large an error a design can tolerate has not been measured for saccade.js, so
+choose an exclusion threshold from pilot data and fix it before collecting.
 
 ## License
 

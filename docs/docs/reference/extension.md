@@ -98,7 +98,7 @@ and the caveats.
 
 ```js
 const jsPsych = initJsPsych({
-  extensions: [{ type: jsPsychExtensionSaccade, params: { smoothing_frames: 3 } }],
+  extensions: [{ type: jsPsychExtensionSaccade }],
 });
 
 timeline.push({

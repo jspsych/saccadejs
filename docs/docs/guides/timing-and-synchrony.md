@@ -8,8 +8,7 @@ description: When to run the time-sync trial, what the measured offset means, an
 # Timing and synchrony
 
 A camera frame's timestamp is not when the light left the screen. The display and the camera
-each add delay, together usually 50 to 150 ms, and the amount depends on the participant's
-hardware. The `saccade-time-sync` trial measures that delay for each participant and subtracts
+each add delay, and the amount depends on the participant's hardware. The `saccade-time-sync` trial measures that delay for each participant and subtracts
 it from every gaze timestamp.
 
 ## Run it once per session
@@ -54,25 +53,33 @@ too, because `t` is a capture time rather than the time the prediction became av
 
 | What you see | What it means |
 | --- | --- |
-| `verdict: "OK"`, `lag_ms` 40–150 | Normal. Use it. |
-| `verdict: "UNRELIABLE"`, low `peak_d` | The camera could not see the screen change: a dim monitor, aggressive auto-exposure, or a blocked lens. |
-| `verdict: "UNRELIABLE"`, `halves_ms` far apart | Something changed mid-run, usually the window losing focus. |
-| `verdict: "INCONCLUSIVE"`, wide `plateau_width_ms` | Too few usable edges. Try a longer `duration`. |
+| `verdict: "OK"` | The measurement held together, and it is applied automatically. |
+| `verdict: "UNRELIABLE"`, low `peak_d` | The camera did not clearly see the screen change. A dim monitor, auto-exposure or a blocked lens can cause it. |
+| `verdict: "UNRELIABLE"`, wide `plateau_width_ms` | Too few edges pinned the lag down. A longer `duration` gives more. |
+| `verdict: "UNRELIABLE"`, `halves_ms` far apart | The lag changed during the run. |
+| `verdict: "INCONCLUSIVE"` | No usable camera samples, or fewer than two edges. See `reason`. |
 | `clock_source: "callback"` | The browser supplied no capture timestamps. The number is not a real measurement. |
 
 Setting `require_ok: true` reruns an `UNRELIABLE` measurement once. The trial continues either
 way, so exclusion is your decision to make in analysis.
 
-## Suggested exclusion criteria
+## Exclusion criteria
 
-Worth pre-registering:
+`saccade_timing` carries what you need to exclude trials whose timestamps you cannot trust. Two
+checks follow from the method: the correction was applied, and the browser supplied capture
+timestamps. The frame rate and dropped-frame cutoffs depend on your design and have not been
+measured for saccade.js, so the numbers below are placeholders. Set them from pilot data and fix
+them before you collect:
 
 ```js
+const minFps = 20;           // placeholder
+const maxDroppedShare = 0.05; // placeholder
+
 const bad = (d) =>
   !d.saccade_timing.corrected ||
   d.saccade_timing.clock !== "captureTime" ||
-  d.saccade_timing.fps < 20 ||
-  d.saccade_timing.dropped_frames > 0.05 * d.saccade_data.length;
+  d.saccade_timing.fps < minFps ||
+  d.saccade_timing.dropped_frames > maxDroppedShare * d.saccade_data.length;
 ```
 
 ## Timing your own events
@@ -113,8 +120,7 @@ fire late while the tracker is busy with a camera frame, and the data would not 
 already happened at that time.
 
 **Sound has its own latency.** The time-sync trial measures the display and the camera, not the
-speakers. If audio timing matters, record `AudioContext.outputLatency` beside the onset. Bluetooth
-output commonly adds 100 ms or more.
+speakers. If audio timing matters, record `AudioContext.outputLatency` beside the onset.
 
 **Expect about a frame of slack.** A display change reaches the screen on a later frame, so an
 onset stamped this way is good to about one refresh, 17 ms at 60 Hz. That is finer than the 33 ms

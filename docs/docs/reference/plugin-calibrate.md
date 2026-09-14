@@ -50,7 +50,7 @@ timeline.push({ type: jsPsychSaccadeCalibrate });
 ## Example
 
 ```js
-// A denser grid, randomized, for a study that can afford the extra time.
+// A 25-point grid in random order, with longer settle and capture times.
 timeline.push({
   type: jsPsychSaccadeCalibrate,
   calibration_points: [

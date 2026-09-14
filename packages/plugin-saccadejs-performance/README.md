@@ -42,13 +42,14 @@ excluded is not first made to sit through thirteen calibration points.
     { type: jsPsychSaccadePreview },
     {
       type: jsPsychSaccadePerformance,
+      // 15 is a placeholder: set it from your own pilot data
       inclusion_function: (data) => data.fps_median >= 15,
       exclusion_message: (data) =>
         data.backend === "wasm"
           ? `<p>This browser could not use your graphics card for the eye tracker, so it runs
              too slowly for this study.</p>`
           : `<p>The eye tracker runs at ${data.fps_median?.toFixed(0) ?? "under 1"} fps on this
-             computer, which is below the 15 fps this study needs.</p>`,
+             computer, which is below what this study needs.</p>`,
     },
     { type: jsPsychSaccadeCalibrate },
   ]);
@@ -90,11 +91,10 @@ saccade.js keeps exactly one inference in flight and asks for the next camera fr
 the current one has been through the model, so the frame rate is bounded by whichever of camera
 delivery or inference is slower, and it is also the rate at which gaze samples land in your data.
 
-**Pick the threshold from your design, not from a rule of thumb.** A ten-second free-viewing
-preference measure is fine at a few frames per second. Anything that depends on _when_ a look
-happened — saccade latency, gaze-contingent displays, time-locking to a stimulus onset — is not.
-Sampling at _f_ Hz puts a floor of roughly `1000 / f` ms on how precisely any event can be
-placed, before any of the other error sources.
+**Pick the threshold from your design and your pilot data.** The rate a given measure needs has
+not been measured for saccade.js, so there is no rule of thumb to fall back on. One bound holds
+regardless: sampling at _f_ Hz puts a floor of roughly `1000 / f` ms on how precisely any event
+can be placed, before any of the other error sources.
 
 **`fps_p10` catches what the median hides.** A machine that stalls periodically — thermal
 throttling, a busy background tab, another program waking up — can have a perfectly healthy
@@ -103,9 +103,9 @@ are at least a tenth of them, so an isolated hiccup will not fail anyone.
 
 **`embed_ms_median` says whose fault a low rate is.** A low `fps_median` with a small
 `embed_ms_median` is a camera that is not delivering frames any faster, and no amount of GPU will
-help. A large `embed_ms_median` is the model, and usually means `backend` is `"wasm"`.
+help. A large `embed_ms_median` is the model; check whether `backend` is `"wasm"`.
 
-**`backend: "wasm"` on a machine that should have WebGPU usually means an asset URL is wrong**
+**`backend: "wasm"` on a machine that should have WebGPU can mean an asset URL is wrong**
 rather than a machine that cannot do it — see
 [Hosting the assets](https://saccade.jspsych.org/guides/hosting-the-assets/).
 

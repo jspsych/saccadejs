@@ -92,7 +92,7 @@ Put it early. Everything after it assumes the camera is running.
 timeline.push({ type: jsPsychSaccadeTimeSync });
 ```
 
-The camera frame showing a reaction arrives 50 to 150 ms after the stimulus was painted. The
+The camera frame showing a reaction arrives some time after the stimulus was painted. The
 delay varies by machine, and JavaScript cannot see it. This trial measures it: for fifteen
 seconds the screen steps between black and white while the camera watches. Every gaze timestamp
 afterwards has the measured delay subtracted.
@@ -113,9 +113,8 @@ Calibration shows thirteen points, takes about twenty seconds, and fits the part
 that is specific to this participant. Nothing predicts gaze until it finishes.
 
 Validation then shows nine points the calibration never saw and measures how far the estimates
-land from them. Record and report its `median_error_viewport`: below `0.07` supports quadrants
-and well-separated regions; `0.12` and up means halves of the screen at best. Choose your
-exclusion threshold before you collect. [`saccade-validate`](reference/plugin-validate) shows
+land from them. Record and report its `median_error_viewport`, and choose your exclusion
+threshold before you collect. [`saccade-validate`](reference/plugin-validate) shows
 how to recalibrate a participant whose first attempt is poor.
 
 </Step>
@@ -221,7 +220,7 @@ The extension adds three fields to every trial it is attached to.
   },
   "saccade_timing": {
     "offset_ms": 78, "corrected": true, "clock": "captureTime",
-    "dropped_frames": 1, "fps": 29.6, "tta": 5
+    "dropped_frames": 1, "fps": 29.6, "smoothing_frames": 1, "trial_start": 48213.7
   }
 }
 ```

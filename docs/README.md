@@ -127,7 +127,7 @@ Components are in `src/components/`: `Steps` (the numbered walkthrough used in G
   against. Drop the override once that is fixed upstream. Docusaurus versions are pinned to
   3.9.2 to match what `@jspsych/docusaurus-preset` depends on; a mismatch nests a second copy
   of the classic preset and breaks the build.
-- **The timing numbers in the docs are measurements, not estimates.** They come from the
-  photodiode-and-LED rig validation recorded in the `eye-tracking` repository's
-  `EXPERIMENT_LOG.md` (2026-09-05). If you restate them, restate them exactly, and say which
-  convention they are on.
+- **Recommend nothing the evidence does not support.** A cutoff, a typical range or a claim
+  about what helps needs a measurement behind it, recorded in the `eye-tracking` repository's
+  `EXPERIMENT_LOG.md`. Until a validation study exists, leave such claims out, and mark any
+  number in an example as a placeholder for the researcher's own pilot data.

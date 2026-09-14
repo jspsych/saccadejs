@@ -52,8 +52,8 @@ timeline.push({
   type: jsPsychSaccadePreview,
   instructions: `
     <h3>Camera setup</h3>
-    <p>Sit about an arm's length from the screen, with light on your face rather than
-    behind you. When your eyes appear clearly in the strip below, press continue.</p>
+    <p>Face the screen, with light on your face rather than behind you. When your eyes
+    appear clearly in the strip below, press continue.</p>
     <p>Nothing is recorded or uploaded. The video stays on your computer.</p>`,
   button_text: "My eyes are visible",
   face_timeout: 30000,
@@ -72,5 +72,5 @@ eye model download reports bytes, so it is the only stage with a moving bar —
 The continue button appears only once the tracker is initialized, and (with `require_face`)
 enables only while a face is being found.
 
-`backend: "wasm"` on a machine that should have WebGPU usually means an asset URL is wrong. See
+`backend: "wasm"` on a machine that should have WebGPU can mean an asset URL is wrong. See
 [Hosting the assets](../guides/hosting-the-assets).

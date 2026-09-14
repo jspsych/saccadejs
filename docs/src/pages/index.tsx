@@ -97,18 +97,15 @@ function Hero(): React.ReactElement {
               webcam.
             </h1>
             <p className={styles.heroLede}>
-              It runs in the browser as a jsPsych extension: attach it to a
-              trial, and that trial's data gains a gaze sample for every camera
-              frame. The core library also runs on its own, without jsPsych.
+              Attach it to a jsPsych trial and that trial's data gains a gaze
+              sample for every camera frame. The core library also runs on its
+              own.
             </p>
             <p className={styles.heroNote}>
-              The model that estimates gaze is trained once and ships with the
-              library, so nothing is trained in the browser. Only a ridge
-              regression is fitted to each participant, which is why calibration
-              takes about twenty seconds. The median error afterwards is roughly
-              a tenth of the screen: enough to distinguish quadrants and
-              well-separated regions of interest, not enough for reading or
-              small stimuli. No video leaves the participant's computer.
+              The gaze model ships pretrained, so nothing is trained in the
+              browser. Calibration fits a ridge regression to each participant
+              in about twenty seconds, and a validation trial measures the
+              error. No video leaves the participant's computer.
             </p>
           </div>
         </div>
@@ -138,11 +135,12 @@ function Hero(): React.ReactElement {
             <div className={styles.pathCard}>
               <div className={styles.pathCardHead}>
                 <CodeIcon className={styles.pathCardIcon} />
-                <h2 className={styles.pathCardTitle}>Use it in an experiment</h2>
+                <h2 className={styles.pathCardTitle}>Integrates with jsPsych</h2>
               </div>
               <p className={styles.pathCardDesc}>
-                The extension records gaze during any trial. One plugin handles
-                each setup step: camera, calibration, validation and timing.
+                saccade.js is a jsPsych extension: attach it to any trial to
+                record gaze during it. One plugin handles each setup step:
+                camera, calibration, validation and timing.
               </p>
               <div className={styles.pathCardActions}>
                 <Link className={styles.pathLink} to="/getting-started">
@@ -187,8 +185,8 @@ function Features(): React.ReactElement {
           <ClockIcon className={styles.featureIcon} />
           <h2 className={styles.featureTitle}>Timing correction</h2>
           <p className={styles.featureBody}>
-            A camera frame arrives 50 to 150 ms after the screen changed, and
-            the delay differs from machine to machine. The{" "}
+            A camera frame arrives some time after the screen changed, and the
+            delay differs from machine to machine. The{" "}
             <code>saccade-time-sync</code> plugin measures it for each
             participant and subtracts it from every gaze timestamp.
           </p>
@@ -279,13 +277,9 @@ const PACKAGES = [
 
 const REQUIREMENTS = [
   {
-    what: "Chrome or Edge",
-    detail:
-      "on a laptop or desktop. Other browsers run the tracker but may not supply the camera capture timestamps that the timing measurement needs.",
-  },
-  {
     what: "A webcam",
-    detail: "and a page served over https:// or localhost.",
+    detail:
+      "on a laptop or desktop, and a page served over https:// or localhost.",
   },
   {
     what: "WebGPU",
