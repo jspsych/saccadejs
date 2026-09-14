@@ -70,7 +70,7 @@ timeline.push(validate, recalibrateIfBad);
 | Value | What it supports |
 | --- | --- |
 | under 0.07 | Quadrants and well-separated regions. |
-| 0.07 – 0.12 | Typical. Left/right and top/bottom distinctions, large regions of interest. |
+| 0.07 – 0.12 | Left/right and top/bottom distinctions, large regions of interest. |
 | 0.12 – 0.20 | Coarse. Halves of the screen at best. |
 | above 0.20 | The fit failed, or the participant moved. Recalibrate or exclude. |
 

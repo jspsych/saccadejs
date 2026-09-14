@@ -75,7 +75,7 @@ far below any photosensitivity threshold.
 
 ## What limits accuracy
 
-In rough order of how much they matter:
+The main ones:
 
 1. **Head movement after calibration.** The fitted map assumes the head pose that was there
    during calibration.

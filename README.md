@@ -1,12 +1,10 @@
 # saccade.js
 
 Webcam eye tracking in the browser, built for [jsPsych](https://www.jspsych.org): MediaPipe
-face landmarks → a small ONNX eye-embedding model → a per-participant ridge calibration, at
-30 fps on WebGPU.
+face landmarks → a small ONNX eye-embedding model → a per-participant ridge calibration.
 
 A screen→webcam timing loopback measures the display and camera lag that JavaScript cannot see,
-so gaze samples line up with the experiment clock. That measurement is checked against a
-hardware reference.
+so gaze samples line up with the experiment clock.
 
 The core (`@saccadejs/core`) has no jsPsych dependency.
 

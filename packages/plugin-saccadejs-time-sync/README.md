@@ -114,15 +114,6 @@ the verdict yourself:
 }
 ```
 
-## How much of this can you trust?
-
-The loopback measures display lag and camera lag as one number, anchored on photons. It has been
-checked against an external hardware clock — a photodiode taped to the screen and an LED in the
-webcam's view on an RP2040, relaying screen edges to the camera after a known delay — so the
-residual after applying the correction is zero-mean, with a spread set by the camera's exposure
-window (up to half a frame). See the
-[timing guide](https://saccade.jspsych.org/guides/timing-and-synchrony/) for the details.
-
 ## License
 
 MIT

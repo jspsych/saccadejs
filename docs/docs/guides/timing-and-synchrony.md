@@ -49,9 +49,6 @@ Each trial also carries a `saccade_timing` object recording what was applied:
 a display latency from a spec sheet or your own measurement. Processing time is already excluded
 too, because `t` is a capture time rather than the time the prediction became available.
 
-What is left after the correction is about half a camera exposure plus one display refresh,
-roughly ±15 to 20 ms on typical hardware.
-
 ## Reading the verdict
 
 | What you see | What it means |
