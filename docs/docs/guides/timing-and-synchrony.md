@@ -7,75 +7,100 @@ description: When to run the time-sync trial, what the measured offset means, an
 
 # Timing and synchrony
 
-A camera frame's timestamp is not when the light left the screen. The display and the camera
-each add delay, and the amount depends on the participant's hardware. The `saccade-time-sync` trial measures that delay for each participant and subtracts
-it from every gaze timestamp.
+This page is for studies where _when_ someone looked matters, not only _where_. For example: how
+long after a face appears does the participant look at it? Which picture were they looking at
+when a word was spoken?
 
-## Run it once per session
+## The problem
+
+Suppose a picture appears on screen at exactly 1,000 ms, and the participant's eyes jump to it
+at 1,200 ms. You would like the gaze data to say 1,200. Without correction, it will say something
+later, such as 1,280, because of two delays neither you nor the browser can see directly:
+
+- **The display delay.** The monitor takes some time to actually show a new image after the
+  browser draws it.
+- **The camera delay.** The camera takes some time to capture a frame and hand it to the
+  browser, and the time the browser stamps on it can be later than the moment the image was
+  captured.
+
+Together these are the _lag_. It depends on the participant's monitor, camera, browser, and
+computer, so a value measured on your own machine does not carry over to theirs.
+
+The `saccade-time-sync` trial measures the lag on each participant's own setup, and saccade.js
+then subtracts it from every gaze timestamp recorded afterwards.
+
+## Adding it to your timeline
 
 ```js
-timeline.push({ type: jsPsychSaccadePreview });     // camera first
-timeline.push({ type: jsPsychSaccadeTimeSync });    // then measure
+timeline.push({ type: jsPsychSaccadePreview });     // start the camera first
+timeline.push({ type: jsPsychSaccadeTimeSync });    // then measure the lag
 timeline.push({ type: jsPsychSaccadeCalibrate });
 ```
 
-It needs a running camera, so it must come after `saccade-preview`. It does not need a
-calibration, so put it before `saccade-calibrate` and get the flashing out of the way while the
-participant is still in setup mode. Fifteen seconds is the default. See
-[How it works](how-it-works) for what happens during those fifteen seconds.
-
-The lag is specific to the participant's screen, camera, browser and room, so a value measured
-on your own machine does not transfer.
+It needs the camera to be running, so it goes after `saccade-preview`. It does not need
+calibration, so it can go before `saccade-calibrate`, which gets the screen switching out of the
+way while the participant is still in setup. Run it once per session. It takes fifteen seconds by
+default. [How it works](how-it-works#measuring-the-screen-to-camera-delay) describes what happens
+during those fifteen seconds.
 
 ## What you get
 
-The trial records `lag_ms`, the measured display plus camera delay. With `apply_offset: true`
-(the default) it is handed to the extension, and every later trial's `saccade_data` timestamps
-have it subtracted automatically. Nothing else to do.
+The trial saves the measured lag as `lag_ms`. By default, it also hands the lag to the extension,
+and every later trial's `saccade_data` has it subtracted from `t` automatically. There is nothing
+else you need to do.
 
-Each trial also carries a `saccade_timing` object recording what was applied:
+To check what happened, every trial that records gaze also carries a `saccade_timing` object:
 
-| Field | Meaning |
+| Field | What it tells you |
 | --- | --- |
-| `offset_ms` | The lag subtracted from `t`, or `null` if time sync never ran. |
-| `corrected` | Whether the subtraction happened. |
-| `clock` | Where camera timestamps came from. `"captureTime"` is the good one. |
-| `dropped_frames` | Camera frames the browser reported dropping during the trial. |
-| `fps` | Frame rate at the end of the trial. |
-| `smoothing_frames` | Frames averaged per estimate. |
-| `trial_start` | The `performance.now()` value `t` counts from. Subtract it from your own timestamps to put them on the same axis. |
+| `offset_ms` | The lag that was subtracted from `t`, in ms. `null` if time sync never ran. |
+| `corrected` | `true` if the lag was subtracted. |
+| `clock` | Where the camera timestamps came from. `"captureTime"` is what you want; see [Reading the verdict](#reading-the-verdict). |
+| `dropped_frames` | How many camera frames the browser reported dropping during the trial. |
+| `fps` | Camera frames per second the tracker was processing at the end of the trial. |
+| `smoothing_frames` | How many frames were averaged into each estimate (1 unless you changed it). |
+| `trial_start` | The moment `t` counts from, as a `performance.now()` value. Use it to line up your own events; see [Timing your own events](#timing-your-own-events). |
 
-**Do not correct twice.** `lag_ms` already contains the display latency, so do not also subtract
-a display latency from a spec sheet or your own measurement. Processing time is already excluded
-too, because `t` is a capture time rather than the time the prediction became available.
+**Do not correct twice.** `lag_ms` already includes the display delay. Do not also subtract a
+display delay from the monitor's spec sheet or a measurement of your own. The time saccade.js
+spends processing each frame is also already excluded, because `t` is when the frame was
+captured, not when the estimate was ready.
 
 ## Reading the verdict
 
+The time-sync trial also saves a `verdict`: whether the measurement held together well enough
+to trust.
+
 | What you see | What it means |
 | --- | --- |
-| `verdict: "OK"` | The measurement held together, and it is applied automatically. |
-| `verdict: "UNRELIABLE"`, low `peak_d` | The camera did not clearly see the screen change. A dim monitor, auto-exposure or a blocked lens can cause it. |
-| `verdict: "UNRELIABLE"`, wide `plateau_width_ms` | Too few edges pinned the lag down. A longer `duration` gives more. |
-| `verdict: "UNRELIABLE"`, `halves_ms` far apart | The lag changed during the run. |
-| `verdict: "INCONCLUSIVE"` | No usable camera samples, or fewer than two edges. See `reason`. |
-| `clock_source: "callback"` | The browser supplied no capture timestamps. The number is not a real measurement. |
+| `verdict: "OK"` | The measurement is trustworthy, and it has been applied. |
+| `verdict: "UNRELIABLE"`, and `peak_d` is low | The camera did not clearly see the screen change brightness. A dim monitor, the camera automatically adjusting its exposure, or something blocking the lens can cause this. |
+| `verdict: "UNRELIABLE"`, and `plateau_width_ms` is wide | There were not enough brightness changes to pin down the lag. A longer run (the `duration` parameter) gives more. |
+| `verdict: "UNRELIABLE"`, and the two `halves_ms` values are far apart | The first and second halves of the run gave different answers, so the lag changed while it was being measured. |
+| `verdict: "INCONCLUSIVE"` | No usable camera frames, or fewer than two brightness changes seen. The `reason` field says which. |
+| `clock_source: "callback"` | The browser did not report when frames were captured, so the number is not a real measurement. See [Browser compatibility](browser-compatibility#capture-timestamps). |
 
-Setting `require_ok: true` reruns an `UNRELIABLE` measurement once. The trial continues either
-way, so exclusion is your decision to make in analysis.
+Setting `require_ok: true` makes the trial try once more after an `UNRELIABLE` result. Either way
+the experiment continues afterwards, so whether to exclude a participant is a decision you make
+in your analysis.
 
-## Exclusion criteria
+## Deciding which trials to exclude
 
-`saccade_timing` carries what you need to exclude trials whose timestamps you cannot trust. Two
-checks follow from the method: the correction was applied, and the browser supplied capture
-timestamps. The frame rate and dropped-frame cutoffs depend on your design and have not been
-measured for saccade.js, so the numbers below are placeholders. Set them from pilot data and fix
-them before you collect:
+`saccade_timing` holds what you need to find trials whose timestamps you should not trust. Two
+checks follow directly from how the correction works:
+
+- the lag was subtracted (`corrected` is `true`), and
+- the browser reported real capture times (`clock` is `"captureTime"`).
+
+You may also want to exclude trials where the tracker ran slowly or dropped many frames. How slow
+is too slow depends on your design, and has not been measured for saccade.js, so the numbers
+below are placeholders. Choose your own from pilot data, and fix them before you collect:
 
 ```js
-const minFps = 20;           // placeholder
-const maxDroppedShare = 0.05; // placeholder
+const minFps = 20;            // placeholder: choose from your pilot data
+const maxDroppedShare = 0.05; // placeholder: choose from your pilot data
 
-const bad = (d) =>
+const untrustworthy = (d) =>
   !d.saccade_timing.corrected ||
   d.saccade_timing.clock !== "captureTime" ||
   d.saccade_timing.fps < minFps ||
@@ -84,11 +109,12 @@ const bad = (d) =>
 
 ## Timing your own events
 
-`t` counts from `saccade_timing.trial_start`, a `performance.now()` value stamped when the trial's
-display loads. A stimulus the plugin draws at the start of the trial is at `t` ≈ 0.
+`t` counts from the start of the trial, which saccade.js records as `saccade_timing.trial_start`.
+Anything shown at the very start of the trial is at `t` = 0, give or take a frame.
 
-For anything later in the trial, such as a spoken word or a second display change, take
-`performance.now()` at the moment you make the change. Record it in the trial's own data,
+For anything that happens later in the trial, such as a word played after one second, or a
+picture that changes partway through, you need to record when it happened yourself. Do this by
+calling `performance.now()` at the moment you make the change, and saving it in the trial data
 relative to `trial_start`:
 
 ```js
@@ -100,38 +126,48 @@ timeline.push({
   stimulus: "<img id='scene' src='scene.png'>",
   extensions: [{ type: jsPsychExtensionSaccade }],
   on_load: () => {
+    // Play the word one second into the trial, and note exactly when.
     jsPsych.pluginAPI.setTimeout(() => {
       word.play();
       wordOnset = performance.now();
     }, 1000);
   },
   on_finish: (data) => {
+    // Convert to the same scale as t in saccade_data.
     data.word_onset = wordOnset === null ? null : wordOnset - data.saccade_timing.trial_start;
   },
 });
 ```
 
-`word_onset` and every `t` in `saccade_data` are now on one axis.
+Now `word_onset` and every `t` in `saccade_data` are on the same timeline. If `word_onset` is
+`1004`, a gaze row with `t: 1350` was recorded 346 ms after the word started.
 
-**Record the time, not the delay.** `data: { word_onset: 1000 }` records the plan. A timer can
-fire late while the tracker is busy with a camera frame, and the data would not show it.
+A few things to keep in mind:
 
-**Do not subtract `offset_ms`.** It moves gaze back to when the screen changed. Your events
-already happened at that time.
-
-**Sound has its own latency.** The time-sync trial measures the display and the camera, not the
-speakers. If audio timing matters, record `AudioContext.outputLatency` beside the onset.
-
-**Expect about a frame of slack.** A display change reaches the screen on a later frame, so an
-onset stamped this way is good to about one refresh, 17 ms at 60 Hz. That is finer than the 33 ms
-between gaze samples at 30 fps.
+- **Record when it happened, not when you planned it.** Writing `data: { word_onset: 1000 }`
+  would record the plan. Timers can fire late, especially while the tracker is busy processing a
+  camera frame, and the data would never show it. Calling `performance.now()` records the truth.
+- **Do not subtract `offset_ms` from your own events.** That correction moves gaze timestamps
+  back to when things happened on screen. Your events are already stamped with when they happened.
+- **Sound has its own delay.** The time-sync trial measures the screen and the camera, not the
+  speakers. If the timing of audio matters to your design, also record
+  `AudioContext.outputLatency` alongside the onset.
+- **Expect about one screen refresh of slack.** A change you make in code appears on the next
+  screen refresh, so an onset recorded this way is accurate to about one refresh: 17 ms on a
+  typical 60 Hz monitor. That is finer than the 33 ms between gaze samples from a 30 frames per
+  second camera, so it is rarely the limiting factor.
 
 ## Gaze-contingent designs
 
-If you change the display in response to gaze, the number that matters is how stale an estimate
-is by the time you can act on it: `frame.time.emit - frame.time.capture`, plus your own render
-and the display latency again on the way out. Expect a closed loop well over 100 ms. Averaging
-frames adds to it, so leave `smoothing_frames` at its default of 1 and accept a noisier estimate.
+In a gaze-contingent design, the display changes in response to where the participant is looking,
+for example revealing a word only when the eyes reach it. Here what matters is how old a gaze
+estimate already is by the time your code can act on it.
 
-Every field listed here is documented in the
+That age is `frame.time.emit - frame.time.capture` (from the [core API](../reference/core-api#frametime)),
+plus the time your own code takes to redraw, plus the display delay again on the way back to
+the participant. Expect the full loop, from eye movement to changed screen, to take well over
+100 ms. Averaging frames makes it longer, so leave `smoothing_frames` at its default of 1 and
+accept a slightly noisier estimate.
+
+Every field on this page is documented in the
 [`saccade-time-sync` reference](../reference/plugin-time-sync).

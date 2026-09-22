@@ -7,9 +7,23 @@ description: Fit the per-participant map from eye appearance to screen position.
 
 # `saccade-calibrate`
 
-Shows a sequence of targets, collects eye embeddings at each, and fits the regression that turns
-an eye appearance into a point on this participant's screen. No gaze estimate exists until this
-trial finishes. Thirteen points at the defaults takes about twenty seconds.
+Calibration teaches the tracker how this participant's eyes look when they are looking at
+different places on their screen. Until it has run, the tracker cannot estimate gaze at all.
+
+**What the participant sees:** a dot appears at one position after another. At each one, a ring
+shrinks onto the dot for one second while the participant's eyes settle on it, then turns green
+for half a second while the tracker records. With the default thirteen positions, the whole trial
+takes about twenty seconds.
+
+At the end, saccade.js fits an equation that turns the tracker's description of the eyes into a
+screen position (a ridge regression; [How it works](../guides/how-it-works#calibration-and-validation)
+has the details).
+
+```js
+timeline.push({ type: jsPsychSaccadeCalibrate });
+```
+
+Follow it with [`saccade-validate`](plugin-validate) to measure how well calibration worked.
 
 | | |
 | --- | --- |
@@ -18,39 +32,49 @@ trial finishes. Thirteen points at the defaults takes about twenty seconds.
 | Trial type | `saccade-calibrate` |
 | Requires | the [extension](extension) and a running camera, so it comes after [`saccade-preview`](plugin-preview) |
 
-```js
-timeline.push({ type: jsPsychSaccadeCalibrate });
-```
+## Tips for participants
+
+Ask participants to:
+
+- move their eyes to each dot, not their head,
+- sit the way they will sit for the rest of the experiment, and stay that way.
+
+The calibration only holds for the head position it was recorded in. If a participant leans in
+or slumps afterwards, accuracy suffers.
 
 ## Parameters
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `calibration_points` | `[number, number][]` | 13 points: 3 × 3 at 5/50/95% plus four at 27.5/72.5% | `[x, y]` pairs as a percentage of viewport width and height. |
-| `calibration_mode` | `"view" \| "click"` | `"view"` | `"view"` captures automatically after the settle interval; `"click"` waits for the participant to click each point. |
-| `repetitions_per_point` | `number` | `1` | How many times the whole sequence of points is repeated. |
-| `randomize_calibration_order` | `boolean` | `false` | Shuffle the order on each repetition. |
-| `time_to_saccade` | `number` | `1000` | Settle time in ms before capture starts. The ring shrinks onto the dot over this interval. |
-| `time_per_point` | `number` | `500` | Capture time in ms at each point. The ring turns green. |
-| `point_size` | `number` | `20` | Diameter of the dot in pixels. The ring is four times this size. |
-| `lambda` | `number \| null` | `null` | Ridge penalty. `null` uses `lambdaFor(n)`: 3 for nine points or fewer, otherwise 1. |
-| `clear_previous` | `boolean` | `true` | Discard calibration points collected earlier in the experiment before starting. |
+| `calibration_points` | `[number, number][]` | 13 points (see below) | Where to put the dots, as `[x, y]` pairs in percent of the window's width and height. `[50, 50]` is the center; `[5, 95]` is near the bottom-left corner. |
+| `calibration_mode` | `"view" \| "click"` | `"view"` | `"view"` records automatically after the settle time. `"click"` waits for the participant to click each dot. |
+| `repetitions_per_point` | `number` | `1` | How many times to go through the whole set of dots. |
+| `randomize_calibration_order` | `boolean` | `false` | Show the dots in a random order, reshuffled on each repetition. |
+| `time_to_saccade` | `number` | `1000` | How long to wait at each dot before recording, in ms, so the eyes have time to get there. The ring shrinks onto the dot during this time. |
+| `time_per_point` | `number` | `500` | How long to record at each dot, in ms. The ring is green during this time. |
+| `point_size` | `number` | `20` | Diameter of the dot, in pixels. The ring is four times this size. |
+| `lambda` | `number \| null` | `null` | How strongly to keep the fit from over-fitting a small number of dots (the ridge penalty). `null` chooses automatically: 3 for nine dots or fewer, 1 for more. Most studies should leave it alone. |
+| `clear_previous` | `boolean` | `true` | Throw away any calibration from earlier in the experiment before starting. Set `false` to add more dots to an existing calibration. |
+
+The default thirteen dots are a 3 × 3 grid near the edges and center (at 5%, 50% and 95% across
+and down), plus four more between them (at 27.5% and 72.5%).
 
 ## Data
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `calibration_points_px` | `[number, number][]` | The targets shown, in the order they appeared, in viewport **pixels**. The `calibration_points` parameter stays in percent. |
-| `n_points` | `number` | The number of distinct targets used. |
-| `repetitions_per_point` | `number` | How many times the sequence was repeated. |
-| `lambda` | `number` | The ridge penalty the fit used, or `null` if the fit failed. |
-| `weighting` | `string` | How the fit weighted its rows: `"model"` (the model's own per-frame weights), `"head"` (a `calHead` given to the tracker), or `"uniform"` (unweighted). `null` if the fit failed. |
-| `rt` | `number` | Milliseconds from trial start to the end of calibration. |
+| `calibration_points_px` | `[number, number][]` | The dots that were shown, in the order they appeared, in **pixels** on this participant's screen. (The `calibration_points` parameter is in percent.) |
+| `n_points` | `number` | How many different dot positions were used. |
+| `repetitions_per_point` | `number` | How many times the set of dots was shown. |
+| `lambda` | `number` | The ridge penalty used, or `null` if calibration failed. |
+| `weighting` | `string` | Whether blinks and other poor frames counted for less in the fit: `"model"` (weighted by the eye model's own quality rating), `"head"` (weighted by a separate rating you supplied to the tracker), or `"uniform"` (every frame counted equally). `null` if calibration failed. Report this: a weighted and an unweighted calibration are different methods. |
+| `rt` | `number` | Milliseconds from the start of the trial to the end of calibration. |
 
 ## Example
 
+A denser 25-dot grid, in random order, with a little more time at each dot:
+
 ```js
-// A 25-point grid in random order, with longer settle and capture times.
 timeline.push({
   type: jsPsychSaccadeCalibrate,
   calibration_points: [
@@ -66,5 +90,4 @@ timeline.push({
 });
 ```
 
-Ask participants to move their eyes rather than their head, and to hold the pose they will use
-for the rest of the experiment. Then [validate](plugin-validate).
+At 1.8 seconds per dot, this takes about 45 seconds.

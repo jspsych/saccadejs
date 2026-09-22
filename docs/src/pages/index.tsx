@@ -97,15 +97,15 @@ function Hero(): React.ReactElement {
               webcam.
             </h1>
             <p className={styles.heroLede}>
-              Attach it to a jsPsych trial and that trial's data gains a gaze
-              sample for every camera frame. The core library also runs on its
-              own.
+              Add it to any jsPsych trial, and that trial's data records where
+              the participant looked, once for every frame of webcam video. It
+              also works without jsPsych.
             </p>
             <p className={styles.heroNote}>
-              The gaze model ships pretrained, so nothing is trained in the
-              browser. Calibration fits a ridge regression to each participant
-              in about twenty seconds, and a validation trial measures the
-              error. No video leaves the participant's computer.
+              Each participant follows a dot for about twenty seconds to
+              calibrate, then a second set of dots measures how accurate the
+              tracker is for them. All the processing happens in the
+              participant's browser: no video leaves their computer.
             </p>
           </div>
         </div>
@@ -135,9 +135,9 @@ function Hero(): React.ReactElement {
                 <h2 className={styles.pathCardTitle}>Integrates with jsPsych</h2>
               </div>
               <p className={styles.pathCardDesc}>
-                saccade.js ships a jsPsych extension: attach it to any trial
-                and that trial records gaze. One plugin handles each setup step:
-                camera, calibration, validation and timing.
+                Setup steps (camera, timing, calibration, accuracy check) are
+                ready-made plugins. Recording gaze during your own trials takes
+                one extra line per trial.
               </p>
               <div className={styles.pathCardActions}>
                 <Link className={styles.pathLink} to="/getting-started">
@@ -161,31 +161,31 @@ function Features(): React.ReactElement {
           <TargetIcon className={styles.featureIcon} />
           <h2 className={styles.featureTitle}>Gaze samples</h2>
           <p className={styles.featureBody}>
-            A trial with the extension attached records one <code>x</code>,{" "}
-            <code>y</code>, <code>t</code> row per camera frame in which a face
-            was found. Coordinates are viewport pixels in the participant's own
-            window. The position of any element you name is recorded with them,
-            so samples can be tested against it directly.
+            Each camera frame with a face in it adds one row: an{" "}
+            <code>x</code> and <code>y</code> position in pixels, and a time{" "}
+            <code>t</code>. Name the elements on your page, such as two
+            pictures, and their positions are recorded too, so you can count
+            which one each look landed on.
           </p>
         </div>
         <div>
           <GridIcon className={styles.featureIcon} />
           <h2 className={styles.featureTitle}>Calibration and validation</h2>
           <p className={styles.featureBody}>
-            Calibration fits a ridge regression on thirteen points. Validation
-            measures the result on nine points the calibration did not use, and
-            reports the median error in viewport units, which is comparable
-            across screen sizes.
+            Calibration takes about twenty seconds, with thirteen dots. A
+            second set of nine dots, mostly in new positions, then measures the
+            typical error as a fraction of the screen, so accuracy can be
+            compared across participants with different screens.
           </p>
         </div>
         <div>
           <ClockIcon className={styles.featureIcon} />
           <h2 className={styles.featureTitle}>Timing correction</h2>
           <p className={styles.featureBody}>
-            A camera frame arrives some time after the screen changed, and the
-            delay differs from machine to machine. The{" "}
-            <code>saccade-time-sync</code> plugin measures it for each
-            participant and subtracts it from every gaze timestamp.
+            A webcam sees the screen change a little late, and how late differs
+            from one computer to the next. The{" "}
+            <code>saccade-time-sync</code> plugin measures this delay on each
+            participant's computer and corrects every gaze timestamp for it.
           </p>
         </div>
       </div>
@@ -218,9 +218,9 @@ function InYourTimeline(): React.ReactElement {
           <p className={styles.eyebrow}>Example</p>
           <h2 className={styles.timelineTitle}>A minimal experiment</h2>
           <p className={styles.timelineBody}>
-            The setup steps are ordinary jsPsych trials, placed in the timeline
-            wherever they are needed. Recording is enabled one trial at a time
-            by attaching the extension, so any plugin can present the stimulus.
+            The setup steps are ordinary jsPsych trials that go in your
+            timeline like any other. To record gaze during a trial, add the
+            extension to it. The trial itself can use any plugin.
           </p>
           <Link className="button button--primary" to="/getting-started">
             Getting started →
@@ -238,12 +238,12 @@ const PACKAGES = [
   {
     name: "@saccadejs/core",
     to: "/reference/core-api",
-    what: "Tracker, calibration, validation, timing loopback. No jsPsych dependency.",
+    what: "The eye tracker itself, for use with or without jsPsych.",
   },
   {
     name: "@saccadejs/extension",
     to: "/reference/extension",
-    what: "Records a gaze sample per camera frame during any trial.",
+    what: "Records gaze during any jsPsych trial.",
   },
   {
     name: "@saccadejs/plugin-preview",
@@ -253,22 +253,22 @@ const PACKAGES = [
   {
     name: "@saccadejs/plugin-performance",
     to: "/reference/plugin-performance",
-    what: "Measures the effective frame rate and can exclude machines that are too slow.",
+    what: "Checks the tracker runs fast enough on this computer, and can turn away slow ones.",
   },
   {
     name: "@saccadejs/plugin-time-sync",
     to: "/reference/plugin-time-sync",
-    what: "Measures screen-to-camera lag and applies it to gaze timestamps.",
+    what: "Measures the screen-to-camera delay and corrects gaze timestamps for it.",
   },
   {
     name: "@saccadejs/plugin-calibrate",
     to: "/reference/plugin-calibrate",
-    what: "Calibration trial.",
+    what: "Calibrates the tracker for each participant.",
   },
   {
     name: "@saccadejs/plugin-validate",
     to: "/reference/plugin-validate",
-    what: "Validation trial.",
+    what: "Measures how accurate the calibration is.",
   },
 ];
 
@@ -276,12 +276,12 @@ const REQUIREMENTS = [
   {
     what: "A webcam",
     detail:
-      "on a laptop or desktop, and a page served over https:// or localhost.",
+      "on a laptop or desktop, and a page served over https:// or from localhost.",
   },
   {
     what: "WebGPU",
     detail:
-      "for full frame rate. Without it the model runs on WebAssembly, more slowly.",
+      "in the browser, so the tracker can use the graphics card. Without it, it still runs, more slowly.",
   },
   {
     what: "About 25 MB",

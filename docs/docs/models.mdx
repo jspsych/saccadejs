@@ -9,17 +9,21 @@ import ModelReleases from "@site/src/components/ModelReleases";
 
 # The model
 
-saccade.js turns an eye image into an embedding with a small ONNX model, and your calibration
-turns that embedding into a gaze point. The model is the part that stays fixed across
-participants, so it is the part a study needs to be able to name.
+saccade.js estimates gaze in two stages. First, a neural network looks at a small picture of the
+participant's eyes and turns it into a list of numbers describing how the eyes look (an
+_embedding_). Then the participant's calibration turns those numbers into a point on the screen.
+[How it works](/guides/how-it-works) walks through the whole process.
+
+The calibration is different for every participant. The network is the same for everyone: it was
+trained once and is downloaded as a single file. That makes it the part of your method you need
+to be able to name precisely in a paper, and this page is about how to do that.
 
 ## Releases
 
 <ModelReleases />
 
-Every version above is served from this site at a versioned URL. That URL is the one worth
-citing in a methods section and the one worth pointing a running study at, because it resolves
-to the same bytes tomorrow as it does today.
+Each version above has its own permanent web address. Use that address in your methods section,
+and point your study at it, because it will always serve exactly the same file.
 
 ```js
 const tracker = new SaccadeTracker({
@@ -29,103 +33,117 @@ const tracker = new SaccadeTracker({
 });
 ```
 
-For real studies, [hosting the model yourself](/guides/hosting-the-assets) is safer still:
-download the versioned file once and serve it from your own origin, and nothing that happens
-here can affect your study.
+For a real study, it is safer still to [host the model yourself](/guides/hosting-the-assets):
+download the versioned file once and serve it from your own server. Then nothing that happens to
+this site can affect your study.
 
-To check a file you downloaded yourself, compare it against the hash in the table above with
-`shasum -a 256 eye_embedding.onnx` (macOS/Linux) or
-`Get-FileHash eye_embedding.onnx -Algorithm SHA256` (PowerShell).
+The table lists a fingerprint (a SHA-256 hash) for each file. To confirm that a file you
+downloaded is exactly the published one, compute its fingerprint and compare:
 
-### How versions are numbered
+- macOS or Linux: `shasum -a 256 eye_embedding.onnx`
+- Windows PowerShell: `Get-FileHash eye_embedding.onnx -Algorithm SHA256`
 
-The model version is **independent of the `@saccadejs/core` package version** — they change
-for different reasons, and one does not imply the other.
+### What the version numbers mean
 
-- **Patch/minor** — new weights, identical interface. Drop-in: the same crop, the same input
-  range, the same outputs. Accuracy may differ; nothing else does.
-- **Major** — the preprocessing contract or the model's inputs and outputs changed. Gaining
-  or losing the `cal_weight` output counts, because it flips every calibration between
-  weighted and unweighted without saying so.
+The model's version number is separate from the version of the `@saccadejs/core` package. The
+two change for different reasons, and a new package version does not mean a new model.
 
-### How long a URL lasts
+- **A minor or patch release** (for example, 1.0.0 to 1.1.0) is a retrained model that works
+  exactly the same way: same input, same outputs. You can swap it in without changing anything
+  else. Its accuracy may be different.
+- **A major release** (for example, 1.x to 2.0.0) changes how the model is used: how the eye
+  picture is prepared, or what goes in and comes out. Adding or removing the frame-quality output
+  (`cal_weight`, described below) counts as a major change, because it silently switches every
+  calibration between weighted and unweighted.
 
-Every version listed here stays up. Once a versioned URL is published we keep serving it, on
-the assumption that it is already written into someone's methods section. The files are ~20 MB
-each and sit on GitHub's infrastructure alongside this site, so there is no pressure to prune
-them, and the build fails if a published version ever goes missing.
+### How long each version stays available
 
-That is a statement of intent rather than a guarantee. A study that must still resolve its
-model in ten years is better served by infrastructure its authors control: download the
-versioned file, serve it from your own origin, and record the hash. The same would be true of
-any host.
+Every version listed here stays online. Once a versioned address is published, we assume someone
+has already written it into a methods section, and we keep serving it. The files are about 20 MB
+each and are hosted on GitHub alongside this site, so there is no pressure to remove them, and
+the site's build fails if a published version ever goes missing.
 
-Models are built and gated in the
-[eye-tracking](https://github.com/jspsych/eye-tracking) repository, which trains the network
-and exports the ONNX; this repository ships the result.
+That is a commitment, not a guarantee. If your study must still be able to find its model in ten
+years, keep your own copy: download the versioned file, serve it yourself, and record its
+fingerprint. That advice would be the same for any host.
+
+The models are trained and tested in the
+[eye-tracking](https://github.com/jspsych/eye-tracking) repository, which trains the network and
+exports it; this repository publishes the result.
 
 ## Recording which model you used
 
-The extension does this for you. When the tracker loads the model it hashes the bytes it
-actually received, looks that hash up in the registry that ships with `@saccadejs/core`, and
-adds a single `saccade_model` column to your data:
+The jsPsych extension does this automatically. When the model loads, saccade.js computes the
+fingerprint of the file it actually downloaded, looks it up in the list of published releases,
+and adds a `saccade_model` column to your data:
 
-| value                 | meaning                                                                                                                         |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `eye-embedding@1.0.0` | the loaded bytes hash-matched this published release                                                                            |
-| `sha256:f4669a8398d9` | a model that is not a published release, identified by its hash                                                                 |
-| `unverified`          | the hash could not be computed (not reachable in a working experiment — the camera needs the same secure context the hash does) |
+| Value | What it means |
+| --- | --- |
+| `eye-embedding@1.0.0` | The file matched this published release exactly. |
+| `sha256:f4669a8398d9` | The file is not a published release. The value is the start of its fingerprint, so you can still identify it. |
+| `unverified` | The fingerprint could not be computed. In practice this does not happen, because the browser only allows it on secure pages, which the camera requires anyway. |
 
-A version here is not copied from a URL or a filename: it is recorded **because the bytes
-matched**. That is why one column is enough, and why a custom model still identifies itself
-rather than reading `unknown`.
+The version is not taken from the file name or the URL. It is recorded **because the file itself
+matched**, which is why one column is enough, and why a custom model still identifies itself
+rather than showing `unknown`.
 
-Only trials that run after the model loads carry it — the camera, and so the model, is not
-touched until your first `saccade-preview` trial or your own `start()` call. Trials before
-that have no gaze data either.
+Only trials that run after the model loads have this column. The model is not loaded until your
+first `saccade-preview` trial (or your own call to `start()`), and trials before that have no gaze
+data either.
 
-If you want the full detail — hash, contract, the URL it came from, and what the model
-actually turned out to be — ask the tracker:
+For the full details, ask the tracker directly:
 
 ```js
 const id = jsPsych.extensions.saccade.getTracker().getModelIdentity();
 // {
 //   sha256: "5a1a111e…", version: "1.0.0", contract: 1, url: "…",
 //   resolvedFrom: "registry",
-//   dim: 128,          // the embedding width this model produced
-//   emitsWeight: true  // whether it carries a per-frame calibration weight
+//   dim: 128,          // how many numbers the model produces per frame
+//   emitsWeight: true  // whether it also rates each frame's quality
 // }
 ```
 
-`dim` and `emitsWeight` come from a real inference at load rather than from the registry, so
-they are correct for an unrecognised model as well as a published one.
+`dim` and `emitsWeight` are found by actually running the model once when it loads, not by
+looking them up. So they are correct for an unfamiliar model as well as a published one.
 
-How your calibration was weighted belongs to the _fit_, not to the model, so it is recorded
-separately. `saccade-calibrate` writes a `weighting` column — `"model"`, `"head"` or
-`"uniform"` — and `fitCalibration()` returns the same value.
+Whether calibration used the frame-quality ratings is a property of the calibration, not the
+model, so it is recorded separately: `saccade-calibrate` saves a `weighting` column with the value
+`"model"`, `"head"` or `"uniform"`, and `fitCalibration()` returns the same value.
 
 ## Using your own model
 
-`modelUrl` selects a build of the eye-embedding model. A replacement must take the same eye
-crop, built the same way. Its embedding can be any length.
+This section is for people who have trained their own eye model and want saccade.js to use it.
+Set `modelUrl` to your model file. It must accept exactly the same eye picture as the published
+model. The number of values it produces can be anything.
 
-**The input is exact.** The model receives a 144 × 36 grayscale strip spanning both eyes, as
-float32 `[1, 36, 144, 1]` with values 0–255. Those pixels come from one pipeline: a crop from
-fixed MediaPipe landmarks, BT.601 grayscale, an OpenCV-compatible bilinear resize, then CLAHE
-at clip 2.0 with 8 × 8 tiles, in that order. A model expecting a different shape fails to
-load. A model trained on differently built crops of the same shape loads and returns
-nonsense, and saccade.js has no way to detect it.
+**The input must match exactly.** The model receives a 144 × 36 grayscale strip spanning both
+eyes, as a float32 tensor of shape `[1, 36, 144, 1]` with values from 0 to 255. saccade.js builds
+that strip in one fixed way, in this order:
 
-**The outputs are not.** The first is the embedding. Its length is whatever your model
-produces — the ridge fit and the smoothing mean read the width from the embeddings — and it
-must be the same on every frame of a session.
+1. crop around fixed MediaPipe face landmarks,
+2. convert to grayscale (BT.601),
+3. resize with OpenCV-compatible bilinear interpolation,
+4. equalize contrast with CLAHE (clip limit 2.0, 8 × 8 tiles).
 
-The second output is optional. Name it `cal_weight` and shape it `[1, 1]`, and saccade.js
-reads it as that frame's quality score in [0, 1], then weights the smoothing mean and the
-calibration fit by it. A model without one is calibrated unweighted.
+A model that expects a different shape will fail to load, which is easy to notice. A model that
+expects the same shape but was trained on pictures prepared differently will load and run and
+produce nonsense, and saccade.js has no way to detect that. Check your training preprocessing
+against the list above.
 
-Three things throw at load, before any participant data exists: an input shape saccade.js
-cannot feed, an embedding width that changes mid-session, and a `cal_weight` outside [0, 1].
-Two things do not. saccade.js cannot tell what preprocessing your model saw in training, and
-it does not compare the `contract` number in the table against the one it implements — that
-number is recorded, not checked.
+**The outputs are flexible.** The first output is the embedding. It can be any length, as long as
+it is the same length on every frame of a session. saccade.js reads the length from the model.
+
+A second output is optional. If your model has an output named `cal_weight` with shape `[1, 1]`,
+saccade.js reads it as a quality score for each frame between 0 and 1, and uses it to weight both
+the averaging of frames and the calibration. Without it, every frame counts equally.
+
+**What saccade.js checks.** Three problems stop it when the model loads, before any participant
+data is collected:
+
+- an input shape it cannot provide,
+- an embedding whose length changes during a session,
+- a `cal_weight` outside the range 0 to 1.
+
+Two things it cannot check. It cannot tell how your training pictures were prepared. And it does
+not compare the `contract` number shown in the release table with the one it implements; that
+number is recorded, not enforced.

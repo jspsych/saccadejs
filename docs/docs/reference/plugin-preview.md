@@ -7,10 +7,21 @@ description: Start the camera, load the model, and let the participant position 
 
 # `saccade-preview`
 
-Prompts for the camera, downloads the model, and shows the participant the mirrored camera
-image, the eye crop the model sees, a face-found indicator and the current frame rate. Put it
-early in the timeline: this is where the download happens, behind a progress bar that names
-each stage.
+The first saccade.js trial in any experiment. It:
+
+1. asks the participant for permission to use their camera,
+2. downloads the eye-tracking model (about 20 MB), with a progress bar,
+3. shows the participant their camera image so they can get into a good position.
+
+While positioning, the participant sees their mirrored camera image, a close-up of their eyes
+exactly as the tracker sees them, an indicator that shows whether their face is being found, and the
+current frame rate. The **Continue** button enables once their face is found.
+
+Put it early in the timeline. Every other saccade.js trial needs the camera to be running.
+
+```js
+timeline.push({ type: jsPsychSaccadePreview });
+```
 
 | | |
 | --- | --- |
@@ -19,31 +30,27 @@ each stage.
 | Trial type | `saccade-preview` |
 | Requires | the [extension](extension) registered in `initJsPsych` |
 
-```js
-timeline.push({ type: jsPsychSaccadePreview });
-```
-
 ## Parameters
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `instructions` | `HTML string` | positioning advice | Shown beside the preview. |
-| `button_text` | `string` | `"Continue"` | Text of the button that ends the trial. |
-| `show_eye_crop` | `boolean` | `true` | Show the 144 × 36 eye crop the model sees, scaled up. |
-| `require_face` | `boolean` | `true` | Enable the continue button only while a face is being found. |
-| `face_timeout` | `number \| null` | `null` | Milliseconds after which the button enables even if no face has been found. `null` waits indefinitely. |
-| `preview_width` | `number` | `320` | Width of the camera preview, in pixels. |
-| `show_progress` | `boolean` | `true` | Show a progress bar and stage label while the camera, MediaPipe, the landmarker, onnxruntime-web and the eye model load. `false` shows "Starting the camera…" instead. |
+| `instructions` | `HTML string` | advice on positioning | Text shown beside the camera image. |
+| `button_text` | `string` | `"Continue"` | The label on the button that ends the trial. |
+| `show_eye_crop` | `boolean` | `true` | Show the close-up of the eyes (the 144 × 36 pixel strip the model sees), enlarged. |
+| `require_face` | `boolean` | `true` | Only enable the button while a face is being found. |
+| `face_timeout` | `number \| null` | `null` | After this many milliseconds, enable the button even if no face has been found, so the participant is never stuck. `null` waits forever. |
+| `preview_width` | `number` | `320` | Width of the camera image, in pixels. |
+| `show_progress` | `boolean` | `true` | Show a progress bar and a label for each loading stage. `false` shows "Starting the camera…" instead. |
 
 ## Data
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `load_time` | `number` | Milliseconds from trial start to the first camera frame: permission, download and warm-up. |
-| `face_detected` | `boolean` | Whether a face was being found when the participant continued. `false` means they got through on a `face_timeout`. |
-| `fps` | `number` | Frame rate at that moment. |
-| `backend` | `"webgpu" \| "wasm"` | The execution provider that loaded. |
-| `rt` | `number` | Milliseconds from the preview appearing to the button click. |
+| `load_time` | `number` | Milliseconds from the start of the trial to the first camera frame. Includes the time the participant took to grant permission, the download, and start-up. |
+| `face_detected` | `boolean` | Whether a face was being found when the participant pressed the button. `false` means they continued only because `face_timeout` ran out. |
+| `fps` | `number` | Camera frames per second being processed at that moment. |
+| `backend` | `"webgpu" \| "wasm"` | Whether the model is running on the graphics card (`"webgpu"`) or the slower processor path (`"wasm"`). See [Browser compatibility](../guides/browser-compatibility#webgpu-the-difference-that-matters-most). |
+| `rt` | `number` | Milliseconds from the camera image appearing to the button press. |
 
 ## Example
 
@@ -56,21 +63,23 @@ timeline.push({
     appear clearly in the strip below, press continue.</p>
     <p>Nothing is recorded or uploaded. The video stays on your computer.</p>`,
   button_text: "My eyes are visible",
-  face_timeout: 30000,
+  face_timeout: 30000, // let them continue after 30 seconds regardless
   preview_width: 400,
 });
 ```
 
 ## The loading screen
 
-Until the tracker is running the trial shows a progress bar fed by the extension's
-`onSetupProgress`, which reports the stages of `SaccadeTracker.init()` in order: camera
-permission, MediaPipe, the face landmarker, onnxruntime-web, the eye model, warm-up. Only the
-eye model download reports bytes, so it is the only stage with a moving bar —
-`Downloading eye model 12.3 / 20.6 MB` — and the rest step the bar on as they complete.
+Before the camera image appears, the trial shows a progress bar that steps through each part of
+loading, in order: camera permission, MediaPipe (the face finder's software), the face finder
+model, onnxruntime-web (the eye model's software), the eye model, and a warm-up run. Only the eye
+model download reports its size, so it is the only stage where the bar moves smoothly, for example
+`Downloading eye model 12.3 / 20.6 MB`. The other stages move the bar forward as each one finishes.
 
-The continue button appears only once the tracker is initialized, and (with `require_face`)
-enables only while a face is being found.
+The progress comes from the extension's `onSetupProgress`, if you want to build your own loading
+screen.
 
-`backend: "wasm"` on a machine that should have WebGPU can mean an asset URL is wrong. See
-[Hosting the assets](../guides/hosting-the-assets).
+## Troubleshooting
+
+If `backend` is `"wasm"` on a computer that should support WebGPU, one possible cause is a wrong
+asset URL. See [Hosting the assets](../guides/hosting-the-assets).

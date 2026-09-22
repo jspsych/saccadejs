@@ -7,35 +7,50 @@ description: What saccade.js downloads at run time, and how to serve it yourself
 
 # Hosting the assets
 
-Four files reach the participant's browser at run time, about 25 MB in total on a first visit.
-By default they come from a CDN, which is fine for a demo or a pilot. Self-host for real data
-collection, so that a CDN outage or a yanked version cannot end a study mid-collection.
+When a participant starts your experiment, their browser downloads four sets of files that
+saccade.js needs: the eye model and the software that runs it, plus Google's face finder and the
+software that runs that. It adds up to about 25 MB on a first visit. After that the browser keeps
+a copy.
 
-## What gets loaded
+By default these files come from public servers (content delivery networks, or CDNs). That is fine
+for trying things out and for pilots. For real data collection, serve them from your own server
+instead. Then an outage at a public server, or a file being removed from it, cannot stop your
+study partway through collection.
 
-| Asset | Size | Default source | Option |
+## What gets downloaded
+
+| File | Size | Where it comes from by default | Setting to change it |
 | --- | --- | --- | --- |
-| `eye_embedding.onnx` | ~20 MB | Next to the package under a bundler; otherwise jsDelivr | `modelUrl` |
-| onnxruntime-web `.wasm` / `.mjs` | a few MB fetched | jsDelivr | `ortWasmUrl` (a directory) |
-| `@mediapipe/tasks-vision` WebAssembly | ~3 MB | jsDelivr | `mediapipeWasmUrl` (a directory) |
-| `face_landmarker.task` | ~3 MB | Google's hosted model | `faceLandmarkerUrl` |
+| `eye_embedding.onnx`, the eye model | ~20 MB | Bundled with your experiment if you use npm and a bundler; otherwise the jsDelivr CDN | `modelUrl` |
+| onnxruntime-web, which runs the eye model (`.wasm` and `.mjs` files) | a few MB | jsDelivr | `ortWasmUrl` (a folder) |
+| MediaPipe, which runs the face finder (`.wasm` files) | ~3 MB | jsDelivr | `mediapipeWasmUrl` (a folder) |
+| `face_landmarker.task`, the face finder model | ~3 MB | Google's servers | `faceLandmarkerUrl` |
 
-## Self-hosting
+## Serving the files yourself
 
-Copy the files:
+This takes two steps: copy the files into your experiment's folder, then tell saccade.js where
+they are.
+
+**1. Copy the files.** The example below assumes your experiment is served from a folder called
+`public`. Run these commands in your project folder (you need [Node.js](https://nodejs.org)
+installed for `npm`):
 
 ```sh
 npm install @saccadejs/core
 mkdir -p public/assets/ort public/assets/mediapipe
 
+# The eye model
 cp node_modules/@saccadejs/core/models/eye_embedding.onnx public/assets/
+# The software that runs it
 cp node_modules/onnxruntime-web/dist/*.wasm node_modules/onnxruntime-web/dist/*.mjs public/assets/ort/
+# The software that runs the face finder
 cp -r node_modules/@mediapipe/tasks-vision/wasm public/assets/mediapipe/
+# The face finder model
 curl -o public/assets/face_landmarker.task \
   https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
 ```
 
-Then point at them, through the extension:
+**2. Point saccade.js at them.** Pass the locations when you register the extension:
 
 ```js
 const jsPsych = initJsPsych({
@@ -55,42 +70,55 @@ const jsPsych = initJsPsych({
 });
 ```
 
-or directly on a tracker:
+If you are using the core library without jsPsych, pass the same `assets` object to the tracker:
 
 ```js
 const tracker = new SaccadeTracker({ assets: { modelUrl: "/assets/eye_embedding.onnx" } });
 ```
 
-Every field is optional and independent, so you can override one and leave the rest on the CDN.
+Each setting is independent. You can host just the eye model yourself and leave the rest on the
+CDN, for example.
 
-`ortWasmUrl` and `mediapipeWasmUrl` are **directory** URLs: the runtimes append their own
-filenames. Getting them wrong produces a 404 for a file you never named, which is the usual
-first symptom.
+**Watch out for folder URLs.** `ortWasmUrl` and `mediapipeWasmUrl` point to a _folder_, not a
+file, because the software adds its own file names. If you get one wrong, the browser's error
+will mention a file you never typed, such as a missing `.wasm` file. That is usually the first
+sign.
 
-Two more fields, `ortModuleUrl` and `mediapipeModuleUrl`, exist for the script-tag build, which
-cannot resolve a bare module specifier and has to import each runtime from a URL. `ortModuleUrl`
-defaults to `ort.bundle.min.mjs` inside `ortWasmUrl`, so the recipe above needs neither. Under a
-bundler both are ignored.
+**Two more settings you probably do not need.** `ortModuleUrl` and `mediapipeModuleUrl` exist for
+experiments loaded with `<script>` tags, which have to load each piece of software from a URL.
+`ortModuleUrl` defaults to the right file inside `ortWasmUrl`, so the example above does not need
+either. If you use a bundler, both are ignored.
 
-## Serving requirements
+## Server settings
 
-- **HTTPS, or `localhost`.** Browsers will not open a camera otherwise.
-- **`.wasm` served as `application/wasm`.** Static hosts that guess by extension often get this
-  wrong. `.onnx` and `.task` are fetched as `ArrayBuffer`, so `application/octet-stream` is fine.
-- **CORS**, if the assets are on a different origin from the experiment. Serving them from the
-  same origin removes a whole class of failure; if you cannot, set
-  `Access-Control-Allow-Origin` and `Cross-Origin-Resource-Policy: cross-origin`.
-- **Long cache lifetimes.** `Cache-Control: public, max-age=31536000, immutable` means the model
-  is downloaded once per participant rather than once per page load.
-- **Do not add COOP/COEP headers.** saccade.js runs the ONNX session single-threaded on purpose,
-  so it never needs cross-origin isolation. Those headers will not make it faster and may break
-  the rest of your page.
+Most web servers handle these correctly already. If something does not load, check them:
 
-## Checking it works
+- **Serve the page over HTTPS, or from `localhost`.** Browsers will not give a page access to the
+  camera otherwise.
+- **Serve `.wasm` files with the type `application/wasm`.** Some static hosting services guess
+  the type from the file extension and get this one wrong. The `.onnx` and `.task` files are not
+  fussy; `application/octet-stream` is fine for them.
+- **Allow cross-origin requests if the files are on a different server from the experiment.**
+  Serving everything from the same server avoids this whole category of problem. If you cannot,
+  the file server needs to send the headers `Access-Control-Allow-Origin` and
+  `Cross-Origin-Resource-Policy: cross-origin`.
+- **Let browsers cache the files for a long time.** With the header
+  `Cache-Control: public, max-age=31536000, immutable`, each participant downloads the model once,
+  rather than every time the page loads.
+- **Do not add `Cross-Origin-Opener-Policy` or `Cross-Origin-Embedder-Policy` headers.** These
+  headers are what let a page run WebAssembly on several threads at once. saccade.js deliberately
+  runs the model on a single thread, so it never needs them. They will not make it
+  faster, and they can break other parts of your page.
 
-Load the experiment in a private window, open the network panel, and confirm that every asset
-returns 200, that `.wasm` carries `Content-Type: application/wasm`, and that nothing is fetched
-from an origin you did not intend.
+## Checking that it works
 
-Then check the [preview trial](../reference/plugin-preview) data. If `backend` is `"wasm"` on a
-machine that should have WebGPU, check the asset URLs first.
+1. Open the experiment in a private browser window, so nothing is already cached.
+2. Open the browser's developer tools (F12, or right-click → Inspect) and go to the **Network**
+   tab.
+3. Run through the preview trial and check that:
+   - every file loads with status `200`,
+   - the `.wasm` files show `Content-Type: application/wasm`,
+   - nothing is downloaded from a server you did not expect.
+
+Finally, check the data from the [preview trial](../reference/plugin-preview). If `backend` is
+`"wasm"` on a computer that should support WebGPU, a wrong asset URL is the first thing to check.

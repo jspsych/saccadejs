@@ -10,15 +10,36 @@ import { Steps, Step } from "@site/src/components/Steps";
 
 # Getting started
 
-This page builds a complete experiment a few lines at a time. The participant sets up their
-webcam, calibrates, then sees two pictures and presses a key. You get back where they looked
-while they decided.
+On this page you will build a small but complete eye-tracking experiment, one piece at a time.
+The participant will:
 
-You need Chrome or Edge on a laptop or desktop, a webcam, and a page served over `https://` or
-from `localhost`. Other browsers run the tracker too, usually more slowly; see
-<Link to="/guides/browser-compatibility">Browser compatibility</Link> for what changes. To see it
-running first, try the <Link to="/demo">live demo</Link>: it runs the same setup trials in the
-page, records you looking at a painting, and hands the recording back as a scanpath.
+1. turn on their webcam and line up their face,
+2. watch the screen switch between black and white for fifteen seconds,
+3. look at a series of dots, first to calibrate the tracker and then to check it,
+4. see two pictures side by side, look at the one they prefer, and press a key.
+
+At the end you will have, for that last trial, a list of where on the screen the participant
+was looking, one estimate per camera frame (typically up to 30 a second), and which picture
+each look landed on.
+
+**What you need:** Chrome or Edge on a laptop or desktop, a webcam, and a way to open the page
+over `https://` or from `localhost` (browsers only allow camera access on secure pages). Other
+browsers work too, usually more slowly; see
+<Link to="/guides/browser-compatibility">Browser compatibility</Link>.
+
+If you would like to see the result before building it, try the <Link to="/demo">live demo</Link>.
+It runs the same setup steps in your browser and then shows you where you looked on a painting.
+
+## How the pieces fit together
+
+saccade.js adds two kinds of things to a jsPsych experiment:
+
+- **Setup trials.** A handful of plugins, each doing one job: start the camera, measure timing,
+  calibrate, check accuracy. You put them near the start of your timeline, like consent or
+  instructions.
+- **Recording.** The saccade.js _extension_ records gaze during any trial you attach it to. Your
+  task trials can use any jsPsych plugin you like; adding one line to a trial turns recording on
+  for that trial.
 
 ## Build the experiment
 
@@ -27,8 +48,8 @@ page, records you looking at a painting, and hands the recording back as a scanp
 
 ### Load the packages
 
-saccade.js is a core library, a jsPsych extension, and one plugin per setup trial. Load them
-from a CDN:
+Each part of saccade.js is its own small package. Load them in your page's `<head>`, alongside
+jsPsych:
 
 ```html
 <!doctype html>
@@ -48,15 +69,19 @@ from a CDN:
 </html>
 ```
 
-Load `@saccadejs/core` first — the extension and the plugins look for it. Pin every version. An
-experiment that picks up a new tracker halfway through data collection has two datasets in it.
+Two things to notice:
+
+- `@saccadejs/core` comes first. The other packages depend on it.
+- Every URL names an exact version (`@0.1.0`). Keep it that way. If you wrote `@saccadejs/core`
+  with no version, participants who arrive after a new release would get a different tracker
+  from those who came before, and you would end up with two datasets mixed together.
 
 </Step>
 <Step>
 
 ### Register the extension
 
-Add the extension to `initJsPsych` once. It is what lets a trial record gaze:
+Tell jsPsych about the extension when you start it:
 
 ```js
 const jsPsych = initJsPsych({
@@ -65,8 +90,8 @@ const jsPsych = initJsPsych({
 });
 ```
 
-This does not touch the camera. The permission prompt and the model download happen at the
-preview trial, next.
+This only makes eye tracking _available_. It does not turn on the camera yet; that happens in
+the next step, when the participant can see what is being asked of them.
 
 </Step>
 <Step>
@@ -77,52 +102,70 @@ preview trial, next.
 const timeline = [{ type: jsPsychSaccadePreview }];
 ```
 
-This trial asks for the camera and downloads the 20 MB eye model behind a progress bar. The
-participant sees themselves mirrored, the narrow strip across their eyes that is all the model
-looks at, and a face-found indicator. The continue button stays disabled until a face is found.
+This trial asks the participant for permission to use the camera, then downloads the eye-tracking
+model (about 20 MB) while showing a progress bar. Once it is running, the participant sees:
 
-Put it early. Everything after it assumes the camera is running.
+- their own camera image, mirrored like a video call,
+- a close-up strip of their eyes, which is the only part of the image the tracker uses,
+- an indicator that turns on when their face is found.
+
+The **Continue** button stays disabled until a face is found. Put this trial early. Every
+saccade.js trial after it expects the camera to be running.
 
 </Step>
 <Step>
 
-### Measure the lag
+### Measure the timing delay
 
 ```js
 timeline.push({ type: jsPsychSaccadeTimeSync });
 ```
 
-The camera frame showing a reaction arrives some time after the stimulus was painted. The
-delay varies by machine, and JavaScript cannot see it. This trial measures it: for fifteen
-seconds the screen steps between black and white while the camera watches. Every gaze timestamp
-afterwards has the measured delay subtracted.
+There is a short delay between the moment something appears on the screen and the moment the
+camera captures a picture of the participant reacting to it. The delay differs from one computer
+to the next, and the browser has no way to report it.
 
-Skip this trial if you only care about *where* people looked. Keep it if you care about *when*.
-See [Timing and synchrony](guides/timing-and-synchrony).
+This trial measures it. For fifteen seconds the screen switches between black and white at
+random moments while the camera watches the screen. Comparing when the screen changed with when
+the camera saw it gives the delay, and saccade.js then subtracts it from every gaze timestamp
+recorded afterwards.
+
+**Do you need it?** If your question is _where_ people looked (which picture, which word), you
+can skip this trial. If it is _when_ they looked (how fast they moved their eyes to a target),
+keep it. [Timing and synchrony](guides/timing-and-synchrony) explains the details.
 
 </Step>
 <Step>
 
-### Calibrate, then check it
+### Calibrate, then check the calibration
 
 ```js
 timeline.push({ type: jsPsychSaccadeCalibrate }, { type: jsPsychSaccadeValidate });
 ```
 
-Calibration shows thirteen points, takes about twenty seconds, and fits the part of the model
-that is specific to this participant. Nothing predicts gaze until it finishes.
+**Calibration** teaches the tracker how this particular person's eyes look when they are looking
+at different parts of the screen. The participant follows a dot to thirteen positions, which
+takes about twenty seconds. Until calibration finishes, the tracker cannot estimate gaze at all.
 
-Validation then shows nine points the calibration never saw and measures how far the estimates
-land from them. Record and report its `median_error_viewport`, and choose your exclusion
-threshold before you collect. [`saccade-validate`](reference/plugin-validate) shows
-how to recalibrate a participant whose first attempt is poor.
+**Validation** then checks how well calibration worked. The participant looks at nine more dots,
+eight of them in positions calibration did not use, and saccade.js measures how far its estimates
+land from each dot. The result is saved as `median_error_viewport`: the typical error, measured as a
+fraction of the window's size so that it compares across screens. For example, `0.08` means the
+estimates typically landed about 8% of the window's size away from the dot, which is roughly 80
+pixels on a window 1,000 pixels wide.
+
+Report this number in your paper. Decide _before_ you collect data how large an error is too large
+for your design, and exclude participants above it. The
+[`saccade-validate` page](reference/plugin-validate) shows how to give a participant a second
+attempt at calibration when the first one goes badly.
 
 </Step>
 <Step>
 
-### Record some gaze
+### Record gaze during a trial
 
-Any trial can record gaze, whatever plugin it uses. Attach the extension to it:
+Now the real task. Any jsPsych trial can record gaze, whatever plugin it uses. Add the extension
+to it with the `extensions` parameter:
 
 ```js
 timeline.push({
@@ -139,13 +182,17 @@ timeline.push({
 jsPsych.run(timeline);
 ```
 
-`targets` is optional. It records where those elements were on this participant's screen, so
-your analysis does not have to reconstruct the layout.
+The `targets` setting is optional but useful. Each participant's window is a different size, so
+the pictures end up in different places on different screens. `targets` records exactly where
+`#left` and `#right` were for this participant, so you can tell which picture they looked at
+without having to work out the layout later.
 
 </Step>
 </Steps>
 
 ## The whole file
+
+Here is everything above in one page:
 
 ```html
 <!doctype html>
@@ -169,14 +216,14 @@ your analysis does not have to reconstruct the layout.
     });
 
     const timeline = [
-      // Camera permission, model download, and head positioning.
+      // Ask for the camera, download the model, and let the participant line up their face.
       { type: jsPsychSaccadePreview },
-      // Measure this participant's screen-to-camera lag and apply it to every later `t`.
+      // Measure this computer's screen-to-camera delay, so later timestamps can be corrected.
       { type: jsPsychSaccadeTimeSync },
-      // Fit the gaze model on 13 points, then check it on 9 held-out points.
+      // Calibrate on 13 dots, then check accuracy on 9 different dots.
       { type: jsPsychSaccadeCalibrate },
       { type: jsPsychSaccadeValidate },
-      // A trial that records gaze. `extensions` is what turns recording on.
+      // The task. The `extensions` line is what turns gaze recording on for this trial.
       {
         type: jsPsychHtmlKeyboardResponse,
         stimulus: `
@@ -196,12 +243,13 @@ your analysis does not have to reconstruct the layout.
 </html>
 ```
 
-Serve it over `https://` or from `localhost` and open it in Chrome or Edge. The first run
-downloads the model; later runs take it from the browser cache.
+Open it in Chrome or Edge over `https://` or from `localhost`. To use `localhost`, run any local
+web server in the folder, for example `npx serve`. The first run downloads the model; after that
+the browser keeps a copy.
 
 ## What the data looks like
 
-The extension adds three fields to every trial it is attached to.
+Every trial with the extension attached gets three extra fields in its data:
 
 ```jsonc
 {
@@ -210,7 +258,7 @@ The extension adds three fields to every trial it is attached to.
     { "x": 412, "y": 388, "t": 51 },
     { "x": 418, "y": 381, "t": 85 },
     { "x": 903, "y": 402, "t": 118 }
-    // one row per camera frame in which a face was found
+    // ...one row for each camera frame in which a face was found
   ],
   "saccade_targets": {
     "#left":  { "x": 260, "y": 300, "width": 300, "height": 200,
@@ -225,22 +273,42 @@ The extension adds three fields to every trial it is attached to.
 }
 ```
 
-`x` and `y` are viewport pixels in the participant's own window, so they hit-test directly
-against `saccade_targets`. `t` is milliseconds since the trial started, on the same clock as
-`rt`, with the measured timing offset already subtracted. There is one row per camera frame with
-a face in it, so a gap means the participant looked away or moved out of frame.
+**`saccade_data`** is the gaze itself. Each row is one estimate:
 
-Counting which picture held the gaze is a hit test:
+- `x` and `y` are the position on the page, in pixels, measured from the top-left corner of the
+  participant's browser window. (The visible area of the window is called the _viewport_, and
+  you will see that word throughout these docs.)
+- `t` is when the participant was looking there, in milliseconds since the trial began. It is on
+  the same clock as jsPsych's `rt`, so a row with `t: 3000` is 184 ms before the key press above.
+  The screen-to-camera delay measured in step 4 has already been subtracted.
+
+There is one row per camera frame in which the tracker found a face. A gap in `t` means it did
+not find one: the participant blinked, looked away, or moved out of the camera's view.
+
+**`saccade_targets`** records where each element you named in `targets` was on this participant's
+screen, in the same pixel coordinates as `x` and `y`. In the example, the left picture spans
+from `left: 260` to `right: 560` horizontally, so the first two gaze rows (`x` of 412 and 418)
+are on it and the third (`x: 903`) is on the right picture.
+
+**`saccade_timing`** describes how the timestamps were produced. You can ignore it to start
+with; [Timing and synchrony](guides/timing-and-synchrony) explains each field.
+
+Here is how to count how many gaze samples landed on each picture:
 
 ```js
 const data = jsPsych.data.get().filter({ trial_type: "html-keyboard-response" }).values()[0];
+
+// Is sample s inside rectangle r?
 const inBox = (s, r) => s.x >= r.left && s.x <= r.right && s.y >= r.top && s.y <= r.bottom;
 
 const left = data.saccade_data.filter((s) => inBox(s, data.saccade_targets["#left"])).length;
 const right = data.saccade_data.filter((s) => inBox(s, data.saccade_targets["#right"])).length;
 ```
 
-## With npm and a bundler
+## Installing with npm instead
+
+If your experiment is built with npm and a bundler (for example, with jsPsych Builder or Vite),
+install the packages instead of using `<script>` tags:
 
 ```sh
 npm install jspsych @saccadejs/extension @saccadejs/plugin-preview \
@@ -256,40 +324,57 @@ import jsPsychSaccadeCalibrate from "@saccadejs/plugin-calibrate";
 import jsPsychSaccadeValidate from "@saccadejs/plugin-validate";
 ```
 
-The timeline is identical. `@saccadejs/core` comes in as a dependency of the others. Install it
-explicitly only if you use the [core API](reference/core-api) directly.
+The timeline is exactly the same. `@saccadejs/core` is installed automatically as a dependency of
+the other packages; you only need to install it yourself if you use the
+[core API](reference/core-api) directly.
 
-## Without jsPsych
+## Using saccade.js without jsPsych
 
-The core library does not depend on jsPsych. The same four stages sit underneath the plugins:
-start the tracker, measure the lag, calibrate, then read frames.
+The core library does not need jsPsych. Underneath, the plugins do the same four things you just
+saw: start the tracker, measure the delay, calibrate, and then read gaze estimates as they
+arrive. Without jsPsych, you do those yourself and draw your own calibration dots:
 
 ```js
 import { SaccadeTracker, runCalibration, defaultGrid13, runLoopback } from "@saccadejs/core";
 
+// 1. Start the camera and load the model.
 const tracker = new SaccadeTracker();
-await tracker.init();              // camera prompt and model load
+await tracker.init();
 document.body.appendChild(tracker.video);
 tracker.start();
 
+// 2. Measure the screen-to-camera delay.
 const { lagMs, verdict } = await runLoopback(tracker);
 
+// 3. Calibrate on 13 points. You supply the function that draws each dot.
 await runCalibration(tracker, defaultGrid13(), { settleMs: 1000, captureMs: 500 }, {
   showTarget: (target, phase) => drawYourOwnTarget(target, phase),
 });
 tracker.fitCalibration();
 
+// 4. Receive an estimate for every camera frame.
 tracker.onFrame((frame) => {
-  if (!frame.gaze) return;
+  if (!frame.gaze) return; // no face in this frame
   const t = (frame.time.meanCapture ?? frame.time.capture) - (verdict === "OK" ? lagMs : 0);
-  console.log(frame.gaze.x, frame.gaze.y, t);   // gaze is viewport fractions, 0-1
+  console.log(frame.gaze.x, frame.gaze.y, t);
 });
 ```
 
+One difference to watch for: here `frame.gaze.x` and `frame.gaze.y` are _fractions_ of the window
+(0 is the left or top edge, 1 is the right or bottom edge), not pixels. Multiply by
+`window.innerWidth` and `window.innerHeight` to get pixels. The [core API](reference/core-api)
+page has the details.
+
 ## Before you collect real data
 
-- [**Hosting the assets**](guides/hosting-the-assets). Serve the model from your own server.
-- [**`saccade-performance`**](reference/plugin-performance). A short frame-rate check that turns
-  away machines too slow for the tracker, before they reach calibration.
-- [**Timing and synchrony**](guides/timing-and-synchrony). What `t` means, and how precise it is.
-- [**Reference**](reference/extension). Every parameter and data field.
+This page gets an experiment running. Before you put one in front of participants, read these:
+
+- [**Hosting the assets**](guides/hosting-the-assets). By default the model downloads from a
+  public server. For a real study, serve it from your own, so an outage elsewhere cannot stop
+  your study.
+- [**`saccade-performance`**](reference/plugin-performance). A five-second check of how fast
+  the tracker runs on the participant's computer, so you can turn away computers too slow for
+  your study before they reach calibration.
+- [**Timing and synchrony**](guides/timing-and-synchrony). What `t` means exactly, how precise
+  it is, and how to line it up with events of your own, such as a sound.
+- [**Reference**](reference/extension). Every setting and every data field.

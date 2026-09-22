@@ -7,19 +7,45 @@ description: SaccadeTracker, the calibration and validation helpers, runLoopback
 
 # Core API — `@saccadejs/core`
 
-The jsPsych-agnostic library: a camera, a face landmarker, an ONNX embedding model, a ridge
-calibration, and a timing loopback. The [extension](extension) and the plugins are thin wrappers
-over what is on this page.
+The core library is saccade.js without jsPsych. The [extension](extension) and the plugins are
+thin wrappers around what is on this page. You need it if you are:
+
+- building an experiment with something other than jsPsych,
+- writing your own jsPsych plugin that uses gaze, or
+- re-analyzing stored timing measurements.
+
+If you are using jsPsych and the plugins, you probably do not need this page.
+
+A minimal session looks like this: the same four stages the plugins run. `ui` is your code for
+drawing calibration dots, described [below](#calibration-and-validation-helpers).
 
 ```js
-import { SaccadeTracker, runCalibration, runValidation, runLoopback } from "@saccadejs/core";
+import { SaccadeTracker, runCalibration, runLoopback, defaultGrid13 } from "@saccadejs/core";
+
+const tracker = new SaccadeTracker();
+await tracker.init();          // ask for the camera, load the models
+tracker.start();               // start processing frames
+
+const lag = await runLoopback(tracker);                        // measure screen-to-camera delay
+await runCalibration(tracker, defaultGrid13(), { settleMs: 1000, captureMs: 500 }, ui);
+tracker.fitCalibration();                                      // fit the calibration
+
+tracker.onFrame((frame) => {
+  if (frame.gaze) console.log(frame.gaze.x, frame.gaze.y);     // 0-1 fractions of the window
+});
 ```
 
-From a script tag the browser bundle defines one global, `Saccade`, holding the same named
-exports: `new Saccade.SaccadeTracker()`, `await Saccade.runLoopback(tracker)`.
+If you load the library with a `<script>` tag instead of `import`, everything is available on one
+global, `Saccade`: `new Saccade.SaccadeTracker()`, `await Saccade.runLoopback(tracker)`.
 
-Times are `performance.now()` milliseconds. Coordinates are viewport fractions, 0–1, origin top
-left; converting to pixels is the caller's job. Nothing touches the camera until `init()`.
+Three conventions apply throughout:
+
+- **Positions are fractions of the window, not pixels.** `x` and `y` run from 0 to 1, with
+  `{x: 0, y: 0}` at the top left and `{x: 1, y: 1}` at the bottom right. Multiply by
+  `window.innerWidth` and `window.innerHeight` to get pixels. (The jsPsych extension does this for
+  you.)
+- **Times are `performance.now()` milliseconds**, the browser's high-resolution clock.
+- **Nothing touches the camera until `init()`.** Creating a tracker is safe at any time.
 
 ## `SaccadeTracker`
 
@@ -30,9 +56,9 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `assets` | `SaccadeAssets` | `{}` | Model and runtime URLs. See [Hosting the assets](../guides/hosting-the-assets). |
-| `video` | `{ width?, height? }` | `640 × 480` | `getUserMedia` ideals, user-facing camera. |
-| `smoothingFrames` | `number` | `1` | Frames whose embeddings are averaged into one prediction. `1` predicts from the newest frame alone. |
-| `executionProviders` | `("webgpu" \| "wasm")[]` | `["webgpu", "wasm"]` | ONNX Runtime providers, tried in order. |
+| `video` | `{ width?, height? }` | `640 × 480` | The camera resolution to ask for. The browser treats it as a preference and may deliver something else. Always uses the front-facing camera. |
+| `smoothingFrames` | `number` | `1` | How many frames to average into each estimate. `1` means no averaging: each estimate comes from the newest frame alone. |
+| `executionProviders` | `("webgpu" \| "wasm")[]` | `["webgpu", "wasm"]` | How to run the eye model, tried in order: on the graphics card (`"webgpu"`), then on the processor (`"wasm"`). |
 | `onFrame` | `(f: TrackerFrame) => void` | — | Equivalent to calling `onFrame()` after construction. |
 | `onProgress` | `(p: SaccadeProgress) => void` | — | Called during `init()` as each stage starts: `camera`, `mediapipe`, `landmarker`, `ort`, `model`, `session`, `ready`. The `model` stage also reports `loaded` and `total` bytes of the ONNX download, so you can show a progress bar. Equivalent to calling `onProgress()` after construction. |
 | `stream` | `MediaStream` | — | Use this camera stream instead of calling `getUserMedia`. The tracker will not stop a stream it did not open. |
@@ -76,7 +102,12 @@ interface InitResult {
 
 ## `TrackerFrame`
 
-One per camera frame, whether or not a face was found.
+What `onFrame` callbacks receive: one object per camera frame, whether or not a face was found.
+Most code only needs `gaze`, `faceFound` and `time`. The rest is for diagnostics and research.
+
+An _embedding_, below, is the list of numbers the eye model produces to describe how the eyes look
+in a frame. Calibration maps embeddings to screen positions; see
+[How it works](../guides/how-it-works).
 
 ```ts
 interface TrackerFrame {
@@ -110,25 +141,55 @@ interface Gaze { x: number; y: number }   // 0-1, origin top-left
 | `emit` | `number` | When the prediction became available. |
 | `meanCapture` | `number \| null` | Mean `capture` of the smoothing ring buffer: the time the smoothed `gaze` refers to. Equals `capture` when `smoothingFrames` is 1. Use this one. |
 
-What `capture` cannot see is display lag plus camera lag, which is what
-[`runLoopback`](#runloopback) measures.
+**Which time to use:** record `meanCapture ?? capture` with each gaze estimate. It is when the
+camera captured the frame (averaged over the frames combined, if `smoothingFrames` is above 1),
+not when the estimate was ready.
+
+Even `capture` is later than the moment the screen changed: it cannot include the time the
+monitor took to show the change, or the camera's own delay. [`runLoopback`](#runloopback)
+measures those two together, so you can subtract them.
 
 ## Calibration and validation helpers
 
-Both walk a list of targets and call back into your UI. They contain no DOM of their own.
+Both step through a list of target positions, telling your code when to show each one. They do
+not draw anything themselves: you supply a `showTarget` function that draws the dot however you
+like.
 
 ```ts
 interface CollectOptions { settleMs: number; captureMs: number; timeoutMs?: number }
 interface TargetUi { showTarget: (t: Gaze | null, phase: "settle" | "capture") => void }
 ```
 
-For each target: `showTarget(target, "settle")`, wait `settleMs`, `showTarget(target,
-"capture")`, collect for `captureMs`, then `showTarget(null, …)` at the end.
+For each target, in order:
 
-`timeoutMs` (default `5000`, `0` to wait indefinitely) is the stall guard: if one camera frame
-takes longer than that — a `<video>` the page stopped rendering, a camera another program took,
-a track that ended — the run rejects with `no camera frames for 5000 ms` instead of waiting
-forever on a target that never moves. The plugins put that message on screen.
+1. `showTarget(target, "settle")`: draw the dot. The eyes have `settleMs` to reach it.
+2. `showTarget(target, "capture")`: data is collected for `captureMs`. You might change the dot's
+   color here, as the plugins do.
+
+After the last target, `showTarget(null, …)` tells you to clear the screen.
+
+```js
+const dot = document.getElementById("dot");
+const ui = {
+  showTarget: (target, phase) => {
+    if (!target) {
+      dot.style.display = "none";
+      return;
+    }
+    // #dot is styled with position: fixed and translate(-50%, -50%).
+    dot.style.display = "block";
+    dot.style.left = `${target.x * 100}%`;
+    dot.style.top = `${target.y * 100}%`;
+    dot.style.background = phase === "capture" ? "green" : "black";
+  },
+};
+```
+
+`timeoutMs` (default `5000`; `0` waits forever) stops the run from hanging if the camera stops
+delivering frames, for example because the page stopped displaying the `<video>`, another program
+took the camera, or the camera was unplugged. If a single frame takes longer than `timeoutMs`,
+the run fails with the error `no camera frames for 5000 ms` instead of leaving a dot on screen
+forever. The plugins show that message to the participant.
 
 ```ts
 runCalibration(tracker, targets: Gaze[], opts: CollectOptions, ui: TargetUi): Promise<CalPoint[]>
@@ -183,6 +244,10 @@ Validate on `validationGrid9()`, not on the calibration points.
 
 ### Row weighting
 
+This section explains how frames of different quality (for example, a frame caught mid-blink)
+are weighted during calibration. You only need it if you are changing the default behavior or
+describing it in a paper.
+
 Each calibration point contributes one weighted row to the ridge fit. The weight comes from the
 first of these that applies:
 
@@ -207,6 +272,8 @@ experiments do not need this option.
 
 ### Embedding width
 
+This section matters only if you are using [your own model](../models#using-your-own-model).
+
 The fit is not fixed at 128. The ridge solve and both mean-embedding paths read their width
 from the embeddings they are handed, so a model of any output length works, provided that
 length is the same on every frame of a session. `EMB_DIM` is the shipped model's width, useful
@@ -227,13 +294,25 @@ exists.
 runLoopback(tracker: SaccadeTracker, opts?: LoopbackOptions): Promise<LoopbackResult>
 ```
 
-Measures display lag plus camera lag as one number by flashing the page and watching it with the
-camera. The tracker must be initialized; if it is running, gaze processing pauses for the
-duration and resumes after.
+Measures the delay from a change on the screen to that change appearing in the camera: the
+monitor's delay and the camera's delay, as one number. It does this by switching the page
+between dark and light at random moments while the camera watches the screen.
+[How it works](../guides/how-it-works#measuring-the-screen-to-camera-delay) describes the method.
+This is what the [`saccade-time-sync`](plugin-time-sync) plugin runs.
+
+The tracker must be initialized first. If it is running, gaze processing pauses during the
+measurement and resumes afterwards.
+
+```js
+const result = await runLoopback(tracker);
+if (result.verdict === "OK") {
+  // subtract result.lagMs from every capture time from now on
+}
+```
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `durationMs` | `15000` | |
+| `durationMs` | `15000` | How long to measure, in ms. |
 | `gapMinMs` / `gapMaxMs` | `500` / `1000` | Random interval between flips. |
 | `levels` | `["#000", "#fff"]` | `[dark, light]` CSS colors. `["#333", "#ccc"]` is gentler and needs a longer run. |
 | `seed` | random | For a reproducible schedule. |
@@ -242,10 +321,10 @@ duration and resumes after.
 
 | Result field | Meaning |
 | --- | --- |
-| `lagMs` | The correction: display lag plus camera lag. |
-| `plateauWidthMs` | Width of the range of lags consistent with every edge. |
-| `peakD` | Height of the edge-difference peak, 0–1. |
-| `nEdges` | Usable edges found. |
+| `lagMs` | The measured delay, in ms: display lag plus camera lag. Subtract it from capture times. |
+| `plateauWidthMs` | How uncertain `lagMs` is: the width of the range of delays that fit every brightness change equally well. |
+| `peakD` | How clearly the camera saw the brightness changes, 0–1. |
+| `nEdges` | How many brightness changes (edges) were usable. |
 | `halves` | `{ first, second }`, the estimate from each half of the run. |
 | `cameraPeriodMs`, `cameraJitterMs`, `droppedFrames` | Camera health. |
 | `rafPeriodMs`, `rafMaxMs` | Animation-frame interval and its worst case. |
@@ -258,7 +337,8 @@ duration and resumes after.
 The verdict is `"OK"` when `peakD` is at least 0.5, the plateau is at most 34 ms, and the halves
 agree: within 8 ms when there are at least 15 edges per half, within 20 ms otherwise.
 
-The estimator is exported so stored `flips` and `samples` can be re-analyzed offline:
+The functions that compute the estimate are exported too, so you can re-analyze stored `flips`
+and `samples` later, outside the experiment:
 `estimateLagEdges`, `estimateLag`, `refineLag`, `sparseSchedule`, `mSequence`, `seededRandom`,
 `intervalStats`, `splitHalves`, `stimulusAt`.
 
@@ -281,6 +361,9 @@ versions and default URLs are exported as `ORT_VERSION`, `MEDIAPIPE_VERSION`,
 [Hosting the assets](../guides/hosting-the-assets).
 
 ## Lower-level exports
+
+The building blocks the tracker is made of, for testing, research, or building a different
+pipeline. Most code never needs them.
 
 | Export | What |
 | --- | --- |

@@ -7,59 +7,65 @@ description: Measure the tracker's effective frame rate, and exclude machines to
 
 # `saccade-performance`
 
-Measures how fast the tracker actually runs on this participant's machine, and optionally ends
-the experiment for machines that are too slow. Without WebGPU saccade.js falls back to
-WebAssembly and keeps going, more slowly, without saying anything; this is how you find out in
-numbers, before your data depends on it.
+Measures how many gaze estimates per second the tracker actually produces on this participant's
+computer, and, if you choose, ends the experiment for computers that are too slow.
 
-The exclusion machinery is
-[`browser-check`](https://www.jspsych.org/latest/plugins/browser-check/)'s — an
-`inclusion_function` over the measured data and an `exclusion_message` built from the same data —
-so a study that already gates on browser and screen size gains one more gate written the same
-way.
+Why this matters: on a computer or browser that cannot use the graphics card, saccade.js does not
+stop or warn. It switches to a slower method and carries on, producing fewer gaze samples per
+second. This trial is how you find out, with a number, before your data depends on it.
 
-|                |                                                                                                         |
-| -------------- | ------------------------------------------------------------------------------------------------------- |
-| Package        | `@saccadejs/plugin-performance`                                                                         |
-| Browser global | `jsPsychSaccadePerformance`                                                                             |
-| Trial type     | `saccade-performance`                                                                                   |
-| Requires       | the [extension](extension) and a running tracker, so it comes after [`saccade-preview`](plugin-preview) |
+The trial asks the participant to look at a dot and hold still for about six seconds: one second
+of warm-up, then five seconds of measurement.
 
 ```js
 timeline.push({ type: jsPsychSaccadePerformance });
 ```
 
-Put it before [`saccade-calibrate`](plugin-calibrate), so a participant who is going to be
-excluded is not first made to sit through thirteen calibration points.
+Put it after [`saccade-preview`](plugin-preview), which starts the camera, and before
+[`saccade-calibrate`](plugin-calibrate), so a participant who is going to be turned away does not
+first sit through calibration.
+
+| | |
+| --- | --- |
+| Package | `@saccadejs/plugin-performance` |
+| Browser global | `jsPsychSaccadePerformance` |
+| Trial type | `saccade-performance` |
+| Requires | the [extension](extension) and a running camera, so it comes after [`saccade-preview`](plugin-preview) |
 
 ## Parameters
 
-| Parameter              | Type                | Default           | Description                                                                                                                                                 |
-| ---------------------- | ------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stimulus`             | `string`            | a fixation dot    | What to show while measuring. A face has to be in view for a frame to reach the model, so the default asks the participant to look at a dot and hold still. |
-| `measurement_duration` | `number`            | `5000`            | How long to measure for in ms, once the warm-up has passed.                                                                                                 |
-| `warmup_duration`      | `number`            | `1000`            | How long to discard in ms before measuring. The first frames pay for shader compilation, the first WebGPU submit and the camera's exposure ramp.            |
-| `inclusion_function`   | `(data) => boolean` | `() => true`      | Receives the measured data; return `true` to include this participant. The default excludes nobody.                                                         |
-| `exclusion_message`    | `(data) => string`  | a generic message | Receives the measured data; returns the HTML shown when `inclusion_function` returns `false`.                                                               |
+Excluding participants works the same way as in jsPsych's
+[`browser-check`](https://www.jspsych.org/latest/plugins/browser-check/) plugin: you write an
+`inclusion_function` that looks at the measurements and returns `true` or `false`, and an
+`exclusion_message` shown to anyone who is excluded. If you already screen participants by
+browser or screen size, this is one more check written the same way.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `stimulus` | `string` | a dot to look at | What to show while measuring. The tracker only processes frames with a face in them, so the default asks the participant to look at a dot and hold still. |
+| `measurement_duration` | `number` | `5000` | How long to measure, in ms, after the warm-up. |
+| `warmup_duration` | `number` | `1000` | How long to wait before measuring, in ms. The first frames are slow while the graphics card compiles the model and the camera adjusts its exposure, and would make the result look worse than it is. |
+| `inclusion_function` | `(data) => boolean` | `() => true` | Receives the measurements (the fields under [Data](#data)); return `true` to keep this participant. The default keeps everyone. |
+| `exclusion_message` | `(data) => string` | a generic message | Receives the measurements; returns the HTML to show when `inclusion_function` returns `false`. |
 
 ## Data
 
-| Field                 | Type                 | Description                                                                                                                           |
-| --------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `fps_median`          | `number`             | Median frame rate over the window, in Hz. **The headline number.** `null` if no two consecutive frames with a face in them were seen. |
-| `fps_mean`            | `number`             | Frames per second averaged over the whole window.                                                                                     |
-| `fps_p10`             | `number`             | The rate at the slow end: the 10th percentile of frame rate, i.e. the 90th percentile of the interval between frames.                 |
-| `frames`              | `number`             | Frames with a face in them — the frames the rates are computed from.                                                                  |
-| `frames_without_face` | `number`             | Frames in the window with no face in them.                                                                                            |
-| `dropped`             | `number`             | Camera frames presented but never processed, from `requestVideoFrameCallback`. How far behind the camera the tracker fell.            |
-| `embed_ms_median`     | `number`             | Median time in ms spent in the model for one frame.                                                                                   |
-| `backend`             | `"webgpu" \| "wasm"` | The execution provider the model is running on.                                                                                       |
-| `rt`                  | `number`             | Milliseconds from trial start to the end of the measurement.                                                                          |
+| Field | Type | Description |
+| --- | --- | --- |
+| `fps_median` | `number` | **The main result:** the typical number of gaze estimates per second (the median rate). `null` if it could not be measured, because a face was never in view for two frames in a row. |
+| `fps_mean` | `number` | The average number of estimates per second over the whole measurement. |
+| `fps_p10` | `number` | The rate at the slow end: one frame in ten was slower than this (the 10th percentile rate). See [below](#fps_p10-catches-what-the-median-hides). |
+| `frames` | `number` | How many frames had a face in them. The rates are calculated from these. |
+| `frames_without_face` | `number` | How many frames had no face in them. |
+| `dropped` | `number` | Camera frames that arrived but were never processed because the tracker was still busy. Shows how far behind the camera the tracker fell. |
+| `embed_ms_median` | `number` | The typical time the eye model took per frame, in ms. |
+| `backend` | `"webgpu" \| "wasm"` | Whether the model ran on the graphics card (`"webgpu"`) or the slower processor path (`"wasm"`). |
+| `rt` | `number` | Milliseconds from the start of the trial to the end of the measurement. |
 
 ## Example
 
 ```js
-// A placeholder. Set it from your own pilot data before collecting.
+// A placeholder. Choose your own threshold from pilot data before collecting.
 const minFps = 15;
 
 timeline.push({
@@ -74,12 +80,11 @@ timeline.push({
 });
 ```
 
-To measure without excluding anyone — the right thing to do while piloting — leave
-`inclusion_function` out and read `fps_median` off the pilot data before deciding what threshold
-it justifies.
+**While piloting**, leave `inclusion_function` out, so nobody is excluded. Then look at
+`fps_median` across your pilot participants to decide what threshold your study needs.
 
-To keep the participant in the experiment but route them somewhere else, leave
-`inclusion_function` out too and branch on the data yourself:
+**To send slow computers down a different path** instead of ending the experiment, also leave
+`inclusion_function` out and use a conditional timeline:
 
 ```js
 const shortVersion = {
@@ -95,51 +100,53 @@ const shortVersion = {
 };
 ```
 
-## Interpreting the numbers
+## Understanding the numbers
 
-### `fps_median` is what to gate on
+### Use `fps_median` for your threshold
 
-It is the rate the experiment will actually run at. saccade.js keeps exactly one inference in
-flight and asks for the next camera frame only after the current one has been through the model,
-so the loop rate is bounded by whichever of camera delivery or inference is slower — and it is
-also the rate at which gaze samples land in your data.
+It is the rate your experiment will actually run at, and the rate at which gaze samples will
+appear in your data. saccade.js processes one camera frame at a time and does not ask for the
+next until the current one is finished. So the rate is set by whichever is slower: the camera
+delivering frames, or the computer processing them.
 
-### Pick the threshold from your design
+### Choose the threshold from your own design
 
-There is no default threshold. The rate a measure needs depends on the design, and it has not
-been measured for saccade.js. Pilot without excluding anyone, then choose a threshold from the
-data.
+There is no recommended threshold. How many samples per second a study needs depends on what it
+measures, and this has not been studied for saccade.js. Pilot without excluding anyone, then
+choose a threshold from what you see.
 
-One bound holds regardless: sampling at _f_ Hz puts a floor of roughly `1000 / f` ms on how
-precisely any event can be placed in time, before any of the other error sources. If the design
-depends on _when_ someone looked, read [Timing and synchrony](../guides/timing-and-synchrony)
-too.
+One limit holds whatever the design: at _f_ samples per second, you cannot place an eye movement
+in time more precisely than about `1000 / f` ms. At 15 per second, that is about 67 ms; at 30,
+about 33 ms. Other sources of error come on top of this. If your design depends on _when_ someone
+looked, also read [Timing and synchrony](../guides/timing-and-synchrony).
 
 ### `fps_p10` catches what the median hides
 
-A machine that stalls periodically — thermal throttling, a busy background tab, another program
-waking up — can have a perfectly healthy median while a fifth of its samples arrive far too late.
-The p10 only moves when the slow frames are at least a tenth of them, so an isolated hiccup will
-not fail anybody.
+Some computers run well most of the time but stall now and then, for example when they get hot
+and slow themselves down, or when another program wakes up. Such a computer can have a healthy
+median while a fifth of its samples arrive far too late. `fps_p10` is the rate that one frame in
+ten falls below, so it drops only when slow frames make up at least a tenth of the measurement. A
+single short hiccup will not move it.
 
-### `embed_ms_median` says whose fault a low rate is
+### `embed_ms_median` tells you what is slow
 
-A low `fps_median` with a small `embed_ms_median` is a camera that is not delivering frames any
-faster, and no amount of GPU will change it. A large `embed_ms_median` is the model; check
-whether `backend` is `"wasm"`.
+If `fps_median` is low but `embed_ms_median` is small, the model is fast and the camera is simply
+not delivering frames any quicker. A faster graphics card would not help. If `embed_ms_median` is
+large, the model is the bottleneck; check whether `backend` is `"wasm"`.
 
-`backend: "wasm"` on a machine that should have WebGPU can mean an asset URL is wrong rather
-than a machine that cannot do it — see [Hosting the assets](../guides/hosting-the-assets).
+If `backend` is `"wasm"` on a computer that should support WebGPU, one possible cause is a wrong
+asset URL. See [Hosting the assets](../guides/hosting-the-assets).
 
-### A machine that could not be measured
+### When the measurement fails
 
-`fps_median` is `null`, and `null >= 15` is `false`, so the obvious comparison in an
-`inclusion_function` excludes it without any extra work. That is the right default: a participant
-whose frame rate is unknown is not one who passed.
+If the rate could not be measured, `fps_median` is `null`. In JavaScript, `null >= 15` is
+`false`, so the `inclusion_function` above excludes that participant automatically. That is
+deliberate: a participant whose frame rate is unknown has not passed the check.
 
-### Frames with no face in them do not count
+### Frames with no face do not count
 
-They never reach the model at all — no face, no eye crop, no inference — so counting them would
-report a rate the machine cannot sustain once it is actually tracking. They are reported
-separately as `frames_without_face`. A large number there means the participant was out of frame,
-and the measurement covers less time than it looks.
+A frame with no face in it never reaches the eye model, so it takes almost no time to process.
+Counting those frames would report a rate the computer cannot keep up once it is actually
+tracking a face. They are reported separately as `frames_without_face`. A large number there means
+the participant was out of view for part of the measurement, so the result is based on less time
+than it seems.

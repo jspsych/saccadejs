@@ -7,10 +7,20 @@ description: Measure this participant's screen-to-camera lag and apply it to gaz
 
 # `saccade-time-sync`
 
-Measures how long it takes for something on this participant's screen to reach their camera, and
-subtracts that from every later gaze timestamp. The screen steps between two brightness levels
-at random moments about once a second while the camera watches. There is at most one change per
-second, so it is not a flickering display.
+Measures how long it takes for a change on this participant's screen to show up in their camera,
+and subtracts that delay from every gaze timestamp recorded afterwards. You need it if your study
+cares about _when_ people looked, not just _where_.
+[Timing and synchrony](../guides/timing-and-synchrony) explains why the delay exists and how to
+use the result.
+
+**What the participant sees:** the whole screen switches between black and white (or dark and
+light gray) at random moments, every half second to a second, for fifteen seconds. The camera
+watches the screen while this happens. The screen never changes more than twice a second, so it
+does not flicker.
+
+```js
+timeline.push({ type: jsPsychSaccadeTimeSync });
+```
 
 | | |
 | --- | --- |
@@ -18,47 +28,67 @@ second, so it is not a flickering display.
 | Browser global | `jsPsychSaccadeTimeSync` |
 | Trial type | `saccade-time-sync` |
 | Requires | the [extension](extension) and a running camera, so it comes after [`saccade-preview`](plugin-preview) |
-| Wraps | [`runLoopback`](core-api#runloopback) |
-
-```js
-timeline.push({ type: jsPsychSaccadeTimeSync });
-```
+| Built on | [`runLoopback`](core-api#runloopback) from the core library |
 
 ## Parameters
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `duration` | `number` | `15000` | Length of the measurement, in ms. Longer runs give more edges and a tighter estimate. |
-| `gap_min` | `number` | `500` | Minimum interval between brightness changes, in ms. |
-| `gap_max` | `number` | `1000` | Maximum interval, in ms. |
-| `contrast` | `"full" \| "reduced"` | `"full"` | `"full"` is black and white; `"reduced"` is dark gray and light gray, gentler but noisier. |
-| `instructions` | `HTML string` | an explanation of the brightness test | Shown before the run. |
-| `button_text` | `string` | `"Start"` | Text of the button that starts the measurement. |
-| `require_ok` | `boolean` | `false` | Rerun once on an `UNRELIABLE` verdict. The trial continues either way. |
-| `apply_offset` | `boolean` | `true` | Hand the measured lag to the extension, so later trials have it subtracted. |
+| `duration` | `number` | `15000` | How long to measure, in ms. A longer run sees more screen changes and gives a more precise result. |
+| `gap_min` | `number` | `500` | The shortest time between screen changes, in ms. |
+| `gap_max` | `number` | `1000` | The longest time between screen changes, in ms. |
+| `contrast` | `"full" \| "reduced"` | `"full"` | `"full"` switches between black and white. `"reduced"` uses dark and light gray, which is gentler on the eyes but harder for the camera to see, so the result is less precise. |
+| `instructions` | `HTML string` | an explanation of the test | Shown before the measurement starts. |
+| `button_text` | `string` | `"Start"` | The label on the button that starts the measurement. |
+| `require_ok` | `boolean` | `false` | If the result is `UNRELIABLE`, run the measurement once more. The experiment continues either way. |
+| `apply_offset` | `boolean` | `true` | Subtract the measured delay from gaze timestamps in all later trials. |
 
 ## Data
 
+**The main results:**
+
 | Field | Type | Description |
 | --- | --- | --- |
-| `lag_ms` | `number` | The measured display plus camera lag, in ms. |
-| `plateau_width_ms` | `number` | Width of the range of lags consistent with every edge: the uncertainty. One camera frame (about 33 ms) or less is expected. |
-| `peak_d` | `number` | Height of the edge-difference peak, 0–1. Below 0.5 the camera did not clearly see the screen change. |
-| `halves_ms` | `[number, number]` | The estimate from each half of the run. |
-| `camera_period_ms` | `number` | Mean camera frame interval. |
-| `camera_jitter_ms` | `number` | Its standard deviation. |
-| `dropped_frames` | `number` | Camera frames the browser reported dropping. |
-| `raf_period_ms` | `number` | Mean animation-frame interval, effectively the display refresh. |
-| `clock_source` | `"captureTime" \| "receiveTime" \| "callback"` | Anything but `"captureTime"` makes `lag_ms` advisory. |
-| `verdict` | `"OK" \| "INCONCLUSIVE" \| "UNRELIABLE"` | |
-| `reason` | `string \| null` | Why, when the verdict is not `"OK"`. |
-| `applied` | `boolean` | Whether the offset was set on the extension. |
-| `rt` | `number` | Milliseconds from trial start to the end of the measurement. |
+| `lag_ms` | `number` | The measured delay from screen to camera, in ms. This is what gets subtracted. |
+| `verdict` | `"OK" \| "INCONCLUSIVE" \| "UNRELIABLE"` | Whether the measurement can be trusted. See [how the verdict is decided](#how-the-verdict-is-decided). |
+| `reason` | `string \| null` | When the verdict is not `"OK"`, why. |
+| `applied` | `boolean` | Whether the delay was passed on to be subtracted from later trials. |
+| `clock_source` | `"captureTime" \| "receiveTime" \| "callback"` | Where the browser's frame timestamps came from. Only `"captureTime"` gives a real measurement; with anything else, treat `lag_ms` as a rough guide. |
 
-The verdict is `"OK"` when `peak_d` is at least 0.5, the plateau is at most 34 ms, and the two
-halves agree: within 8 ms when there are at least 15 edges per half, within 20 ms otherwise.
+**Quality checks**, used to decide the verdict:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `plateau_width_ms` | `number` | How uncertain `lag_ms` is, in ms. The camera only takes a picture every 33 ms or so, so any delay within that window fits equally well; this is the width of the window. One camera frame (about 33 ms) or less is expected. |
+| `peak_d` | `number` | How clearly the camera saw the screen change, from 0 to 1. Below 0.5 it did not see it clearly. |
+| `halves_ms` | `[number, number]` | The delay measured from the first half of the run and from the second half, separately. If they disagree, the delay changed during the measurement. |
+
+**Camera and display health:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `camera_period_ms` | `number` | The average time between camera frames, in ms. |
+| `camera_jitter_ms` | `number` | How much that time varied (its standard deviation). |
+| `dropped_frames` | `number` | Camera frames the browser reported dropping. |
+| `raf_period_ms` | `number` | The average time between screen redraws, in ms. In practice, the screen's refresh interval: about 16.7 ms at 60 Hz. |
+| `rt` | `number` | Milliseconds from the start of the trial to the end of the measurement. |
+
+### How the verdict is decided
+
+The verdict is `"OK"` when all three of these are true:
+
+- `peak_d` is at least 0.5 (the camera clearly saw the changes),
+- `plateau_width_ms` is at most 34 ms (the delay is pinned down to within about one camera frame),
+- the two `halves_ms` agree: within 8 ms if each half saw at least 15 screen changes, or within
+  20 ms if fewer.
+
+[Timing and synchrony](../guides/timing-and-synchrony#reading-the-verdict) explains what to do
+when it is not.
 
 ## Example
+
+A gentler version with gray levels, run for longer to make up for the lower contrast, and with
+instructions that tell the participant what to expect:
 
 ```js
 timeline.push({
@@ -73,6 +103,3 @@ timeline.push({
     what you looked at with when it appeared.</p>`,
 });
 ```
-
-See [Timing and synchrony](../guides/timing-and-synchrony) for how to read the verdict and what
-the correction leaves behind.
