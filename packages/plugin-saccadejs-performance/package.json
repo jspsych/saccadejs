@@ -1,6 +1,6 @@
 {
   "name": "@saccadejs/plugin-performance",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "jsPsych plugin: saccade.js effective frame rate check",
   "type": "module",
   "main": "dist/index.cjs",
@@ -46,7 +46,7 @@
   "devDependencies": {
     "@jspsych/config": "^3.3.3",
     "@jspsych/test-utils": "^1.2.0",
-    "@saccadejs/extension": "^0.1.0",
+    "@saccadejs/extension": "^0.2.0",
     "jspsych": "^8.0.0"
   },
   "peerDependencies": {
