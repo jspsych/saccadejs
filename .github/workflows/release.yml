@@ -1,0 +1,69 @@
+name: release
+
+env:
+  HUSKY: 0
+
+on:
+  push:
+    paths:
+      - ".changeset/**"
+      - ".github/**"
+      - "packages/**"
+      - "package.json"
+      - "package-lock.json"
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      # Needed for npm trusted publishing (OIDC), which replaces NPM_TOKEN.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Trusted publishing requires Node >= 22.14.0 and npm >= 11.5.1
+          node-version: 22
+          cache: npm
+          # No registry-url: setup-node would write an `_authToken` line to
+          # .npmrc, which breaks OIDC when no token is set
+          # (https://github.com/actions/setup-node/issues/1551).
+
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@^11.5.1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run tests
+        run: npm run test -- --ci --maxWorkers=2
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096" # Increase heap size for jest
+
+      - name: Create Release Pull Request or Publish Packages
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        with:
+          version: npm run changeset:version
+          publish: npm run changeset:publish
+          commit: "chore(release): version packages"
+        env:
+          # No NPM_TOKEN: without it, changesets/action leaves .npmrc alone and
+          # npm publish authenticates through the trusted publisher configured
+          # for each package. Trust can only be added to a package that exists,
+          # so publish a new package once by hand, then run (npm >= 11.15.0):
+          #   npm trust github <package> --file release.yml --repo jspsych/saccadejs --allow-publish
+          # Otherwise its publish here fails with E404.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
