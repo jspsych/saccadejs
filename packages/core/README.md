@@ -64,8 +64,10 @@ tracker.onFrame((f) => {
 screen. It receives a `SaccadeProgress` (`{ stage, loaded?, total? }`) as init walks its
 stages, in this order: `"camera"` (the permission prompt), `"mediapipe"`, `"landmarker"`,
 `"ort"`, `"model"`, `"session"`, `"ready"`. Only `"model"` carries byte counts, and `total` is
-present only when the server sent a `Content-Length`; the `.onnx` is fetched once and reused
-for every execution-provider attempt. Passing no callback changes nothing about `init()`.
+present only when the file's size is known: always for a published release, and otherwise only
+when the server sent it uncompressed with a `Content-Length`. The `.onnx` is fetched once and
+reused for every execution-provider attempt. Passing no callback changes nothing about `init()`;
+`tracker.onProgress(cb)` subscribes after construction.
 
 ```js
 const tracker = new SaccadeTracker({
@@ -117,6 +119,7 @@ See the [documentation site](https://saccade.jspsych.org/) for the extension and
 | `start()` / `stop()` / `dispose()` / `running`                                                      | the frame loop                                                                                                                                  |
 | `video`                                                                                             | the live, **unmirrored** camera element — display it if you like (CSS-mirror the preview, never the pixels the model sees)                      |
 | `onFrame(cb)`                                                                                       | returns an unsubscribe function                                                                                                                 |
+| `onProgress(cb)`                                                                                    | replays the latest load-progress report, then every new one; returns an unsubscribe function                                                    |
 | `nextFrame()` / `nextEmbedding()` / `nextSample()`                                                  | one-shot promises; `nextSample()` pairs the embedding with the model's weight for it                                                            |
 | `addCalibrationPoint(target, embeddings, weights?)`, `clearCalibration()`, `getCalibrationPoints()` | calibration set                                                                                                                                 |
 | `fitCalibration({lambda, center, calHead})`                                                         | solves the ridge map, returns `{lambda, nPoints, weighting}`                                                                                    |

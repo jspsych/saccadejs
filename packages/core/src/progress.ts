@@ -27,7 +27,10 @@ export interface SaccadeProgress {
   stage: SaccadeProgressStage;
   /** Bytes received so far, when the stage is a download this package performs. */
   loaded?: number;
-  /** Total bytes, when the server sent a `Content-Length`. Absent otherwise. */
+  /**
+   * Size of the file in bytes, when it is known: from the release registry for a published
+   * model, or from an uncompressed response's `Content-Length`. Absent otherwise.
+   */
   total?: number;
 }
 

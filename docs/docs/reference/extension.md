@@ -81,7 +81,7 @@ Reached as `jsPsych.extensions.saccade`.
 | `getTimingOffset()` | `number \| null` | The offset currently subtracted from `t`. |
 | `setTimingOffset(ms \| null)` | `void` | Set it manually. `null` turns the correction off. |
 | `getLastLoopback()` | `LoopbackResult \| null` | The full result of the last time-sync run. |
-| `onSetupProgress(cb)` | `() => void` | Subscribe to `start()`'s load progress — see [`SaccadeProgress`](core-api). The most recent report is replayed on subscribe; the returned function unsubscribes. Nothing is reported for a tracker supplied through the `tracker` parameter. |
+| `onSetupProgress(cb)` | `() => void` | Subscribe to `start()`'s load progress — see [`SaccadeProgress`](core-api). The most recent report is replayed on subscribe; the returned function unsubscribes. A tracker supplied through the `tracker` parameter reports here too. |
 | `getSetupProgress()` | `SaccadeProgress \| null` | The most recent progress report. |
 | `dispose()` | `void` | End the frame subscriptions, remove the camera preview and gaze dot, and dispose the tracker (releasing the camera) unless it was supplied through the `tracker` parameter. jsPsych has no extension teardown hook, so a page that runs more than one experiment has to call this between them. |
 

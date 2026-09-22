@@ -4,7 +4,7 @@ import { Landmarker } from "./landmarker";
 import { OrtEmbeddingModel } from "./model";
 import type { FrameTime, TrackerFrame } from "./pipeline";
 import { Pipeline } from "./pipeline";
-import type { SaccadeProgressCallback } from "./progress";
+import type { SaccadeProgress, SaccadeProgressCallback } from "./progress";
 import { reportProgress } from "./progress";
 import type { CalHead, CalPoint, CalWeighting, EmbeddingModel, Gaze, ModelIdentity } from "./types";
 
@@ -25,7 +25,8 @@ export interface SaccadeTrackerOptions {
   /**
    * Called as `init()` walks its load stages, so a page can show a setup screen instead of a
    * blank wait. The `model` stage carries byte counts for the ~20 MB `.onnx`. Optional: with
-   * no callback nothing about init changes. See `SaccadeProgress`.
+   * no callback nothing about init changes. See `SaccadeProgress`, and `onProgress()` for
+   * subscribing after construction.
    */
   onProgress?: SaccadeProgressCallback;
   /**
@@ -89,6 +90,8 @@ export class SaccadeTracker {
   private weighting: CalWeighting | null = null;
   private lastGaze: { gaze: Gaze; time: FrameTime } | null = null;
   private subscribers = new Set<(f: TrackerFrame) => void>();
+  private progressListeners = new Set<SaccadeProgressCallback>();
+  private lastProgress: SaccadeProgress | null = null;
   private smoothingFrames: number;
   private wantRunning = false;
   private disposed = false;
@@ -102,6 +105,7 @@ export class SaccadeTracker {
     this.assets = opts.assets ?? {};
     this.smoothingFrames = opts.smoothingFrames ?? 1;
     if (opts.onFrame) this.subscribers.add(opts.onFrame);
+    if (opts.onProgress) this.progressListeners.add(opts.onProgress);
     this.video = document.createElement("video");
     this.video.autoplay = true;
     this.video.muted = true;
@@ -126,7 +130,7 @@ export class SaccadeTracker {
 
   private async doInit(): Promise<InitResult> {
     if (this.disposed) throw new Error("tracker disposed");
-    const onProgress = this.opts.onProgress;
+    const onProgress = this.emitProgress;
     const width = this.opts.video?.width ?? 640;
     const height = this.opts.video?.height ?? 480;
     if (this.opts.stream) {
@@ -285,6 +289,8 @@ export class SaccadeTracker {
       this.holder = null;
     }
     this.subscribers.clear();
+    this.progressListeners.clear();
+    this.lastProgress = null;
     this.initResult = null;
     this.initPromise = null;
   }
@@ -296,6 +302,24 @@ export class SaccadeTracker {
       this.subscribers.delete(cb);
     };
   }
+
+  /**
+   * Subscribe to `init()`'s load progress. The most recent report, if there is one, is delivered
+   * straight away, so a subscriber that arrives while init is under way is not left waiting for
+   * the next stage. Returns the unsubscribe function.
+   */
+  onProgress(cb: SaccadeProgressCallback): () => void {
+    this.progressListeners.add(cb);
+    if (this.lastProgress) reportProgress(cb, this.lastProgress);
+    return () => {
+      this.progressListeners.delete(cb);
+    };
+  }
+
+  private emitProgress = (p: SaccadeProgress): void => {
+    this.lastProgress = p;
+    for (const cb of Array.from(this.progressListeners)) reportProgress(cb, p);
+  };
 
   /** Resolves with the next frame the loop emits. */
   nextFrame(): Promise<TrackerFrame> {

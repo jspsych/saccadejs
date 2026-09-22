@@ -34,7 +34,7 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `smoothingFrames` | `number` | `1` | Frames whose embeddings are averaged into one prediction. `1` predicts from the newest frame alone. |
 | `executionProviders` | `("webgpu" \| "wasm")[]` | `["webgpu", "wasm"]` | ONNX Runtime providers, tried in order. |
 | `onFrame` | `(f: TrackerFrame) => void` | — | Equivalent to calling `onFrame()` after construction. |
-| `onProgress` | `(p: SaccadeProgress) => void` | — | Called during `init()` as each stage starts: `camera`, `mediapipe`, `landmarker`, `ort`, `model`, `session`, `ready`. The `model` stage also reports `loaded` and `total` bytes of the ONNX download, so you can show a progress bar. |
+| `onProgress` | `(p: SaccadeProgress) => void` | — | Called during `init()` as each stage starts: `camera`, `mediapipe`, `landmarker`, `ort`, `model`, `session`, `ready`. The `model` stage also reports `loaded` and `total` bytes of the ONNX download, so you can show a progress bar. Equivalent to calling `onProgress()` after construction. |
 | `stream` | `MediaStream` | — | Use this camera stream instead of calling `getUserMedia`. The tracker will not stop a stream it did not open. |
 | `model` | `EmbeddingModel` | — | Substitute the embedding model, for tests or a pre-warmed session. |
 
@@ -50,6 +50,7 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `dispose` | `(): void` | Stops everything and releases the camera. Not reversible. |
 | `running` | `boolean` (getter) | |
 | `onFrame` | `(cb: (f: TrackerFrame) => void) => () => void` | Subscribe to every frame; returns the unsubscribe function. |
+| `onProgress` | `(cb: (p: SaccadeProgress) => void) => () => void` | Subscribe to `init()`'s load progress. The most recent report is delivered straight away; returns the unsubscribe function. |
 | `nextFrame` | `(): Promise<TrackerFrame>` | |
 | `nextEmbedding` | `(): Promise<Float32Array \| null>` | |
 | `nextGaze` | `(): Promise<Gaze \| null>` | |

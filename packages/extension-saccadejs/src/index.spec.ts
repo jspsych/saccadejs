@@ -575,13 +575,11 @@ describe("SaccadeExtension public API", () => {
     const extension = new SaccadeExtension(makeJsPsych(display));
     await extension.initialize({});
     extension.getTracker();
-
-    const onProgress = SaccadeTracker.instances[0].options.onProgress;
-    expect(typeof onProgress).toBe("function");
+    const tracker = SaccadeTracker.instances[0];
 
     const seen: any[] = [];
     const unsubscribe = extension.onSetupProgress((p) => seen.push(p));
-    onProgress({ stage: "model", loaded: 5, total: 20 });
+    tracker.emitProgress({ stage: "model", loaded: 5, total: 20 });
 
     expect(seen).toEqual([{ stage: "model", loaded: 5, total: 20 }]);
     expect(extension.getSetupProgress()).toEqual({ stage: "model", loaded: 5, total: 20 });
@@ -592,10 +590,25 @@ describe("SaccadeExtension public API", () => {
     expect(late).toHaveLength(1);
 
     unsubscribe();
-    onProgress({ stage: "ready" });
+    tracker.emitProgress({ stage: "ready" });
     expect(seen).toHaveLength(1);
 
     extension.dispose();
+  });
+
+  it("reports setup progress for a tracker handed in, and lets go of it on dispose", async () => {
+    const tracker = new SaccadeTracker();
+    const extension = new SaccadeExtension(makeJsPsych(display));
+    await extension.initialize({ tracker: tracker as any });
+
+    const seen: any[] = [];
+    extension.onSetupProgress((p) => seen.push(p));
+    tracker.emitProgress({ stage: "model", loaded: 5, total: 20 });
+    expect(seen).toEqual([{ stage: "model", loaded: 5, total: 20 }]);
+
+    extension.dispose();
+    tracker.emitProgress({ stage: "ready" });
+    expect(extension.getSetupProgress()).toBeNull();
   });
 
   it("disposes the tracker it built, and clears its overlays", async () => {

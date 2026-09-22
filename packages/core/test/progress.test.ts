@@ -3,6 +3,7 @@ import { OrtEmbeddingModel, StubEmbeddingModel } from "../src/model";
 import type { SaccadeProgress } from "../src/progress";
 import { SaccadeTracker } from "../src/tracker";
 import { fakeLandmarks } from "./helpers/fakes";
+import releases from "../models/releases.json";
 
 // ---------------------------------------------------------------------------- doubles
 
@@ -11,6 +12,8 @@ interface FakeResponseOptions {
   chunks?: number[];
   /** Content-Length header value. Omit for a response that does not declare a length. */
   contentLength?: string | null;
+  /** Content-Encoding header value, e.g. "gzip". Omit for an uncompressed response. */
+  contentEncoding?: string | null;
   ok?: boolean;
   status?: number;
   statusText?: string;
@@ -23,8 +26,12 @@ function fakeResponse(opts: FakeResponseOptions = {}): Response {
   const bytes = chunks.map((n, i) => new Uint8Array(n).fill(i + 1));
   let next = 0;
   const headers = {
-    get: (name: string) =>
-      name.toLowerCase() === "content-length" ? (opts.contentLength ?? null) : null,
+    get: (name: string) => {
+      const key = name.toLowerCase();
+      if (key === "content-length") return opts.contentLength ?? null;
+      if (key === "content-encoding") return opts.contentEncoding ?? null;
+      return null;
+    },
   };
   const whole = (): ArrayBuffer => {
     const total = chunks.reduce((a, b) => a + b, 0);
@@ -150,6 +157,39 @@ describe("fetchModelBytes", () => {
     expect(seen).toEqual([undefined]);
   });
 
+  it("does not take a compressed response's Content-Length for the file size", async () => {
+    // What GitHub Pages and jsDelivr send a browser: the length of the gzip, not of the file.
+    global.fetch = jest.fn(async () =>
+      fakeResponse({ chunks: [8, 8, 4], contentLength: "15", contentEncoding: "gzip" }),
+    ) as any;
+    const seen: (number | undefined)[] = [];
+    await fetchModelBytes("/m.onnx", (_loaded, total) => seen.push(total));
+    expect(seen).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("prefers the expected size to any Content-Length", async () => {
+    global.fetch = jest.fn(async () =>
+      fakeResponse({ chunks: [8, 8, 4], contentLength: "15", contentEncoding: "gzip" }),
+    ) as any;
+    const seen: { loaded: number; total?: number }[] = [];
+    await fetchModelBytes("/m.onnx", (loaded, total) => seen.push({ loaded, total }), 20);
+    expect(seen).toEqual([
+      { loaded: 8, total: 20 },
+      { loaded: 16, total: 20 },
+      { loaded: 20, total: 20 },
+    ]);
+  });
+
+  it("drops a total the byte count runs past", async () => {
+    // A cross-origin server that hides Content-Encoding: the compressed length looks usable.
+    global.fetch = jest.fn(async () =>
+      fakeResponse({ chunks: [8, 8, 4], contentLength: "15" }),
+    ) as any;
+    const seen: (number | undefined)[] = [];
+    await fetchModelBytes("/m.onnx", (_loaded, total) => seen.push(total));
+    expect(seen).toEqual([15, undefined, undefined]);
+  });
+
   it("falls back to arrayBuffer() when the response has no streaming body", async () => {
     global.fetch = jest.fn(async () =>
       fakeResponse({ chunks: [6, 6], contentLength: null, noStream: true }),
@@ -211,6 +251,30 @@ describe("OrtEmbeddingModel progress", () => {
     expect(created[0].arg).toBeInstanceOf(Uint8Array);
     expect((created[0].arg as Uint8Array).byteLength).toBe(20);
     model.dispose();
+  });
+
+  it("reports a published model's size from the registry, whatever the server says", async () => {
+    presetModules(fakeOrt().ort);
+    global.fetch = jest.fn(async () =>
+      fakeResponse({ chunks: [10, 10], contentLength: "15", contentEncoding: "gzip" }),
+    ) as any;
+
+    const totals = async (modelUrl?: string) => {
+      const seen: SaccadeProgress[] = [];
+      const model = new OrtEmbeddingModel({
+        assets: modelUrl ? { modelUrl } : {},
+        onProgress: (p) => seen.push(p),
+      });
+      await model.init();
+      model.dispose();
+      return seen.filter((p) => p.stage === "model" && p.loaded).map((p) => p.total);
+    };
+
+    const current = releases.releases[releases.releases.length - 1];
+    const versioned = `https://example.org/models/${releases.id}/${current.version}/${current.file}`;
+    expect(await totals()).toEqual([current.bytes, current.bytes]);
+    expect(await totals(`${versioned}?v=1`)).toEqual([current.bytes, current.bytes]);
+    expect(await totals("/my/own/model.onnx")).toEqual([undefined, undefined]);
   });
 
   it("reuses the one download across every execution-provider attempt", async () => {
@@ -296,6 +360,26 @@ describe("SaccadeTracker progress", () => {
 
     await t.init();
     expect(seen.map((p) => p.stage)).toEqual(["mediapipe", "landmarker", "ready"]);
+    t.dispose();
+  }, 15000);
+
+  it("reports to onProgress() subscribers, replaying the latest report to a late one", async () => {
+    presetModules(undefined, fakeVision());
+    const t = new SaccadeTracker({ stream: fakeStream(), model: new StubEmbeddingModel() });
+    t.video.play = async () => undefined;
+    Object.defineProperty(t.video, "videoWidth", { value: 64, configurable: true });
+    Object.defineProperty(t.video, "videoHeight", { value: 48, configurable: true });
+
+    const early: SaccadeProgress[] = [];
+    const unsubscribe = t.onProgress((p) => early.push(p));
+    await t.init();
+    expect(early.map((p) => p.stage)).toEqual(["mediapipe", "landmarker", "ready"]);
+
+    const late: SaccadeProgress[] = [];
+    t.onProgress((p) => late.push(p));
+    expect(late).toEqual([{ stage: "ready" }]);
+
+    unsubscribe();
     t.dispose();
   }, 15000);
 });

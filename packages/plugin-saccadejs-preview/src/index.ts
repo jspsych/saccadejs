@@ -217,11 +217,15 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
       const bar = display_element.querySelector("#saccade-preview-progress-bar") as HTMLElement;
       const label = display_element.querySelector("#saccade-preview-progress-label") as HTMLElement;
 
+      // The bar only ever moves forward. A download whose size stops being known part-way (see
+      // `fetchModelBytes`) would otherwise drop back to the start of its stage.
+      let shown = 0;
       const render = (p: SaccadeProgress | null) => {
         // The screen is swapped out as soon as init resolves; a late report must not write to
         // elements that are no longer in the display.
         if (!bar.isConnected) return;
-        const pct = Math.round(Math.min(1, Math.max(0, setupFraction(p))) * 100);
+        shown = Math.max(shown, Math.round(Math.min(1, Math.max(0, setupFraction(p))) * 100));
+        const pct = shown;
         bar.style.width = `${pct}%`;
         track.setAttribute("aria-valuenow", String(pct));
         label.textContent = setupLabel(p);

@@ -243,6 +243,7 @@ class SaccadeExtension implements JsPsychExtension {
   // ---- setup progress ------------------------------------------------------------------------
   private progressCallbacks: Array<SaccadeProgressCallback> = [];
   private lastProgress: SaccadeProgress | null = null;
+  private progressUnsubscribe: (() => void) | null = null;
 
   // ---- per-trial state -----------------------------------------------------------------------
   private currentTrialData: SaccadeGazeSample[] = [];
@@ -286,6 +287,7 @@ class SaccadeExtension implements JsPsychExtension {
     if (tracker) {
       this.tracker = tracker;
       this.ownsTracker = false;
+      this.progressUnsubscribe = tracker.onProgress(this.handleProgress);
       this.parkVideo();
       this.watchFrames();
       // A supplied tracker may already be initialised, and an experiment driving it itself
@@ -552,9 +554,9 @@ class SaccadeExtension implements JsPsychExtension {
       this.tracker = new SaccadeTracker({
         assets: this.assets,
         smoothingFrames: this.smoothing_frames,
-        onProgress: this.handleProgress,
       });
       this.ownsTracker = true;
+      this.progressUnsubscribe = this.tracker.onProgress(this.handleProgress);
       this.parkVideo();
       this.watchFrames();
     }
@@ -566,9 +568,7 @@ class SaccadeExtension implements JsPsychExtension {
    * face-landmarker task, onnxruntime-web, the ~20 MB eye model, and the warm-up — so a trial
    * can show a progress bar instead of a blank wait. The most recent report (if any) is
    * delivered synchronously on subscribe, so a late subscriber is not left with an empty bar.
-   *
-   * A tracker supplied through the `tracker` initialize parameter was constructed by the page,
-   * which owns its `onProgress`; nothing is reported for it here.
+   * This holds for a tracker handed in through the `tracker` initialize parameter too.
    *
    * @returns A function that removes the subscription.
    */
@@ -620,6 +620,8 @@ class SaccadeExtension implements JsPsychExtension {
     this.warnedNotStarted = false;
     this.faceFound = false;
     this.currentGaze = null;
+    this.progressUnsubscribe?.();
+    this.progressUnsubscribe = null;
     this.lastProgress = null;
     this.progressCallbacks = [];
     this.gazeUpdateCallbacks = [];

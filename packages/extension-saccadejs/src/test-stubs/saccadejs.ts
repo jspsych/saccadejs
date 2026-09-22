@@ -131,6 +131,20 @@ export class SaccadeTracker {
     };
   }
 
+  private progressCallbacks = new Set<(p: any) => void>();
+
+  onProgress(cb: (p: any) => void) {
+    this.progressCallbacks.add(cb);
+    return () => {
+      this.progressCallbacks.delete(cb);
+    };
+  }
+
+  /** Test helper: deliver a load-progress report to every progress subscriber. */
+  emitProgress(p: any) {
+    for (const cb of [...this.progressCallbacks]) cb(p);
+  }
+
   /** Test helper: deliver a frame to every subscriber. */
   emit(frame: StubFrame) {
     for (const cb of [...this.callbacks]) cb(frame);

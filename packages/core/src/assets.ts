@@ -98,25 +98,35 @@ export function modelUrl(assets: SaccadeAssets = {}): string {
  * execution-provider attempt (webgpu with graph capture, webgpu without, wasm), which would
  * mean up to three requests for the same 20 MB.
  *
- * `onBytes` is called per chunk with the running byte count, and with `total` only when the
- * response carried a usable `Content-Length`.
+ * `onBytes` is called per chunk with the running byte count, and with `total` when the size of
+ * the decoded file is known. `Content-Length` counts the bytes on the wire, so it is that size
+ * only for a response that was not compressed -- and both GitHub Pages and jsDelivr gzip or
+ * brotli the .onnx for any browser. `expectedBytes`, the size a published release is known to
+ * have, is therefore preferred when the caller has it. Failing that, a cross-origin server may
+ * hide `Content-Encoding`, which leaves a compressed length looking usable; once the count runs
+ * past it, `total` is dropped.
  */
 export async function fetchModelBytes(
   url: string,
   onBytes?: (loaded: number, total?: number) => void,
+  expectedBytes?: number,
 ): Promise<Uint8Array> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`failed to fetch ${url}: ${res.status} ${res.statusText}`);
 
+  const encoding = res.headers?.get?.("content-encoding");
   const header = res.headers?.get?.("content-length");
   const parsed = header == null ? NaN : Number(header);
-  const total = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  const usable = (n: number | undefined) =>
+    n != null && Number.isFinite(n) && n > 0 ? n : undefined;
+  const identity = !encoding || encoding.toLowerCase() === "identity";
+  let total = usable(expectedBytes) ?? (identity ? usable(parsed) : undefined);
 
   const reader = res.body?.getReader?.();
   if (!reader) {
     // No streaming body (an older browser, or a test double): one shot, one report.
     const buf = new Uint8Array(await res.arrayBuffer());
-    onBytes?.(buf.byteLength, total ?? buf.byteLength);
+    onBytes?.(buf.byteLength, buf.byteLength);
     return buf;
   }
 
@@ -128,6 +138,7 @@ export async function fetchModelBytes(
     if (!value) continue;
     chunks.push(value);
     loaded += value.byteLength;
+    if (total != null && loaded > total) total = undefined;
     onBytes?.(loaded, total);
   }
 
