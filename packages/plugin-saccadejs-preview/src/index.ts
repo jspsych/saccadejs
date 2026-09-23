@@ -414,10 +414,18 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
         unsubscribeProgress?.();
         unsubscribeProgress = null;
         console.error(error);
+        // Matched by name rather than instanceof: this plugin only imports core's types, and
+        // the check has to hold even when core and the plugin come from separate bundles.
+        const why =
+          error?.name === "WebGLUnavailableError"
+            ? `<p>This browser has its graphics features (WebGL) turned off or unavailable, and the
+               eye tracker needs them. Turning on hardware acceleration in the browser's settings,
+               or using a different browser, may help.</p>`
+            : `<p>This usually means the page doesn't have permission to use your camera, or
+               another app is using it.</p>`;
         display_element.innerHTML = `
           <p>Sorry, the eye tracker couldn't start, so the experiment can't continue.</p>
-          <p>This usually means the page doesn't have permission to use your camera, or another
-          app is using it.</p>
+          ${why}
           <p class="saccade-preview-detail">${escapeHtml(String(error?.message ?? error))}</p>`;
         on_load();
       });

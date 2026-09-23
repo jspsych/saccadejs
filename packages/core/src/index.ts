@@ -39,7 +39,13 @@ export type { FrameTime, TrackerFrame, TrackerTimings } from "./pipeline";
 export { Pipeline } from "./pipeline";
 export type { InitResult, SaccadeTrackerOptions } from "./tracker";
 export { SaccadeTracker } from "./tracker";
-export { Landmarker, createLandmarker, headPoseFromMatrix } from "./landmarker";
+export {
+  Landmarker,
+  WebGLUnavailableError,
+  createLandmarker,
+  headPoseFromMatrix,
+  webglAvailable,
+} from "./landmarker";
 export type { FaceDetection, HeadPose, LandmarkerOptions } from "./landmarker";
 export { OrtEmbeddingModel, StubEmbeddingModel } from "./model";
 

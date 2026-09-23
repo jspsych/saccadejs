@@ -374,6 +374,8 @@ pipeline. Most code never needs them.
 | `solveRidge`, `predict`, `calWeight`, `fitRidge` | The calibration mathematics. |
 | `Landmarker`, `createLandmarker(opts?)` | The MediaPipe wrapper on its own. With `{ headPose: true }`, `detectFace()` also returns the head-pose matrix (4x4, column-major). |
 | `headPoseFromMatrix(m)` | Yaw, pitch and roll in degrees, and position, from that matrix. |
+| `webglAvailable()` | Whether the page can create a WebGL context (`null` where there is no DOM to ask). The face tracker cannot run without one. |
+| `WebGLUnavailableError` | Thrown by `createLandmarker()`, and so by `tracker.init()`, when there is no WebGL. Its `name` is `"WebGLUnavailableError"`. |
 | `OrtEmbeddingModel`, `StubEmbeddingModel` | The ONNX model, and a stub for tests. |
 | `Pipeline` | The frame loop without camera management. |
 | `loadOrt`, `loadVision`, `presetModules`, `modelUrl` | Asset loading, and a way to inject already-loaded modules. |
