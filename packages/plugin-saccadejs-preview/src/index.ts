@@ -11,6 +11,10 @@ const EYE_H = 36;
 
 const STYLE_ID = "saccade-preview-style";
 
+/** What the face indicator says. Read by participants, so plain words rather than "face: no". */
+const FACE_YES = "Face found";
+const FACE_NO = "Looking for your face…";
+
 const CSS = `
 #saccade-preview-wrapper {
   display: flex;
@@ -40,13 +44,33 @@ const CSS = `
 }
 #saccade-preview-status {
   display: flex;
-  gap: 18px;
+  flex-direction: column;
   align-items: center;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
+  gap: 4px;
 }
-#saccade-preview-status .saccade-face-yes { color: #15803d; font-weight: 600; }
-#saccade-preview-status .saccade-face-no { color: #b91c1c; font-weight: 600; }
+#saccade-preview-face {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+#saccade-preview-face::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+#saccade-preview-face.saccade-face-yes { color: #16a34a; }
+#saccade-preview-face.saccade-face-no { color: #d97706; }
+#saccade-preview-diagnostics {
+  display: flex;
+  gap: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  opacity: 0.7;
+}
 #saccade-preview-instructions { max-width: 640px; }
 #saccade-preview-loading {
   display: flex;
@@ -91,7 +115,7 @@ const info = <const>{
         <p>Look directly at the screen and keep your face centered in the preview. It is important
         that you keep your head reasonably still for the rest of the experiment, so take a moment
         now to make your setup comfortable.</p>
-        <p>When the face indicator is green, you can continue.</p>`,
+        <p>When the preview says <strong>Face found</strong>, you can continue.</p>`,
     },
     /** Text of the button that ends the trial. */
     button_text: {
@@ -128,6 +152,13 @@ const info = <const>{
     show_progress: {
       type: ParameterType.BOOL,
       default: true,
+    },
+    /** Whether to show the tracker's frame rate and the execution provider ("webgpu" or "wasm")
+     * under the preview. Useful while piloting; off by default because they mean nothing to a
+     * participant. Both are recorded in the data (`fps`, `backend`) either way. */
+    show_diagnostics: {
+      type: ParameterType.BOOL,
+      default: false,
     },
   },
   data: {
@@ -209,8 +240,8 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
             <div id="saccade-preview-progress-bar"></div>
           </div>
           <p id="saccade-preview-progress-label">Starting…</p>
-          <p id="saccade-preview-loading-note">The eye model is about 20 MB. It is downloaded
-          once and then cached by the browser.</p>
+          <p id="saccade-preview-loading-note">This can take a minute on a slow connection. It
+          only needs to download once.</p>
         </div>`;
 
       const track = display_element.querySelector("#saccade-preview-progress-track") as HTMLElement;
@@ -286,10 +317,16 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
           <div id="saccade-preview-panel">
             <canvas id="saccade-preview-crop" width="${EYE_W}" height="${EYE_H}"
               style="${cropStyle}"></canvas>
-            <div id="saccade-preview-status">
-              <span>face: <span id="saccade-preview-face" class="saccade-face-no">no</span></span>
-              <span id="saccade-preview-fps">– fps</span>
-              <span id="saccade-preview-backend">${extension.getBackend() ?? "–"}</span>
+            <div id="saccade-preview-status" aria-live="polite">
+              <span id="saccade-preview-face" class="saccade-face-no">${FACE_NO}</span>
+              ${
+                trial.show_diagnostics
+                  ? `<span id="saccade-preview-diagnostics">
+                      <span id="saccade-preview-fps">– fps</span>
+                      <span id="saccade-preview-backend">${extension.getBackend() ?? "–"}</span>
+                    </span>`
+                  : ""
+              }
             </div>
           </div>
           <div id="saccade-preview-instructions">${trial.instructions}</div>
@@ -329,9 +366,10 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
         }, trial.face_timeout);
       }
 
-      backendEl.textContent = extension.getBackend() ?? "–";
+      if (backendEl) backendEl.textContent = extension.getBackend() ?? "–";
 
       let tick = 0;
+      let shownFace = false;
       unsubscribe = extension.getTracker().onFrame((frame: TrackerFrame) => {
         faceFound = frame.faceFound;
         fps = frame.fps;
@@ -348,11 +386,16 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
           cropCtx.putImageData(cropImage, 0, 0);
         }
 
-        faceEl.textContent = frame.faceFound ? "yes" : "no";
-        faceEl.className = frame.faceFound ? "saccade-face-yes" : "saccade-face-no";
+        // Only touched on a change: rewriting the text every frame would make a screen reader
+        // announce it thirty times a second through the aria-live region.
+        if (frame.faceFound !== shownFace) {
+          shownFace = frame.faceFound;
+          faceEl.textContent = frame.faceFound ? FACE_YES : FACE_NO;
+          faceEl.className = frame.faceFound ? "saccade-face-yes" : "saccade-face-no";
+        }
         if (trial.require_face && !face_gate_open) button.disabled = !frame.faceFound;
 
-        if (tick++ % 5 === 0) fpsEl.textContent = `${frame.fps.toFixed(1)} fps`;
+        if (fpsEl && tick++ % 5 === 0) fpsEl.textContent = `${frame.fps.toFixed(1)} fps`;
       });
 
       on_load();
@@ -372,9 +415,9 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
         unsubscribeProgress = null;
         console.error(error);
         display_element.innerHTML = `
-          <p>The experiment cannot continue because the eye tracker failed to start.</p>
-          <p>This may be a technical problem, or you may not have given the page permission to use
-          your camera.</p>
+          <p>Sorry, the eye tracker couldn't start, so the experiment can't continue.</p>
+          <p>This usually means the page doesn't have permission to use your camera, or another
+          app is using it.</p>
           <p class="saccade-preview-detail">${escapeHtml(String(error?.message ?? error))}</p>`;
         on_load();
       });
