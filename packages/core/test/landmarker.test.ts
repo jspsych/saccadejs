@@ -1,5 +1,10 @@
 import { presetModules, resetModules } from "../src/assets";
-import { createLandmarker, headPoseFromMatrix } from "../src/landmarker";
+import {
+  WebGLUnavailableError,
+  createLandmarker,
+  headPoseFromMatrix,
+  webglAvailable,
+} from "../src/landmarker";
 import { fakeLandmarks } from "./helpers/fakes";
 
 const RAD = Math.PI / 180;
@@ -127,5 +132,38 @@ describe("Landmarker head pose", () => {
     presetModules(undefined, vision);
     const lm = await createLandmarker({ headPose: true });
     expect(lm.detectFace(video, 1)!.pose).toBeNull();
+  });
+});
+
+describe("Landmarker without WebGL", () => {
+  const withoutWebGL = async (fn: () => Promise<void>) => {
+    const stubbed = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string) {
+      return kind === "webgl2" || kind === "webgl" ? null : stubbed.call(this, kind as "2d");
+    } as typeof stubbed;
+    try {
+      await fn();
+    } finally {
+      HTMLCanvasElement.prototype.getContext = stubbed;
+      resetModules();
+    }
+  };
+
+  it("reports WebGL when the browser has it", () => {
+    expect(webglAvailable()).toBe(true);
+  });
+
+  it("refuses to start, before loading MediaPipe, when there is no WebGL", async () => {
+    await withoutWebGL(async () => {
+      expect(webglAvailable()).toBe(false);
+      const { vision, seen } = fakeVision(null);
+      presetModules(undefined, vision);
+
+      const attempt = createLandmarker();
+      await expect(attempt).rejects.toBeInstanceOf(WebGLUnavailableError);
+      await expect(attempt).rejects.toThrow(/needs WebGL/);
+      // failed up front: the face landmarker was never built
+      expect(seen).toHaveLength(0);
+    });
   });
 });
