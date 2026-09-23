@@ -68,8 +68,8 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-validate
 | `average_offset`        | array   | For each point, `{x, y, r}` — the average offset of gaze from the target (accuracy) and the median distance of individual samples from that average (precision). `{x: null, y: null, r: null}` for a point with no samples. |
 | `samples_per_sec`       | float   | Mean sampling rate over the points. `null` if no point collected two samples.                                                                                                                                               |
 | `validation_points`     | array   | The points, in the order they were shown.                                                                                                                                                                                   |
-| `median_error_px`       | float   | Median across points of the distance in pixels between the target and the average gaze for that target. `null` if no point collected any samples. |
-| `median_error_viewport` | float   | The same error in viewport units (x divided by viewport width, y by height), comparable across screen sizes. **The number to report.** |
+| `median_error_px`       | float   | Median across points of the distance in pixels between the target and the average gaze for that target. `null` if no point collected any samples.                                                                           |
+| `median_error_viewport` | float   | The same error as a fraction of the viewport's diagonal, comparable across screen sizes and shapes. **The number to report.**                                                                                               |
 | `rt`                    | integer | Time from the start of the trial until validation finished.                                                                                                                                                                 |
 
 ## Interpreting the numbers

@@ -114,7 +114,8 @@ export interface CalPoint { target: Gaze; embeddings: Float32Array[];
  *  or the caller passes a CalHead. */
 export type CalWeighting = "model" | "head" | "uniform";
 export function defaultGrid13(): Gaze[]; export function trainingGrid20(): Gaze[]; export function validationGrid9(): Gaze[];
-export function lambdaFor(nPoints: number): number;   // 3 when <= 9 points else 1
+export function lambdaFor(nPoints: number): number;   // 3 when <= 9 distinct points else 1
+export function countTargets(cal: CalPoint[]): number; // distinct targets; a repeated dot counts once
 
 // ---- calibration / validation helpers (pure, DOM-free) -----------------------
 export interface CollectOptions { settleMs: number; captureMs: number;

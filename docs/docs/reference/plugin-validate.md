@@ -19,10 +19,10 @@ because the calibration was built to fit those. Measuring on new positions tells
 works in general.
 
 **The number to report is `median_error_viewport`**: the typical distance between the estimate
-and the dot, as a fraction of the window's size. For example, `0.08` means estimates typically
-landed about 8% of the window's size away from the dot, which is roughly 80 pixels on a window
-1,000 pixels wide. Because it is a fraction, it can be compared across participants with
-different screen sizes.
+and the dot, as a fraction of the window's diagonal. For example, `0.08` means estimates typically
+landed about 8% of the diagonal away from the dot: roughly 150 pixels, in any direction, on a
+1,600 × 900 window, whose diagonal is about 1,840 pixels. Because it is a fraction, it can be
+compared across participants with different screen sizes and shapes.
 
 ```js
 timeline.push({ type: jsPsychSaccadeValidate });
@@ -54,7 +54,7 @@ timeline.push({ type: jsPsychSaccadeValidate });
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `median_error_viewport` | `number` | **The number to report.** The typical error across dots, as a fraction of the window's size. Comparable across screen sizes. |
+| `median_error_viewport` | `number` | **The number to report.** The typical error across dots, as a fraction of the window's diagonal. Comparable across screen sizes and shapes. |
 | `median_error_px` | `number` | The same error in pixels on this participant's screen. For each dot, the distance from the dot to the average of the gaze samples recorded there; then the median across dots. |
 | `samples_per_sec` | `number` | The average number of gaze samples per second while recording. |
 | `rt` | `number` | Milliseconds from the start of the trial to the end of validation. |

@@ -1,5 +1,5 @@
 import type { SaccadeAssets } from "./assets";
-import { CENTER, fitRidge, lambdaFor, meanEmbedding } from "./grids";
+import { CENTER, countTargets, fitRidge, lambdaFor, meanEmbedding } from "./grids";
 import { Landmarker } from "./landmarker";
 import { OrtEmbeddingModel } from "./model";
 import type { FrameTime, TrackerFrame } from "./pipeline";
@@ -385,7 +385,8 @@ export class SaccadeTracker {
     weighting: CalWeighting;
   } | null {
     if (this.cal.length === 0) return null;
-    const lambda = opts.lambda ?? lambdaFor(this.cal.length);
+    const nPoints = countTargets(this.cal);
+    const lambda = opts.lambda ?? lambdaFor(nPoints);
     const center = opts.center ?? CENTER;
     const head = opts.calHead !== undefined ? opts.calHead : (this.opts.calHead ?? null);
     const { kernel, weighting } = fitRidge(this.cal, head, lambda, center);
@@ -393,7 +394,7 @@ export class SaccadeTracker {
     this.weighting = weighting;
     this.pipeline?.setCenter(center);
     this.pipeline?.setKernel(this.kernel);
-    return { lambda, nPoints: this.cal.length, weighting };
+    return { lambda, nPoints, weighting };
   }
 
   /** How the last fit weighted its rows, or null before one has run. */

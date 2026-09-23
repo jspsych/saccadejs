@@ -88,9 +88,9 @@ const info = <const>{
         webcam takes a few more to timestamp what it sees. We need the total so that the
         eye-tracking data can be lined up with what was on the screen at the time.</p>
         <p>To measure it, the whole screen will change between two brightness levels at random
-        moments, roughly once a second, for about 15 seconds, while the webcam watches your face.
-        <strong>This is not a flashing or flickering display</strong> — there is at most one change
-        per second, well below the level associated with photosensitive reactions.</p>
+        moments, every half second to a second, for about 15 seconds, while the webcam watches your
+        face. <strong>This is not a flashing or flickering display</strong> — there are at most two
+        changes per second, well below the level associated with photosensitive reactions.</p>
         <p>Please sit still and keep looking at the screen until it is finished.</p>`,
     },
     /** Text of the button that starts the measurement. */
@@ -105,7 +105,8 @@ const info = <const>{
       default: false,
     },
     /** Whether to apply the measured lag to the extension, so that every later trial's
-     * `saccade_data` timestamps have it subtracted. */
+     * `saccade_data` timestamps have it subtracted. Only an `OK` verdict is applied: an
+     * `UNRELIABLE` lag is recorded but not used, and `applied` says which happened. */
     apply_offset: {
       type: ParameterType.BOOL,
       default: true,
@@ -165,7 +166,8 @@ const info = <const>{
     reason: {
       type: ParameterType.STRING,
     },
-    /** Whether the measured lag was applied to the extension (`apply_offset`). */
+    /** Whether the measured lag was applied to the extension: `apply_offset` was true and the
+     * verdict was `OK`. */
     applied: {
       type: ParameterType.BOOL,
     },
@@ -184,10 +186,11 @@ type Info = typeof info;
  * Measures the combined display + camera lag with the saccade.js screen→webcam loopback, and
  * applies it to the extension so that gaze timestamps line up with stimulus onsets.
  *
- * The screen changes between two brightness levels at random moments about once a second; the
+ * The screen changes between two brightness levels at random moments 0.5–1 s apart; the
  * webcam watches the light those changes throw on the participant's face. Cross-correlating the
  * two gives the total lag on the `performance.now()` timeline jsPsych uses for stimulus onsets.
- * There is no flicker: at most one change per second, a third of the WCAG 2.3.1 / Harding limit.
+ * There is no flicker: at most two changes, so one flash (a change and its reversal), per second,
+ * a third of the WCAG 2.3.1 / Harding limit of three flashes per second.
  *
  * The `saccade` extension must be registered in `initJsPsych`.
  *
@@ -286,7 +289,10 @@ class SaccadeTimeSyncPlugin implements JsPsychPlugin<Info> {
       measure().then(
         (result) => {
           extension.setLastLoopback(result);
-          const applied = !!trial.apply_offset && Number.isFinite(result.lagMs);
+          // A lag the measurement itself calls untrustworthy is kept in the data but not
+          // subtracted, so `saccade_timing.corrected` stays an honest exclusion check.
+          const applied =
+            !!trial.apply_offset && result.verdict === "OK" && Number.isFinite(result.lagMs);
           if (applied) extension.setTimingOffset(result.lagMs);
           end_trial(result, applied);
         },

@@ -44,9 +44,16 @@ export function validationGrid9(): Gaze[] {
   return points;
 }
 
-/** Ridge penalty: heavier with few points, where overfitting is the real risk. */
+/** Ridge penalty: heavier with few points, where overfitting is the real risk. `nPoints` is
+ * the number of distinct targets, not rows: showing nine dots twice is still nine points. */
 export function lambdaFor(nPoints: number): number {
   return nPoints <= 9 ? manifest.ridge.lambda_fewpoint : manifest.ridge.lambda_default;
+}
+
+/** How many distinct targets the calibration rows cover. Repeating a dot adds a row, not a
+ * point, and it is points that decide how well the map is constrained across the screen. */
+export function countTargets(cal: CalPoint[]): number {
+  return new Set(cal.map((p) => `${p.target.x},${p.target.y}`)).size;
 }
 
 /**
@@ -113,7 +120,7 @@ function rowWeight(p: CalPoint): number | null {
 export function fitRidge(
   cal: CalPoint[],
   head: CalHead | null = null,
-  lambda: number = lambdaFor(cal.length),
+  lambda: number = lambdaFor(countTargets(cal)),
   center: number = CENTER,
 ): { kernel: Float32Array; weighting: CalWeighting } {
   const weighted = cal.filter((p) => rowWeight(p) != null).length;

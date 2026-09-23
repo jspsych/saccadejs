@@ -41,7 +41,7 @@ timeline.push({ type: jsPsychSaccadeTimeSync });
 | `instructions` | `HTML string` | an explanation of the test | Shown before the measurement starts. |
 | `button_text` | `string` | `"Start"` | The label on the button that starts the measurement. |
 | `require_ok` | `boolean` | `false` | If the result is `UNRELIABLE`, run the measurement once more. The experiment continues either way. |
-| `apply_offset` | `boolean` | `true` | Subtract the measured delay from gaze timestamps in all later trials. |
+| `apply_offset` | `boolean` | `true` | Subtract the measured delay from gaze timestamps in all later trials, if the verdict is `"OK"`. Any other verdict is recorded but not applied. |
 
 ## Data
 

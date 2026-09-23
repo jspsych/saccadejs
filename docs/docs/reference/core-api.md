@@ -238,6 +238,7 @@ defaultGrid13(): Gaze[]     // 3x3 at 5/50/95% plus 4 inner points at 27.5/72.5%
 trainingGrid20(): Gaze[]    // 4x5, denser
 validationGrid9(): Gaze[]   // 3x3 at 15/50/85%, off the calibration grid
 lambdaFor(nPoints: number): number   // 3 when nPoints <= 9, else 1
+countTargets(cal: CalPoint[]): number   // distinct targets: nine dots shown twice is 9
 ```
 
 Validate on `validationGrid9()`, not on the calibration points.

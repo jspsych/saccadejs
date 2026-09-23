@@ -180,6 +180,27 @@ describe("saccade-time-sync trial", () => {
     expect(getData().values()[0].lag_ms).toBe(82);
   });
 
+  it("records but does not apply an UNRELIABLE lag", async () => {
+    (runLoopback as jest.Mock).mockResolvedValueOnce(
+      makeLoopbackResult({ verdict: "UNRELIABLE", reason: "halves disagree" }),
+    );
+    const jsPsych = setup();
+    const { displayElement, getData, finished } = await startTimeline(
+      [{ type: SaccadeTimeSyncPlugin }],
+      jsPsych,
+    );
+    const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
+
+    await clickTarget(displayElement.querySelector("#saccade-time-sync-start"));
+    await finished;
+
+    expect(extension.setTimingOffset).not.toHaveBeenCalled();
+    const data = getData().values()[0];
+    expect(data.applied).toBe(false);
+    expect(data.verdict).toBe("UNRELIABLE");
+    expect(data.lag_ms).toBe(82);
+  });
+
   it("uses the reduced-contrast levels when asked", async () => {
     const jsPsych = setup();
     const { displayElement, finished } = await startTimeline(
