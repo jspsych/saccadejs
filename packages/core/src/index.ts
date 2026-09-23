@@ -39,7 +39,8 @@ export type { FrameTime, TrackerFrame, TrackerTimings } from "./pipeline";
 export { Pipeline } from "./pipeline";
 export type { InitResult, SaccadeTrackerOptions } from "./tracker";
 export { SaccadeTracker } from "./tracker";
-export { Landmarker, createLandmarker } from "./landmarker";
+export { Landmarker, createLandmarker, headPoseFromMatrix } from "./landmarker";
+export type { FaceDetection, HeadPose, LandmarkerOptions } from "./landmarker";
 export { OrtEmbeddingModel, StubEmbeddingModel } from "./model";
 
 // ---- preprocessing (bit-exact with the training pipeline) --------------------

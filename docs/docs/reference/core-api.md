@@ -372,7 +372,8 @@ pipeline. Most code never needs them.
 | `rgbaToGray`, `resizeBilinearCv`, `clahe` | The three preprocessing steps, each matching OpenCV byte for byte. |
 | `extractEyeCrop(frameRGBA, W, H, lm)` | All of the above in one call. |
 | `solveRidge`, `predict`, `calWeight`, `fitRidge` | The calibration mathematics. |
-| `Landmarker`, `createLandmarker(opts?)` | The MediaPipe wrapper on its own. |
+| `Landmarker`, `createLandmarker(opts?)` | The MediaPipe wrapper on its own. With `{ headPose: true }`, `detectFace()` also returns the head-pose matrix (4x4, column-major). |
+| `headPoseFromMatrix(m)` | Yaw, pitch and roll in degrees, and position, from that matrix. |
 | `OrtEmbeddingModel`, `StubEmbeddingModel` | The ONNX model, and a stub for tests. |
 | `Pipeline` | The frame loop without camera management. |
 | `loadOrt`, `loadVision`, `presetModules`, `modelUrl` | Asset loading, and a way to inject already-loaded modules. |
