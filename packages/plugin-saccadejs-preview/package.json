@@ -1,6 +1,6 @@
 {
   "name": "@saccadejs/plugin-preview",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "jsPsych plugin: start the saccade.js camera and show the face and eye-crop preview",
   "type": "module",
   "main": "dist/index.cjs",

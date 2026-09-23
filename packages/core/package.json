@@ -1,6 +1,6 @@
 {
   "name": "@saccadejs/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "saccade.js core: webcam eye tracking in the browser (MediaPipe face landmarks → ONNX eye embedding → ridge calibration), with a screen-to-webcam timing loopback",
   "type": "module",
   "main": "dist/index.cjs",
