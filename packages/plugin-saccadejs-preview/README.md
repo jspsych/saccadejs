@@ -4,12 +4,17 @@ A [jsPsych](https://www.jspsych.org) plugin that starts the [saccade.js](https:/
 camera and lets the participant position themselves in front of it.
 
 The trial shows the mirrored camera image, the 144×36 eye crop that the model actually sees
-(scaled up), a face-found indicator and the frame rate, and a continue button that stays disabled
-until the tracker is running and a face is being found. Because it is the first trial that
-touches the camera, it is also where the browser's camera-permission prompt appears and where the
-ONNX model and MediaPipe wasm are downloaded — so it opens on a progress bar that names each
-stage as it loads (`Downloading eye model 12.3 / 20.6 MB` for the ~20 MB model, the only stage
-that can report bytes). Set `show_progress: false` for a plain "Starting the camera…" message.
+(scaled up), an indicator that reads "Face found" or "Looking for your face…", and a continue
+button that stays disabled until the tracker is running and a face is being found. Because it is
+the first trial that touches the camera, it is also where the browser's camera-permission prompt
+appears and where the ONNX model and MediaPipe wasm are downloaded — so it opens on a progress bar
+with a plain-language label (`Downloading the eye tracker (12.3 of 20.6 MB)…` for the ~20 MB
+model, the only stage that can report bytes). Set `show_progress: false` for a plain "Starting the
+camera…" message.
+
+Everything on screen is worded for participants. The frame rate and the execution provider are
+recorded in the data either way; set `show_diagnostics: true` to show them under the preview
+while piloting.
 
 Requires the [`@saccadejs/extension`](../extension-saccadejs) extension to be registered in
 `initJsPsych`.
@@ -41,15 +46,16 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-preview
 
 ## Parameters
 
-| Parameter       | Type        | Default                      | Description                                                                                                                                                                                                                                  |
-| --------------- | ----------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `instructions`  | HTML string | _(positioning instructions)_ | Instructions shown beside the camera preview.                                                                                                                                                                                                |
-| `button_text`   | string      | `"Continue"`                 | Text of the button that ends the trial.                                                                                                                                                                                                      |
-| `show_eye_crop` | boolean     | `true`                       | Show the 144×36 eye crop the model sees, scaled up to `preview_width`. Very useful for spotting a bad crop early.                                                                                                                            |
-| `require_face`  | boolean     | `true`                       | Enable the continue button only while a face is being found.                                                                                                                                                                                 |
-| `face_timeout`  | integer     | `null`                       | Escape hatch for `require_face`: after this many ms the button is enabled even if no face has ever been found, so a participant the model cannot cope with is not stuck. `null` waits indefinitely; `face_detected` still records the truth. |
-| `preview_width` | integer     | `320`                        | Width of the camera preview, in pixels.                                                                                                                                                                                                      |
-| `show_progress` | boolean     | `true`                       | Show a progress bar and a stage label while the camera, MediaPipe, the face landmarker, onnxruntime-web and the eye model load, instead of a plain "Starting the camera…" message.                                                            |
+| Parameter          | Type        | Default                      | Description                                                                                                                                                                                                                                  |
+| ------------------ | ----------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions`     | HTML string | _(positioning instructions)_ | Instructions shown beside the camera preview.                                                                                                                                                                                                |
+| `button_text`      | string      | `"Continue"`                 | Text of the button that ends the trial.                                                                                                                                                                                                      |
+| `show_eye_crop`    | boolean     | `true`                       | Show the 144×36 eye crop the model sees, scaled up to `preview_width`. Very useful for spotting a bad crop early.                                                                                                                            |
+| `require_face`     | boolean     | `true`                       | Enable the continue button only while a face is being found.                                                                                                                                                                                 |
+| `face_timeout`     | integer     | `null`                       | Escape hatch for `require_face`: after this many ms the button is enabled even if no face has ever been found, so a participant the model cannot cope with is not stuck. `null` waits indefinitely; `face_detected` still records the truth. |
+| `preview_width`    | integer     | `320`                        | Width of the camera preview, in pixels.                                                                                                                                                                                                      |
+| `show_progress`    | boolean     | `true`                       | Show a progress bar and a stage label while the camera, MediaPipe, the face landmarker, onnxruntime-web and the eye model load, instead of a plain "Starting the camera…" message.                                                           |
+| `show_diagnostics` | boolean     | `false`                      | Show the tracker's frame rate and the execution provider (`webgpu` or `wasm`) under the preview. For piloting; both are recorded in the data either way.                                                                                     |
 
 ## Data generated
 

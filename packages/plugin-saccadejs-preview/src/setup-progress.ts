@@ -11,13 +11,16 @@ import type { SaccadeProgress, SaccadeProgressStage } from "@saccadejs/core";
  * wait, so it gets most of the bar. The weights matter to the bar and nothing else; a stage the
  * tracker skips (a page-supplied stream or model) simply never arrives.
  */
+// The labels are read by participants, not researchers: they say what the participant is
+// waiting for, not which library is loading. The three loads in the middle share one label
+// because the difference between them means nothing to someone waiting; the bar still steps.
 const SETUP_STAGES: { stage: SaccadeProgressStage; label: string; weight: number }[] = [
-  { stage: "camera", label: "Waiting for camera permission", weight: 1 },
-  { stage: "mediapipe", label: "Loading the face tracker", weight: 2 },
-  { stage: "landmarker", label: "Loading the face model", weight: 3 },
-  { stage: "ort", label: "Starting the model runtime", weight: 2 },
-  { stage: "model", label: "Downloading eye model", weight: 10 },
-  { stage: "session", label: "Warming up the model", weight: 2 },
+  { stage: "camera", label: "Waiting for permission to use your camera", weight: 1 },
+  { stage: "mediapipe", label: "Loading", weight: 2 },
+  { stage: "landmarker", label: "Loading", weight: 3 },
+  { stage: "ort", label: "Loading", weight: 2 },
+  { stage: "model", label: "Downloading the eye tracker", weight: 10 },
+  { stage: "session", label: "Almost ready", weight: 2 },
 ];
 const SETUP_TOTAL_WEIGHT = SETUP_STAGES.reduce((total, s) => total + s.weight, 0);
 
@@ -38,11 +41,13 @@ export function setupFraction(p: SaccadeProgress | null): number {
   return before / SETUP_TOTAL_WEIGHT;
 }
 
-/** What to say about `p`, e.g. `Downloading eye model 12.3 / 20.6 MB`. */
+/** What to say about `p`, e.g. `Downloading the eye tracker (12.3 of 20.6 MB)…`. */
 export function setupLabel(p: SaccadeProgress | null): string {
   if (!p) return "Starting…";
   if (p.stage === "ready") return "Ready";
   const base = SETUP_STAGES.find((s) => s.stage === p.stage)?.label ?? "Loading";
   if (p.stage !== "model" || p.loaded == null) return `${base}…`;
-  return p.total ? `${base} ${mb(p.loaded)} / ${mb(p.total)} MB` : `${base} ${mb(p.loaded)} MB`;
+  return p.total
+    ? `${base} (${mb(p.loaded)} of ${mb(p.total)} MB)…`
+    : `${base} (${mb(p.loaded)} MB)…`;
 }

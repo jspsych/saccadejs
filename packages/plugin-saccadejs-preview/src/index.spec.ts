@@ -36,6 +36,7 @@ describe("saccade-preview info", () => {
     expect(p.preview_width.default).toBe(320);
     expect(p.face_timeout.default).toBeNull();
     expect(p.show_progress.default).toBe(true);
+    expect(p.show_diagnostics.default).toBe(false);
     expect(typeof p.instructions.default).toBe("string");
   });
 
@@ -53,12 +54,16 @@ describe("saccade-preview info", () => {
 describe("setup progress formatting", () => {
   it("names the stage, and the bytes for the model download", () => {
     expect(setupLabel(null)).toBe("Starting…");
-    expect(setupLabel({ stage: "camera" })).toBe("Waiting for camera permission…");
+    expect(setupLabel({ stage: "camera" })).toBe("Waiting for permission to use your camera…");
+    expect(setupLabel({ stage: "ort" })).toBe("Loading…");
+    expect(setupLabel({ stage: "session" })).toBe("Almost ready…");
     expect(setupLabel({ stage: "model", loaded: 12.3e6, total: 20.6e6 })).toBe(
-      "Downloading eye model 12.3 / 20.6 MB",
+      "Downloading the eye tracker (12.3 of 20.6 MB)…",
     );
     // No Content-Length: report what has arrived rather than a fraction of nothing.
-    expect(setupLabel({ stage: "model", loaded: 5e6 })).toBe("Downloading eye model 5.0 MB");
+    expect(setupLabel({ stage: "model", loaded: 5e6 })).toBe(
+      "Downloading the eye tracker (5.0 MB)…",
+    );
     expect(setupLabel({ stage: "ready" })).toBe("Ready");
   });
 
@@ -107,9 +112,19 @@ describe("saccade-preview trial", () => {
     expect(displayElement.querySelector("#saccade-preview-crop")).not.toBeNull();
     expect(displayElement.contains(extension.tracker.video)).toBe(true);
 
+    const face = displayElement.querySelector("#saccade-preview-face");
+    expect(face.textContent).toBe("Looking for your face…");
+    // frame rate and backend are for researchers, and hidden unless asked for
+    expect(displayElement.querySelector("#saccade-preview-diagnostics")).toBeNull();
+
     extension.tracker.emit(makeFrame({ faceFound: true, fps: 29.5 }));
     expect(button.disabled).toBe(false);
-    expect(displayElement.querySelector("#saccade-preview-face").textContent).toBe("yes");
+    expect(face.textContent).toBe("Face found");
+    expect(face.className).toBe("saccade-face-yes");
+
+    extension.tracker.emit(makeFrame({ faceFound: false, fps: 29.5 }));
+    expect(face.textContent).toBe("Looking for your face…");
+    extension.tracker.emit(makeFrame({ faceFound: true, fps: 29.5 }));
 
     await clickTarget(button);
     await expectFinished();
@@ -121,6 +136,21 @@ describe("saccade-preview trial", () => {
     expect(typeof data.load_time).toBe("number");
     expect(typeof data.rt).toBe("number");
     expect(extension.hideVideo).toHaveBeenCalled();
+  });
+
+  it("shows the frame rate and backend when show_diagnostics is set", async () => {
+    const jsPsych = setup();
+    const { displayElement } = await startTimeline(
+      [{ type: SaccadePreviewPlugin, show_diagnostics: true }],
+      jsPsych,
+    );
+    const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
+    await flushPromises();
+
+    expect(displayElement.querySelector("#saccade-preview-diagnostics")).not.toBeNull();
+    expect(displayElement.querySelector("#saccade-preview-backend").textContent).toBe("webgpu");
+    extension.tracker.emit(makeFrame({ faceFound: true, fps: 29.5 }));
+    expect(displayElement.querySelector("#saccade-preview-fps").textContent).toBe("29.5 fps");
   });
 
   it("leaves the button enabled when require_face is false", async () => {
@@ -192,7 +222,7 @@ describe("saccade-preview trial", () => {
     expect(label.textContent).toBe("Starting…");
 
     extension.emitProgress({ stage: "model", loaded: 12.3e6, total: 20.6e6 });
-    expect(label.textContent).toBe("Downloading eye model 12.3 / 20.6 MB");
+    expect(label.textContent).toBe("Downloading the eye tracker (12.3 of 20.6 MB)…");
     expect(parseFloat(bar.style.width)).toBeGreaterThan(0);
     expect(parseFloat(bar.style.width)).toBeLessThan(100);
 
@@ -231,7 +261,7 @@ describe("saccade-preview trial", () => {
     const { getHTML } = await startTimeline([{ type: SaccadePreviewPlugin }], jsPsych);
     await flushPromises();
 
-    expect(getHTML()).toMatch(/eye tracker failed to start/);
+    expect(getHTML()).toMatch(/eye tracker couldn't start/);
     errorSpy.mockRestore();
   });
 });

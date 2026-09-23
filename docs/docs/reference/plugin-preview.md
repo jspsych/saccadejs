@@ -14,8 +14,8 @@ The first saccade.js trial in any experiment. It:
 3. shows the participant their camera image so they can get into a good position.
 
 While positioning, the participant sees their mirrored camera image, a close-up of their eyes
-exactly as the tracker sees them, an indicator that shows whether their face is being found, and the
-current frame rate. The **Continue** button enables once their face is found.
+exactly as the tracker sees them, and an indicator that reads **Face found** or **Looking for your
+face…**. The **Continue** button enables once their face is found.
 
 Put it early in the timeline. Every other saccade.js trial needs the camera to be running.
 
@@ -41,6 +41,7 @@ timeline.push({ type: jsPsychSaccadePreview });
 | `face_timeout` | `number \| null` | `null` | After this many milliseconds, enable the button even if no face has been found, so the participant is never stuck. `null` waits forever. |
 | `preview_width` | `number` | `320` | Width of the camera image, in pixels. |
 | `show_progress` | `boolean` | `true` | Show a progress bar and a label for each loading stage. `false` shows "Starting the camera…" instead. |
+| `show_diagnostics` | `boolean` | `false` | Show the frame rate and whether the model is running on the graphics card (`webgpu`) or not (`wasm`) under the preview. Useful while piloting. Both are saved in the data either way. |
 
 ## Data
 
