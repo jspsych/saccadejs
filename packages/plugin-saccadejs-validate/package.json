@@ -1,6 +1,6 @@
 {
   "name": "@saccadejs/plugin-validate",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "jsPsych plugin: saccade.js calibration validation",
   "type": "module",
   "main": "dist/index.cjs",
