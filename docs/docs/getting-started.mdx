@@ -150,9 +150,9 @@ takes about twenty seconds. Until calibration finishes, the tracker cannot estim
 **Validation** then checks how well calibration worked. The participant looks at nine more dots,
 eight of them in positions calibration did not use, and saccade.js measures how far its estimates
 land from each dot. The result is saved as `median_error_viewport`: the typical error, measured as a
-fraction of the window's size so that it compares across screens. For example, `0.08` means the
-estimates typically landed about 8% of the window's size away from the dot, which is roughly 80
-pixels on a window 1,000 pixels wide.
+fraction of the window's diagonal so that it compares across screens. For example, `0.08` means the
+estimates typically landed about 8% of the diagonal away from the dot, which is roughly 150 pixels
+on a 1,600 × 900 window.
 
 Report this number in your paper. Decide _before_ you collect data how large an error is too large
 for your design, and exclude participants above it. The

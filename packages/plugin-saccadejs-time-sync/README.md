@@ -18,9 +18,10 @@ two brightness levels at known random moments, watches the mean luminance of the
 screen lights the participant's face and the room, so an ordinary user-facing webcam works), and
 cross-correlates the two.
 
-**There is no flicker.** The changes are at most one per second — the schedule is sparse, with gaps
-of 0.5–1 s — which is a third of the WCAG 2.3.1 / Harding limit of three per second. The timing
-information is in the edges, not the rate, and a 15-second run has about 20 of them.
+**There is no flicker.** The schedule is sparse, with gaps of 0.5–1 s, so there are at most two
+changes per second: one flash (a change and its reversal), a third of the WCAG 2.3.1 / Harding
+limit of three flashes per second. The timing information is in the edges, not the rate, and a
+15-second run has about 20 of them.
 
 Requires the [`@saccadejs/extension`](../extension-saccadejs) extension to be registered in
 `initJsPsych`. Run it once, before your gaze-recording trials; put it after
@@ -52,9 +53,10 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-time-sync
 ```
 
 The trial shows the instructions with a start button first, then a progress readout while the
-screen changes, then ends. When `apply_offset` is true the measured lag is handed to
-`extension.setTimingOffset()`, and every later trial's `saccade_data[].t` has it subtracted (and
-`saccade_timing.corrected` is `true`).
+screen changes, then ends. When `apply_offset` is true and the verdict is `OK`, the measured lag is
+handed to `extension.setTimingOffset()`, and every later trial's `saccade_data[].t` has it
+subtracted (and `saccade_timing.corrected` is `true`). Any other verdict is recorded but not
+applied.
 
 ## Parameters
 
@@ -67,7 +69,7 @@ screen changes, then ends. When `apply_offset` is true the measured lag is hande
 | `instructions` | HTML string             | _(see below)_ | Shown before the measurement starts. The default explains what is about to happen and states that it is not a flickering display.                |
 | `button_text`  | string                  | `"Start"`     | Text of the button that begins the measurement.                                                                                                  |
 | `require_ok`   | boolean                 | `false`       | If true, an `UNRELIABLE` result is measured once more before continuing. The trial always continues either way; `verdict` records what happened. |
-| `apply_offset` | boolean                 | `true`        | Apply the measured lag to the extension.                                                                                                         |
+| `apply_offset` | boolean                 | `true`        | Apply the measured lag to the extension when the verdict is `OK`.                                                                                |
 
 ## Data generated
 
@@ -92,21 +94,21 @@ the experiment can continue.
 
 ## Verdicts
 
-| Verdict          | Meaning                                                                                                                                                              |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"OK"`           | The estimate is well constrained: a strong edge signal (`peak_d ≥ 0.5`), a plateau no wider than one camera frame (≤ 34 ms), and the two halves of the run agreeing. |
-| `"INCONCLUSIVE"` | There was nothing to estimate from: no usable camera samples, or fewer than two luminance edges. |
+| Verdict          | Meaning                                                                                                                                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"OK"`           | The estimate is well constrained: a strong edge signal (`peak_d ≥ 0.5`), a plateau no wider than one camera frame (≤ 34 ms), and the two halves of the run agreeing.                                              |
+| `"INCONCLUSIVE"` | There was nothing to estimate from: no usable camera samples, or fewer than two luminance edges.                                                                                                                  |
 | `"UNRELIABLE"`   | An estimate exists but fails at least one of the checks above: a weak edge signal, a plateau wider than a camera frame, or halves that disagree. `reason` says which. `lag_ms` from such a run cannot be trusted. |
 
-`apply_offset` applies whatever was measured, so if your analysis depends on the correction, check
-the verdict yourself:
+`apply_offset` applies only an `OK` result. To use your own rule instead — for example, to apply
+an `UNRELIABLE` lag rather than none — turn it off and apply the lag yourself:
 
 ```js
 {
   type: jsPsychSaccadeTimeSync,
   apply_offset: false,
   on_finish: (data) => {
-    if (data.verdict === "OK") {
+    if (data.lag_ms !== null) {
       jsPsych.extensions.saccade.setTimingOffset(data.lag_ms);
     }
   },

@@ -51,6 +51,7 @@ export { calWeight, predict, solveRidge } from "./ridge";
 export {
   CAL_HEAD,
   CENTER,
+  countTargets,
   DEFAULT_CAPTURE_MS,
   DEFAULT_SETTLE_MS,
   defaultGrid13,

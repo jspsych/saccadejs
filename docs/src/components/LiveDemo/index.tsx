@@ -840,7 +840,7 @@ function Menu({
               <>
                 {validation.errorPercent === null
                   ? "—"
-                  : `${validation.errorPercent.toFixed(1)}% of the screen`}
+                  : `${validation.errorPercent.toFixed(1)}% of the screen diagonal`}
                 <span className={styles.cardAside}>
                   {validation.errorPx === null ? null : `${validation.errorPx.toFixed(0)} px off`}
                   {validation.precisionPx === null

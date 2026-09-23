@@ -80,6 +80,9 @@ to trust.
 | `verdict: "INCONCLUSIVE"` | No usable camera frames, or fewer than two brightness changes seen. The `reason` field says which. |
 | `clock_source: "callback"` | The browser did not report when frames were captured, so the number is not a real measurement. See [Browser compatibility](browser-compatibility#capture-timestamps). |
 
+Only an `OK` measurement is applied. After any other verdict the lag is saved but not subtracted,
+so later trials' `saccade_timing.corrected` is `false`.
+
 Setting `require_ok: true` makes the trial try once more after an `UNRELIABLE` result. Either way
 the experiment continues afterwards, so whether to exclude a participant is a decision you make
 in your analysis.

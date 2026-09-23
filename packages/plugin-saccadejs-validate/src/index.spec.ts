@@ -127,7 +127,7 @@ describe("saccade-validate trial", () => {
     }
   });
 
-  it("computes the offset from the target, in pixels and viewport units", async () => {
+  it("computes the offset from the target, in pixels and fractions of the diagonal", async () => {
     const jsPsych = setup();
     const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
     // one point at the very center; gaze sits 100 px to its right
@@ -153,7 +153,30 @@ describe("saccade-validate trial", () => {
     expect(data.raw_gaze[0][0].dy).toBeCloseTo(0, 6);
     expect(data.percent_in_roi).toEqual([0]); // 100 px away, ROI is 50 px
     expect(data.median_error_px).toBeCloseTo(100, 6);
-    expect(data.median_error_viewport).toBeCloseTo(100 / window.innerWidth, 6);
+    expect(data.median_error_viewport).toBeCloseTo(
+      100 / Math.hypot(window.innerWidth, window.innerHeight),
+      6,
+    );
+  });
+
+  it("scales the viewport error by the diagonal, whichever axis the error is on", async () => {
+    const jsPsych = setup();
+    const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    // the same 100 px error, straight down instead of to the right
+    extension.gazeSamples = [{ x: cx, y: cy + 100, t: 0 }];
+
+    const { getData, finished } = await startTimeline(
+      [{ type: SaccadeValidatePlugin, ...FAST, validation_points: [[50, 50]] }],
+      jsPsych,
+    );
+    await finished;
+
+    expect(getData().values()[0].median_error_viewport).toBeCloseTo(
+      100 / Math.hypot(window.innerWidth, window.innerHeight),
+      6,
+    );
   });
 
   it("supports center-offset-pixels coordinates", async () => {

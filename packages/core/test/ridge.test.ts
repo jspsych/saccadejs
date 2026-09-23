@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { fitRidge, lambdaFor } from "../src/grids";
+import { countTargets, fitRidge, lambdaFor } from "../src/grids";
 import { calWeight, predict, solveRidge } from "../src/ridge";
 import type { RidgeRow } from "../src/types";
 
@@ -80,6 +80,17 @@ describe("lambdaFor", () => {
     expect(lambdaFor(9)).toBe(3);
     expect(lambdaFor(13)).toBe(1);
     expect(lambdaFor(20)).toBe(1);
+  });
+});
+
+describe("countTargets", () => {
+  it("counts a repeated dot once", () => {
+    const at = (x: number, y: number) => ({
+      target: { x, y },
+      embeddings: [Float32Array.of(0)],
+      meanEmbedding: Float32Array.of(0),
+    });
+    expect(countTargets([at(0.1, 0.1), at(0.9, 0.1), at(0.1, 0.1), at(0.9, 0.1)])).toBe(2);
   });
 });
 

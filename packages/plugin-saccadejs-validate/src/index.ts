@@ -127,9 +127,9 @@ const info = <const>{
     median_error_px: {
       type: ParameterType.FLOAT,
     },
-    /** The same error expressed in viewport units (the error in x divided by the viewport width,
-     * in y by the height), which is comparable across screen sizes and is the unit the model was
-     * evaluated in. */
+    /** The same error as a fraction of the viewport's diagonal, which is comparable across screen
+     * sizes and shapes. On a 16:9 viewport it is the unit the model's held-out error is reported
+     * in. */
     median_error_viewport: {
       type: ParameterType.FLOAT,
     },
@@ -194,9 +194,10 @@ class SaccadeValidatePlugin implements JsPsychPlugin<Info> {
       // Points where no gaze sample was recorded have no offset and cannot contribute an error.
       const measured = average_offset.filter((o) => o.x !== null && o.y !== null);
       const errorsPx = measured.map((o) => Math.sqrt(o.x * o.x + o.y * o.y));
-      const errorsViewport = measured.map((o) =>
-        Math.sqrt(Math.pow(o.x / viewportWidth(), 2) + Math.pow(o.y / viewportHeight(), 2)),
-      );
+      // A fraction of the diagonal, not x/width and y/height: dividing each axis by its own
+      // length would make the same pixel error count for more in the shorter direction.
+      const diagonal = Math.hypot(viewportWidth(), viewportHeight());
+      const errorsViewport = errorsPx.map((e) => e / diagonal);
 
       ui.destroy();
       display_element.innerHTML = "";

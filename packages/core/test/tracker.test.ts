@@ -65,6 +65,14 @@ describe("SaccadeTracker", () => {
     expect(t9.fitCalibration()!.lambda).toBe(3);
     expect(t9.fitCalibration({ lambda: 0.25 })!.lambda).toBe(0.25);
 
+    // Repeating the nine dots doubles the rows, not the points: still the heavier penalty.
+    const t9x2 = new SaccadeTracker();
+    for (let rep = 0; rep < 2; rep++) {
+      validationGrid9().forEach((target, i) => t9x2.addCalibrationPoint(target, [embedding(i)]));
+    }
+    expect(t9x2.getCalibrationPoints()).toHaveLength(18);
+    expect(t9x2.fitCalibration()).toEqual({ lambda: 3, nPoints: 9, weighting: "uniform" });
+
     t.clearCalibration();
     expect(t.calibrated).toBe(false);
     expect(t.getCalibrationPoints()).toHaveLength(0);
