@@ -13,7 +13,8 @@ description: The browser features saccade.js depends on, which browsers have the
 - **Firefox and Safari** will run saccade.js, and recent versions have every feature it uses. They
   have not yet been tested with a real webcam and checked against known results, so treat them as
   _untested_ rather than unsupported.
-- saccade.js never checks which browser it is running in and never refuses to run. In a weaker
+- saccade.js never checks which browser it is running in. It refuses to run only when WebGL is
+  missing, because the face finder cannot work without it (see below). Otherwise, in a weaker
   browser it runs more slowly or with less precise timestamps, **without any warning**. So rather
   than trusting the browser name, check the data each participant produces. The last section of
   this page shows how.
@@ -27,13 +28,20 @@ feature is missing.
 | --- | --- | --- |
 | Camera access (`getUserMedia`) on a secure page | Everything | Nothing works |
 | WebAssembly | Running the face finder and the eye model | Nothing works |
-| WebGL 2 | Running the face finder on the graphics card | The face finder runs on the processor instead, more slowly |
+| WebGL | Reading camera frames into the face finder, and running it on the graphics card | With WebGL 1 or software WebGL, the face finder runs on the processor, more slowly. With no WebGL at all, nothing works, and the tracker stops with a `WebGLUnavailableError` |
 | WebGPU | Running the eye model on the graphics card | The eye model runs on the processor instead, much more slowly |
 | Camera frame callbacks (`requestVideoFrameCallback`) | Processing each camera frame as it arrives, and knowing when it arrived | Frames are timestamped when processing finishes, not when they were captured |
 | Capture timestamps (`captureTime`) | Knowing when each frame was captured, which the timing correction relies on | The timing correction is not a real measurement |
 
-Every current browser has camera access, WebAssembly and WebGL 2, so those three are not worth
-worrying about. The other three are covered below, most important first.
+Every current browser has camera access, WebAssembly and WebGL. But WebGL can be switched off:
+when hardware acceleration is turned off in the browser's settings, or the browser has blocked the
+graphics card, the page gets no WebGL at all, and recent versions of Chrome no longer fall back to a
+software version on their own. The face finder needs WebGL even when it runs on the processor,
+because that is how it reads each camera frame, so saccade.js checks for it before downloading
+anything and stops with a `WebGLUnavailableError`. The preview trial tells the participant what
+went wrong. `webglAvailable()` in the core API lets an experiment check first and screen these
+participants out before the camera is involved. The other three features are covered below, most
+important first.
 
 ## WebGPU: the difference that matters most
 

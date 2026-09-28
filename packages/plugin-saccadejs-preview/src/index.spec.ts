@@ -262,6 +262,24 @@ describe("saccade-preview trial", () => {
     await flushPromises();
 
     expect(getHTML()).toMatch(/eye tracker couldn't start/);
+    expect(getHTML()).toMatch(/permission to use your camera/);
+    errorSpy.mockRestore();
+  });
+
+  it("says so when the browser has no WebGL, rather than blaming the camera", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const jsPsych = setup();
+    const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
+    const noWebGL = Object.assign(new Error("saccade.js needs WebGL"), {
+      name: "WebGLUnavailableError",
+    });
+    extension.start.mockRejectedValueOnce(noWebGL);
+
+    const { getHTML } = await startTimeline([{ type: SaccadePreviewPlugin }], jsPsych);
+    await flushPromises();
+
+    expect(getHTML()).toMatch(/graphics features \(WebGL\)/);
+    expect(getHTML()).not.toMatch(/permission to use your camera/);
     errorSpy.mockRestore();
   });
 });

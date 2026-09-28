@@ -62,6 +62,10 @@ export class Landmarker {
   }
 
   static async create(opts: LandmarkerOptions = {}): Promise<Landmarker> {
+    // Before anything downloads: without WebGL the landmarker can be built (on the CPU) but can
+    // never detect, so failing here saves the ~7 MB of MediaPipe and a tracker that errors on
+    // every frame.
+    if (webglAvailable() === false) throw new WebGLUnavailableError();
     const assets = opts.assets ?? {};
     reportProgress(opts.onProgress, { stage: "mediapipe" });
     const vision = await loadVision(assets);
@@ -105,6 +109,44 @@ export class Landmarker {
   close(): void {
     this.fl.close();
   }
+}
+
+/**
+ * Thrown when the browser gives no WebGL context. MediaPipe's face landmarker needs one even
+ * with its CPU delegate: every video frame is uploaded as a WebGL texture before inference, so
+ * without it the landmarker builds and then throws on every detection. WebGL goes missing when
+ * hardware acceleration is off, the graphics card is blocklisted, or Chrome runs with
+ * `--disable-gpu` (recent Chrome no longer falls back to software WebGL on its own).
+ */
+export class WebGLUnavailableError extends Error {
+  constructor() {
+    super(
+      "saccade.js needs WebGL, and this browser does not provide it. The face tracker uses " +
+        "WebGL to read camera frames even when it runs on the CPU. Hardware acceleration may be " +
+        "turned off in the browser's settings.",
+    );
+    this.name = "WebGLUnavailableError";
+  }
+}
+
+/**
+ * Whether the page can create a WebGL context: true, false, or null when there is no DOM to
+ * ask (a worker, or a server-side import), in which case the caller should not guess.
+ */
+export function webglAvailable(): boolean | null {
+  if (typeof document === "undefined") return null;
+  for (const kind of ["webgl2", "webgl"] as const) {
+    try {
+      const gl = document.createElement("canvas").getContext(kind) as WebGLRenderingContext | null;
+      if (gl) {
+        gl.getExtension("WEBGL_lose_context")?.loseContext();
+        return true;
+      }
+    } catch {
+      // a throwing getContext is as good as a null one
+    }
+  }
+  return false;
 }
 
 export function createLandmarker(opts: LandmarkerOptions = {}): Promise<Landmarker> {
