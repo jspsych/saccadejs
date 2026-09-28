@@ -132,7 +132,7 @@ function Hero(): React.ReactElement {
             <div className={styles.pathCard}>
               <div className={styles.pathCardHead}>
                 <CodeIcon className={styles.pathCardIcon} />
-                <h2 className={styles.pathCardTitle}>Integrates with jsPsych</h2>
+                <h2 className={styles.pathCardTitle}>Use it in jsPsych</h2>
               </div>
               <p className={styles.pathCardDesc}>
                 Setup steps (camera, timing, calibration, accuracy check) are
@@ -253,7 +253,7 @@ const PACKAGES = [
   {
     name: "@saccadejs/plugin-performance",
     to: "/reference/plugin-performance",
-    what: "Checks the tracker runs fast enough on this computer, and can turn away slow ones.",
+    what: "Checks that the tracker runs fast enough on this computer, and can turn away computers that are too slow.",
   },
   {
     name: "@saccadejs/plugin-time-sync",
@@ -281,7 +281,7 @@ const REQUIREMENTS = [
   {
     what: "WebGPU",
     detail:
-      "in the browser, so the tracker can use the graphics card. Without it, it still runs, more slowly.",
+      "in the browser, so the tracker can use the graphics card. Without it, the tracker still runs, but more slowly.",
   },
   {
     what: "About 25 MB",

@@ -149,7 +149,8 @@ A few things to keep in mind:
 
 - **Record when it happened, not when you planned it.** Writing `data: { word_onset: 1000 }`
   would record the plan. Timers can fire late, especially while the tracker is busy processing a
-  camera frame, and the data would never show it. Calling `performance.now()` records the truth.
+  camera frame, and the data would never show it. Calling `performance.now()` records when the
+  change actually happened.
 - **Do not subtract `offset_ms` from your own events.** That correction moves gaze timestamps
   back to when things happened on screen. Your events are already stamped with when they happened.
 - **Sound has its own delay.** The time-sync trial measures the screen and the camera, not the

@@ -62,34 +62,34 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `onFrame` | `(f: TrackerFrame) => void` | — | Equivalent to calling `onFrame()` after construction. |
 | `onProgress` | `(p: SaccadeProgress) => void` | — | Called during `init()` as each stage starts: `camera`, `mediapipe`, `landmarker`, `ort`, `model`, `session`, `ready`. The `model` stage also reports `loaded` and `total` bytes of the ONNX download, so you can show a progress bar. Equivalent to calling `onProgress()` after construction. |
 | `stream` | `MediaStream` | — | Use this camera stream instead of calling `getUserMedia`. The tracker will not stop a stream it did not open. |
-| `model` | `EmbeddingModel` | — | Substitute the embedding model, for tests or a pre-warmed session. |
+| `model` | `EmbeddingModel` | — | Use an embedding model you have already loaded, instead of loading one from `assets.modelUrl`. Mainly useful in tests. |
 
 ### Members
 
 | Member | Signature | Notes |
 | --- | --- | --- |
-| `init` | `(): Promise<InitResult>` | Requests the camera, loads MediaPipe and ONNX, warms them up. Idempotent. Rejects if the camera is denied. |
-| `initialized` | `boolean` (getter) | |
+| `init` | `(): Promise<InitResult>` | Asks for the camera, loads the face finder (MediaPipe) and the eye model (ONNX), and runs each once to warm it up. Calling it again returns the same promise. Rejects if camera access is denied, or with a `WebGLUnavailableError` if the browser has no WebGL. |
+| `initialized` | `boolean` (getter) | Whether `init()` has finished. |
 | `video` | `HTMLVideoElement` (readonly) | The live camera element, unmirrored. Mirror it with CSS if you show it; never mirror the pixels the model sees. **Keep it in the document:** Chrome delivers camera frames only for a rendered video, so hide it with `opacity: 0` / a 2×2 px size, never `display: none` or by unmounting it. The tracker re-attaches it to an invisible holder on `document.body` if it is detached. |
 | `start` | `(): void` | Starts the frame loop. Safe before `init()`. |
 | `stop` | `(): void` | Stops the loop. The camera stays open. |
 | `dispose` | `(): void` | Stops everything and releases the camera. Not reversible. |
-| `running` | `boolean` (getter) | |
+| `running` | `boolean` (getter) | Whether the frame loop is running. |
 | `onFrame` | `(cb: (f: TrackerFrame) => void) => () => void` | Subscribe to every frame; returns the unsubscribe function. |
 | `onProgress` | `(cb: (p: SaccadeProgress) => void) => () => void` | Subscribe to `init()`'s load progress. The most recent report is delivered straight away; returns the unsubscribe function. |
-| `nextFrame` | `(): Promise<TrackerFrame>` | |
-| `nextEmbedding` | `(): Promise<Float32Array \| null>` | |
-| `nextGaze` | `(): Promise<Gaze \| null>` | |
-| `nextSample` | `(): Promise<{ embedding, weight } \| null>` | The next embedding with the model's per-frame weight for it; `weight` is `null` for a model that emits none. What calibration collects through. |
-| `addCalibrationPoint` | `(target: Gaze, embeddings: Float32Array[], weights?: number[] \| null): void` | Adds one observation. Does not fit. `weights` are the model's per-frame scores; they weight the point's mean embedding and, averaged, its row in the fit. |
+| `nextFrame` | `(): Promise<TrackerFrame>` | Resolves with the next frame. |
+| `nextEmbedding` | `(): Promise<Float32Array \| null>` | The next frame's `embedding`. |
+| `nextGaze` | `(): Promise<Gaze \| null>` | The next frame's `gaze`. |
+| `nextSample` | `(): Promise<{ embedding, weight } \| null>` | The next embedding with the model's per-frame weight for it; `weight` is `null` for a model that does not produce one. Calibration collects its data through this. |
+| `addCalibrationPoint` | `(target: Gaze, embeddings: Float32Array[], weights?: number[] \| null): void` | Adds one calibration point, without refitting. `weights` are the model's per-frame quality scores. They weight the frames in the point's mean embedding, and their average sets how much the point counts in the fit. |
 | `clearCalibration` | `(): void` | |
 | `getCalibrationPoints` | `(): CalPoint[]` | |
-| `fitCalibration` | `(opts?: { lambda?, center?, calHead? }) => { lambda, nPoints, weighting } \| null` | Solves the ridge map from the points added so far. `null` when there is nothing to fit. |
+| `fitCalibration` | `(opts?: { lambda?, center?, calHead? }) => { lambda, nPoints, weighting } \| null` | Fits the calibration (a ridge regression) to the points added so far. Returns `null` when there is nothing to fit. |
 | `calibrated` | `boolean` (getter) | `gaze` stays `null` until this is true. |
-| `getKernel` | `(): Float32Array \| null` | The fitted kernel, `2 * d` long for a `d`-dimensional embedding, x and y interleaved. |
+| `getKernel` | `(): Float32Array \| null` | The fitted coefficients (the kernel): `2 * d` numbers for an embedding of length `d`, with x and y interleaved. |
 | `getCalWeighting` | `(): CalWeighting \| null` | How the last fit weighted its rows; `null` before one has run. |
 | `setSmoothingFrames` / `getSmoothingFrames` | `(n: number): void` / `(): number` | Changeable while running. |
-| `getCurrentGaze` | `(): { gaze: Gaze; time: FrameTime } \| null` | |
+| `getCurrentGaze` | `(): { gaze: Gaze; time: FrameTime } \| null` | The most recent gaze estimate and its timing. |
 | `sampleLuminance` | `(): number` | Mean luminance of the current camera frame. |
 
 ```ts
@@ -116,7 +116,7 @@ interface TrackerFrame {
   crop: Uint8Array | null;             // 144 x 36 grayscale, row-major
   embedding: Float32Array | null;      // the model's width (128 for eye-embedding 1.0.0)
   weight: number | null;               // the model's score for this frame, [0, 1]; null if none
-  meanEmbedding: Float32Array | null;  // the smoothing mean, which `gaze` came from
+  meanEmbedding: Float32Array | null;  // averaged over smoothingFrames; `gaze` comes from this
   timings: { landmark: number; crop: number; embed: number; total: number; wait?: number };
   time: FrameTime;
   fps: number;                         // smoothed
@@ -126,7 +126,7 @@ interface TrackerFrame {
 interface Gaze { x: number; y: number }   // 0-1, origin top-left
 ```
 
-`timings` is per-stage wall time in ms, diagnostic only.
+`timings` is how long each processing stage took, in ms. It is for diagnostics only.
 
 ## `FrameTime`
 
@@ -139,7 +139,7 @@ interface Gaze { x: number; y: number }   // 0-1, origin top-left
 | `dropped` | `number \| null` | Frames the camera presented but the loop never saw, since the previous frame. |
 | `callback` | `number` | When JavaScript received the frame. |
 | `emit` | `number` | When the prediction became available. |
-| `meanCapture` | `number \| null` | Mean `capture` of the smoothing ring buffer: the time the smoothed `gaze` refers to. Equals `capture` when `smoothingFrames` is 1. Use this one. |
+| `meanCapture` | `number \| null` | The average `capture` time of the frames averaged into `gaze`, so the time the smoothed estimate refers to. Equals `capture` when `smoothingFrames` is 1. Use this one. |
 
 **Which time to use:** record `meanCapture ?? capture` with each gaze estimate. It is when the
 camera captured the frame (averaged over the frames combined, if `smoothingFrames` is above 1),
@@ -254,40 +254,47 @@ first of these that applies:
 
 | Source | When | `weighting` |
 | --- | --- | --- |
-| A `CalHead` you supply | `SaccadeTrackerOptions.calHead`, or `fitCalibration({ calHead })`. An explicit argument wins. | `"head"` |
-| The model's second output | The loaded model emits a per-frame weight, averaged over the point's capture window. | `"model"` |
-| Nothing | Neither of the above. Every row at 1, which is plain unweighted ridge. | `"uniform"` |
+| A `CalHead` you supply (a separate scoring model; see below) | `SaccadeTrackerOptions.calHead`, or `fitCalibration({ calHead })`. If both are set, the argument to `fitCalibration` wins. | `"head"` |
+| The model's second output | The loaded model produces a quality score for each frame. A point's weight is the average score over the frames recorded at it. | `"model"` |
+| Nothing | Neither of the above. Every point counts equally, which is plain unweighted ridge regression. | `"uniform"` |
 
 `fitCalibration()` returns which one ran, and `getCalWeighting()` reports it afterwards. Record
 it: a weighted fit and an unweighted one are different analyses, and nothing else in the data
 tells them apart. `saccade-calibrate` writes the `weighting` column for you.
 
-Weights apply **before** the mean, so a low-scoring frame drops out of the point's embedding
-instead of only discounting the finished point. The live smoothing ring uses the same weights,
-so a smoothed gaze and a calibration point are computed the same way.
+The weights are applied to individual frames **before** they are averaged, so a low-scoring
+frame contributes little to the point's embedding, rather than only lowering the weight of the
+finished point. Smoothing during tracking uses the same weights, so a smoothed gaze estimate and
+a calibration point are computed the same way.
 
-`CAL_HEAD` — the logistic head exported alongside eye-embedding 1.0.0 — is off by default. A
-head is trained against one model's embedding space and produces meaningless scores on another
-model's embeddings. eye-embedding 1.0.0 now carries its weighting in the graph, so most
-experiments do not need this option.
+`CAL_HEAD` is a separate scoring model (a logistic regression) exported alongside eye-embedding
+1.0.0. It is off by default, and most experiments do not need it, because eye-embedding 1.0.0
+already produces its own quality score. A scoring model only works with the eye model it was
+trained on; given another model's embeddings, its scores are meaningless.
 
 ### Embedding width
 
 This section matters only if you are using [your own model](../models#using-your-own-model).
 
-The fit is not fixed at 128. The ridge solve and both mean-embedding paths read their width
-from the embeddings they are handed, so a model of any output length works, provided that
-length is the same on every frame of a session. `EMB_DIM` is the shipped model's width, useful
-for sizing a buffer, and is not a limit.
+Nothing in calibration is fixed at 128 numbers. The fit and the frame averaging both take their
+length from the embeddings they receive, so a model of any output length works, as long as the
+length is the same on every frame of a session. `EMB_DIM` is the published model's length. It is
+useful for sizing a buffer, but it is not a limit.
 
-The solve costs O(d²) in memory and O(d³) to factorise, once, when calibration ends. At 128
-that is negligible; at a few thousand it would not be.
+For an embedding of length _d_, fitting takes memory proportional to _d_² and time proportional
+to _d_³. It happens once, when calibration ends. At 128 the cost is negligible; at a few thousand
+it would be noticeable.
 
-Five conditions throw rather than continue with bad numbers: an embedding whose width changes
-mid-session, a ragged set of calibration rows, a `CalHead` whose length does not match the
-embedding, a half-weighted calibration set, and a weight output that is not a finite number in
-`[0, 1]`. The last throws at `init()`, on the warm-up inference, before any participant data
-exists.
+Five problems throw an error rather than continue with bad numbers:
+
+- an embedding whose length changes during a session,
+- calibration points whose embeddings have different lengths,
+- a `CalHead` whose length does not match the embedding,
+- a calibration set where some points have weights and others do not,
+- a quality score that is not a number between 0 and 1.
+
+The last is caught during `init()`, when the model is first run, before any participant data is
+collected.
 
 ## `runLoopback`
 
@@ -314,7 +321,7 @@ if (result.verdict === "OK") {
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `durationMs` | `15000` | How long to measure, in ms. |
-| `gapMinMs` / `gapMaxMs` | `500` / `1000` | Random interval between flips. |
+| `gapMinMs` / `gapMaxMs` | `500` / `1000` | The shortest and longest time between screen changes, in ms. Each gap is chosen at random between the two. |
 | `levels` | `["#000", "#fff"]` | `[dark, light]` CSS colors. `["#333", "#ccc"]` is gentler and needs a longer run. |
 | `seed` | random | For a reproducible schedule. |
 | `container` | a full-viewport `div` on `document.body` | Where to draw. |
@@ -327,9 +334,9 @@ if (result.verdict === "OK") {
 | `peakD` | How clearly the camera saw the brightness changes, 0–1. |
 | `nEdges` | How many brightness changes (edges) were usable. |
 | `halves` | `{ first, second }`, the estimate from each half of the run. |
-| `cameraPeriodMs`, `cameraJitterMs`, `droppedFrames` | Camera health. |
-| `rafPeriodMs`, `rafMaxMs` | Animation-frame interval and its worst case. |
-| `clockSource` | The `FrameTime.source` in force. Anything but `"captureTime"` makes `lagMs` advisory. |
+| `cameraPeriodMs`, `cameraJitterMs`, `droppedFrames` | How regularly the camera delivered frames, and how many it dropped. |
+| `rafPeriodMs`, `rafMaxMs` | The average and longest time between screen redraws (`requestAnimationFrame`). |
+| `clockSource` | The `FrameTime.source` in use. With anything other than `"captureTime"`, treat `lagMs` as a rough guide. |
 | `verdict` | `"OK"` \| `"INCONCLUSIVE"` \| `"UNRELIABLE"`. |
 | `reason` | Why, when the verdict is not `"OK"`. |
 | `flips`, `samples` | Raw flip times and per-frame luminance, for re-analysis. |
@@ -356,10 +363,9 @@ interface SaccadeAssets {
 }
 ```
 
-Defaults resolve relative to the package under a bundler, and to jsDelivr otherwise. The pinned
-versions and default URLs are exported as `ORT_VERSION`, `MEDIAPIPE_VERSION`,
-`DEFAULT_ORT_WASM_URL`, `DEFAULT_MEDIAPIPE_WASM_URL` and `DEFAULT_FACE_LANDMARKER_URL`. See
-[Hosting the assets](../guides/hosting-the-assets).
+Leave a field out to use its default. [Hosting the assets](../guides/hosting-the-assets) lists
+where each default comes from. The pinned versions and default URLs are exported as `ORT_VERSION`, `MEDIAPIPE_VERSION`,
+`DEFAULT_ORT_WASM_URL`, `DEFAULT_MEDIAPIPE_WASM_URL` and `DEFAULT_FACE_LANDMARKER_URL`.
 
 ## Lower-level exports
 

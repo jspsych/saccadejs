@@ -106,13 +106,14 @@ its uncertainty, and a verdict on whether the measurement was trustworthy.
 
 The switches come at random times for a reason. At a steady rate, each switch would land at the
 same point in the camera's own rhythm, and the error would pile up in the same direction every
-time. The random timing also means the screen changes at most twice a second, far below any
-photosensitivity threshold.
+time. The minimum gap also means the screen changes at most twice a second, under the limit of
+three flashes a second that web accessibility guidelines (WCAG) set to protect people with
+photosensitive epilepsy.
 
 ## What limits accuracy
 
-Each of the following follows from how the method works. How much each one costs in accuracy has
-not been measured.
+These limits follow from how the method works. How much accuracy each one costs has not been
+measured.
 
 1. **Moving the head after calibration.** The equation fitted in calibration assumes the head is
    where it was during calibration. Leaning in or turning away changes how the eyes look for the

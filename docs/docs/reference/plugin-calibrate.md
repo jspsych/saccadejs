@@ -2,7 +2,7 @@
 id: plugin-calibrate
 title: saccade-calibrate
 sidebar_label: saccade-calibrate
-description: Fit the per-participant map from eye appearance to screen position.
+description: Calibrate the tracker for each participant by having them look at a series of dots.
 ---
 
 # `saccade-calibrate`

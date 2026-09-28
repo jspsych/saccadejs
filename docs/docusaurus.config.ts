@@ -11,7 +11,7 @@ const baseUrl = "/";
 
 const config: Config = defineJspsychConfig({
   title: "saccade.js",
-  tagline: "Webcam eye tracking in the browser, with timing you can defend",
+  tagline: "Webcam eye tracking for experiments that run in the browser",
   // Custom domain, set by docs/static/CNAME and the repository's Pages settings.
   url: "https://saccade.jspsych.org",
   baseUrl,
