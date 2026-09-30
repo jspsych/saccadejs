@@ -63,13 +63,13 @@ has already written it into a methods section, and we keep serving it. The files
 each and are hosted on GitHub alongside this site, so there is no pressure to remove them, and
 the site's build fails if a published version ever goes missing.
 
-That is a commitment, not a guarantee. If your study must still be able to find its model in ten
-years, keep your own copy: download the versioned file, serve it yourself, and record its
-fingerprint. That advice would be the same for any host.
+We intend to keep every version online, but we cannot promise it. If your study must still be
+able to find its model in ten years, keep your own copy: download the versioned file, serve it
+yourself, and record its fingerprint. The same advice applies to a model hosted anywhere else.
 
-The models are trained and tested in the
-[eye-tracking](https://github.com/jspsych/eye-tracking) repository, which trains the network and
-exports it; this repository publishes the result.
+The model is trained, tested and exported in the
+[eye-tracking](https://github.com/jspsych/eye-tracking) repository. This site publishes the
+finished files.
 
 ## Recording which model you used
 
@@ -83,9 +83,9 @@ and adds a `saccade_model` column to your data:
 | `sha256:f4669a8398d9` | The file is not a published release. The value is the start of its fingerprint, so you can still identify it. |
 | `unverified` | The fingerprint could not be computed. In practice this does not happen, because the browser only allows it on secure pages, which the camera requires anyway. |
 
-The version is not taken from the file name or the URL. It is recorded **because the file itself
-matched**, which is why one column is enough, and why a custom model still identifies itself
-rather than showing `unknown`.
+saccade.js identifies the file by its contents, not by its name or URL. So a renamed copy of a
+published release is still recognized, and a model of your own is still identified, by its
+fingerprint.
 
 Only trials that run after the model loads have this column. The model is not loaded until your
 first `saccade-preview` trial (or your own call to `start()`), and trials before that have no gaze

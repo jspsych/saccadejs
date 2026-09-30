@@ -164,7 +164,7 @@ attempt at calibration when the first one goes badly.
 
 ### Record gaze during a trial
 
-Now the real task. Any jsPsych trial can record gaze, whatever plugin it uses. Add the extension
+Now the task itself. Any jsPsych trial can record gaze, whatever plugin it uses. Add the extension
 to it with the `extensions` parameter:
 
 ```js
@@ -243,9 +243,11 @@ Here is everything above in one page:
 </html>
 ```
 
-Open it in Chrome or Edge over `https://` or from `localhost`. To use `localhost`, run any local
-web server in the folder, for example `npx serve`. The first run downloads the model; after that
-the browser keeps a copy.
+Open it in Chrome or Edge over `https://` or from `localhost`. Opening the file directly (a
+`file://` address) will not work, because the browser will not allow the camera. To use
+`localhost`, run a local web server in the folder. If you have [Node.js](https://nodejs.org)
+installed, `npx serve` is one way. The first run downloads the model; after that the browser keeps
+a copy.
 
 ## What the data looks like
 
