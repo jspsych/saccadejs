@@ -615,11 +615,13 @@ function Demo() {
             // `show_validation_data` is meant for piloting, which is exactly what this is.
             // The live gaze dot is the extension's own `showPredictions()`, on only for this
             // trial and only if the visitor asked for it: a dot that follows the eyes invites
-            // them to chase it, which is why a study would leave it off.
+            // them to chase it, which is why a study would leave it off. It has to be
+            // `on_load`, not `on_start`: the plugin calls `hidePredictions()` itself as it
+            // begins, and `on_load` is the hook that runs after that.
             {
               type: m.validate,
               show_validation_data: true,
-              on_start: () => {
+              on_load: () => {
                 if (session.showGazeDuringCheck) extensionRef.current?.showPredictions();
               },
               on_finish: () => extensionRef.current?.hidePredictions(),
