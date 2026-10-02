@@ -788,7 +788,7 @@ interface CardProps {
   blurb: React.ReactNode;
   /** What this activity measured last time it ran, or null if it has not. */
   result: React.ReactNode;
-  /** A setting for the next run, shown just above the button. */
+  /** A setting for the next run, shown under the blurb so the result's rule lines up across cards. */
   option?: React.ReactNode;
   cta: string;
   disabled: boolean;
@@ -803,10 +803,10 @@ function Card({ title, cost, blurb, result, option, cta, disabled, onRun }: Card
         <span className={styles.cardCost}>{cost}</span>
       </div>
       <p className={styles.cardBlurb}>{blurb}</p>
+      {option ? <div className={styles.cardOption}>{option}</div> : null}
       <div className={styles.cardResult}>
         {result ?? <span className={styles.cardPending}>Not run yet</span>}
       </div>
-      {option ? <div className={styles.cardOption}>{option}</div> : null}
       <button className={styles.secondary} onClick={onRun} disabled={disabled}>
         {cta}
       </button>

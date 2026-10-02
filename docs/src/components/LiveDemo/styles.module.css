@@ -136,9 +136,10 @@
   margin-top: 0.2rem;
 }
 
-/* A setting for the card's next run, between its result and its button. */
+/* A setting for the card's next run, under the blurb. Kept above the result, not beside the
+   button, so the result's rule sits at the same height in every card of a row. */
 .cardOption {
-  margin-bottom: 0.75rem;
+  margin: 0 0 0.9rem;
 }
 
 /* ------------------------------------------------------------------ buttons --------- */
