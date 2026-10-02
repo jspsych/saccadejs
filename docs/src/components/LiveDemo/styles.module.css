@@ -136,6 +136,11 @@
   margin-top: 0.2rem;
 }
 
+/* A setting for the card's next run, between its result and its button. */
+.cardOption {
+  margin-bottom: 0.75rem;
+}
+
 /* ------------------------------------------------------------------ buttons --------- */
 
 .buttonRow {

@@ -345,6 +345,8 @@ interface Session {
   scanpath: ScanpathResult | null;
   /** Frames averaged per estimate: the tracker's own default until free viewing changes it. */
   smoothingFrames: number;
+  /** Show the live gaze dot during the accuracy check. Off by default, as it would be in a study. */
+  showGazeDuringCheck: boolean;
 }
 
 const EMPTY_SESSION: Session = {
@@ -352,6 +354,7 @@ const EMPTY_SESSION: Session = {
   validation: null,
   scanpath: null,
   smoothingFrames: 1,
+  showGazeDuringCheck: false,
 };
 
 function median(values: number[]): number | null {
@@ -610,7 +613,17 @@ function Demo() {
             { type: m.button, stimulus: VALIDATE_INSTRUCTIONS, choices: ["Begin accuracy check"] },
             // Nine held-out points, then the scatter of what was actually recorded at each one.
             // `show_validation_data` is meant for piloting, which is exactly what this is.
-            { type: m.validate, show_validation_data: true },
+            // The live gaze dot is the extension's own `showPredictions()`, on only for this
+            // trial and only if the visitor asked for it: a dot that follows the eyes invites
+            // them to chase it, which is why a study would leave it off.
+            {
+              type: m.validate,
+              show_validation_data: true,
+              on_start: () => {
+                if (session.showGazeDuringCheck) extensionRef.current?.showPredictions();
+              },
+              on_finish: () => extensionRef.current?.hidePredictions(),
+            },
           ],
           scanpath: [
             ...setup,
@@ -672,11 +685,15 @@ function Demo() {
         endActivity();
       }
     },
-    [endActivity, modelUrl, sceneUrl, session.validation],
+    [endActivity, modelUrl, sceneUrl, session.validation, session.showGazeDuringCheck],
   );
 
   const setSmoothing = useCallback((smoothingFrames: number) => {
     setSession((prev) => ({ ...prev, smoothingFrames }));
+  }, []);
+
+  const setShowGazeDuringCheck = useCallback((showGazeDuringCheck: boolean) => {
+    setSession((prev) => ({ ...prev, showGazeDuringCheck }));
   }, []);
 
   return (
@@ -699,6 +716,7 @@ function Demo() {
           supported={supported}
           onRun={run}
           onReset={reset}
+          onShowGazeDuringCheckChange={setShowGazeDuringCheck}
         />
       ) : null}
 
@@ -770,12 +788,14 @@ interface CardProps {
   blurb: React.ReactNode;
   /** What this activity measured last time it ran, or null if it has not. */
   result: React.ReactNode;
+  /** A setting for the next run, shown just above the button. */
+  option?: React.ReactNode;
   cta: string;
   disabled: boolean;
   onRun: () => void;
 }
 
-function Card({ title, cost, blurb, result, cta, disabled, onRun }: CardProps) {
+function Card({ title, cost, blurb, result, option, cta, disabled, onRun }: CardProps) {
   return (
     <div className={clsx(styles.card, disabled && styles.cardDisabled)}>
       <div className={styles.cardHead}>
@@ -786,6 +806,7 @@ function Card({ title, cost, blurb, result, cta, disabled, onRun }: CardProps) {
       <div className={styles.cardResult}>
         {result ?? <span className={styles.cardPending}>Not run yet</span>}
       </div>
+      {option ? <div className={styles.cardOption}>{option}</div> : null}
       <button className={styles.secondary} onClick={onRun} disabled={disabled}>
         {cta}
       </button>
@@ -799,12 +820,14 @@ function Menu({
   supported,
   onRun,
   onReset,
+  onShowGazeDuringCheckChange,
 }: {
   session: Session;
   calibrated: boolean;
   supported: boolean;
   onRun: (activity: Activity) => void;
   onReset: () => void;
+  onShowGazeDuringCheckChange: (show: boolean) => void;
 }) {
   const { calibration, validation, scanpath } = session;
 
@@ -849,6 +872,17 @@ function Menu({
                 </span>
               </>
             ) : null
+          }
+          option={
+            <label className={styles.toggle}>
+              <input
+                type="checkbox"
+                checked={session.showGazeDuringCheck}
+                disabled={!calibrated || !supported}
+                onChange={(e) => onShowGazeDuringCheckChange(e.target.checked)}
+              />
+              Show my gaze live during the check
+            </label>
           }
           cta={!calibrated ? "Calibrate first" : validation ? "Check again" : "Check the accuracy"}
           disabled={!calibrated || !supported}
