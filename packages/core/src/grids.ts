@@ -1,7 +1,7 @@
 import calWeights from "./generated/cal_weights.json";
 import manifest from "./generated/export_manifest.json";
 import { calWeight, solveRidge } from "./ridge";
-import type { CalHead, CalPoint, CalWeighting, Gaze, RidgeRow } from "./types";
+import type { CalFit, CalHead, CalPoint, CalWeighting, Gaze, RidgeRow } from "./types";
 
 /** Targets are centred on this before the ridge fit, and the prediction adds it back. */
 export const CENTER: number = manifest.ridge.center;
@@ -44,9 +44,21 @@ export function validationGrid9(): Gaze[] {
   return points;
 }
 
-/** Ridge penalty: heavier with few points, where overfitting is the real risk. `nPoints` is
- * the number of distinct targets, not rows: showing nine dots twice is still nine points. */
-export function lambdaFor(nPoints: number): number {
+/**
+ * Ridge penalty for the per-frame fit, at any number of points. Chosen across participants in
+ * the eyetracking cook-off (200 sessions, picked on one half and scored on the other): the same
+ * value won in both halves and at 9, 13 and 25 points. It assumes row weights rescaled to mean 1,
+ * which `fitRidge` does.
+ */
+export const FRAME_LAMBDA = 3;
+
+/**
+ * The default ridge penalty for a fit. `"frames"` uses `FRAME_LAMBDA` whatever the point count.
+ * `"points"` penalises harder with few points, where overfitting is the real risk. `nPoints` is
+ * the number of distinct targets, not rows: showing nine dots twice is still nine points.
+ */
+export function lambdaFor(nPoints: number, fit: CalFit = "frames"): number {
+  if (fit === "frames") return FRAME_LAMBDA;
   return nPoints <= 9 ? manifest.ridge.lambda_fewpoint : manifest.ridge.lambda_default;
 }
 
@@ -109,10 +121,20 @@ function rowWeight(p: CalPoint): number | null {
  * Fit the embedding -> (x, y) ridge map from calibration points. Returns a kernel of `2 * d`
  * (x and y interleaved), where `d` is the model's embedding length.
  *
- * Row weights, in order of precedence:
+ * `fit` chooses the rows:
+ *
+ *   - `"frames"` (the default): every calibration frame is its own row. The frames of one look
+ *     differ while gaze does not, which shows the fit which embedding directions are noise. The
+ *     row weights are rescaled to mean 1 so that `lambda` means the same with or without them.
+ *     In the eyetracking cook-off this cut median error by about 13% against `"points"`, and
+ *     roughly halved it with nine points.
+ *   - `"points"`: one row per point, its weighted mean embedding (`meanEmbedding`), as
+ *     saccade.js fit up to 0.3. Kept for reproducing earlier data.
+ *
+ * Weights, in order of precedence:
  *
  *   1. `head` -- a `CalHead` the caller passed deliberately. An explicit argument wins.
- *   2. the per-frame weights the model emitted, averaged over the capture window.
+ *   2. the per-frame weights the model emitted (averaged over the point for `"points"`).
  *   3. uniform. Not a degraded mode: every row at 1 is plain unweighted ridge.
  *
  * `weighting` names which of those ran, so callers can record the choice rather than infer it.
@@ -120,8 +142,9 @@ function rowWeight(p: CalPoint): number | null {
 export function fitRidge(
   cal: CalPoint[],
   head: CalHead | null = null,
-  lambda: number = lambdaFor(countTargets(cal)),
+  lambda?: number,
   center: number = CENTER,
+  fit: CalFit = "frames",
 ): { kernel: Float32Array; weighting: CalWeighting } {
   const weighted = cal.filter((p) => rowWeight(p) != null).length;
   if (!head && weighted > 0 && weighted < cal.length) {
@@ -133,14 +156,30 @@ export function fitRidge(
     );
   }
   const weighting: CalWeighting = head ? "head" : weighted > 0 ? "model" : "uniform";
+  const penalty = lambda ?? lambdaFor(countTargets(cal), fit);
 
-  const rows: RidgeRow[] = cal.map((p) => ({
-    e: p.meanEmbedding,
-    x: p.target.x,
-    y: p.target.y,
-    w: head ? calWeight(p.meanEmbedding, head) : (rowWeight(p) ?? 1),
-  }));
-  return { kernel: solveRidge(rows, lambda, center), weighting };
+  if (fit === "points") {
+    const rows: RidgeRow[] = cal.map((p) => ({
+      e: p.meanEmbedding,
+      x: p.target.x,
+      y: p.target.y,
+      w: head ? calWeight(p.meanEmbedding, head) : (rowWeight(p) ?? 1),
+    }));
+    return { kernel: solveRidge(rows, penalty, center), weighting };
+  }
+
+  const rows: RidgeRow[] = [];
+  for (const p of cal) {
+    // As in meanEmbedding: a point whose frames all scored ~0 falls back to equal weights.
+    const own = p.weights && p.weights.reduce((a, b) => a + b, 0) > 1e-6 ? p.weights : null;
+    p.embeddings.forEach((e, k) => {
+      const w = head ? calWeight(e, head) : own ? own[k] : 1;
+      rows.push({ e, x: p.target.x, y: p.target.y, w });
+    });
+  }
+  const mean = rows.reduce((a, r) => a + r.w, 0) / rows.length;
+  if (mean > 0) for (const r of rows) r.w /= mean;
+  return { kernel: solveRidge(rows, penalty, center), weighting };
 }
 
 export function median(values: number[]): number | null {

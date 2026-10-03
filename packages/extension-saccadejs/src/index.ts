@@ -7,6 +7,7 @@ import {
 } from "@saccadejs/core";
 import type {
   CalPoint,
+  CalFit,
   CalWeighting,
   FrameTime,
   LoopbackResult,
@@ -512,13 +513,19 @@ class SaccadeExtension implements JsPsychExtension {
   /**
    * Fit the ridge regression from the calibration points collected so far.
    *
-   * @param lambda Ridge penalty. Omit to let the core pick one with `lambdaFor(nPoints)`.
+   * @param lambda Ridge penalty. Omit to let the core pick one with `lambdaFor(nPoints, fit)`.
+   * @param fit Which rows to fit: `"frames"` (every calibration frame, the default) or
+   *   `"points"` (one mean embedding per point, as up to 0.3). Omit for the tracker's default.
    */
   fitCalibration = (
     lambda?: number,
-  ): { lambda: number; nPoints: number; weighting: CalWeighting } | null => {
+    fit?: CalFit,
+  ): { lambda: number; nPoints: number; weighting: CalWeighting; fit: CalFit } | null => {
     const tracker = this.getTracker();
-    return tracker.fitCalibration(lambda === undefined || lambda === null ? undefined : { lambda });
+    return tracker.fitCalibration({
+      ...(lambda === undefined || lambda === null ? {} : { lambda }),
+      ...(fit === undefined || fit === null ? {} : { fit }),
+    });
   };
 
   /** The calibration points collected so far (targets in viewport fractions, 0–1). */
@@ -881,6 +888,6 @@ class SaccadeExtension implements JsPsychExtension {
   }
 }
 
-export type { CalWeighting } from "@saccadejs/core";
+export type { CalFit, CalWeighting } from "@saccadejs/core";
 
 export default SaccadeExtension;

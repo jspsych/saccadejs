@@ -130,7 +130,7 @@ building your own calibration procedure.
 | --- | --- | --- |
 | `resetCalibration()` | `void` | Throw away all calibration points and the fitted calibration. |
 | `calibratePoint(x, y, embeddings?, captureMs?, timeoutMs?)` | `Promise<number>` | Add one calibration point at pixel position (`x`, `y`). If you do not supply `embeddings`, it records them from the camera for `captureMs` (default `500`). If a single camera frame takes longer than `timeoutMs` (default `5000`) to arrive, it fails with the error `no camera frames for <ms> ms`. Returns how many frames it recorded. |
-| `fitCalibration(lambda?)` | `{lambda, nPoints, weighting} \| null` | Fit the calibration from the points added so far. You must call this after adding points with `calibratePoint`. `weighting` says whether frames were weighted by quality: `"model"`, `"head"` or `"uniform"` (not weighted). |
+| `fitCalibration(lambda?, fit?)` | `{lambda, nPoints, weighting, fit} \| null` | Fit the calibration from the points added so far. You must call this after adding points with `calibratePoint`. `weighting` says whether frames were weighted by quality: `"model"`, `"head"` or `"uniform"` (not weighted). `fit` is `"frames"` (every frame, the default) or `"points"` (one average per dot, as up to 0.3). |
 | `getCalibrationPoints()` | `CalPoint[]` | The calibration points, with positions as fractions of the window (0 to 1), and the eye data recorded at each. |
 
 ### Reading gaze live

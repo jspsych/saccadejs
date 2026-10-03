@@ -17,6 +17,7 @@ export {
 // ---- core types --------------------------------------------------------------
 export type {
   BBox,
+  CalFit,
   CalHead,
   CalPoint,
   CalWeighting,
@@ -63,6 +64,7 @@ export {
   DEFAULT_SETTLE_MS,
   defaultGrid13,
   fitRidge,
+  FRAME_LAMBDA,
   lambdaFor,
   meanEmbedding,
   median,

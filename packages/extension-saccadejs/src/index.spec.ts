@@ -481,7 +481,7 @@ describe("SaccadeExtension public API", () => {
     expect(tracker.nextSample).toHaveBeenCalled();
   });
 
-  it("passes lambda through to the tracker's fit", async () => {
+  it("passes lambda and fit through to the tracker's fit", async () => {
     const { extension } = await makeExtension(display);
     expect(extension.fitCalibration()).toBeNull();
 
@@ -490,8 +490,20 @@ describe("SaccadeExtension public API", () => {
       lambda: 2.5,
       nPoints: 1,
       weighting: "uniform",
+      fit: "frames",
     });
-    expect(extension.fitCalibration()).toEqual({ lambda: 1, nPoints: 1, weighting: "uniform" });
+    expect(extension.fitCalibration()).toEqual({
+      lambda: 1,
+      nPoints: 1,
+      weighting: "uniform",
+      fit: "frames",
+    });
+    expect(extension.fitCalibration(undefined, "points")).toEqual({
+      lambda: 1,
+      nPoints: 1,
+      weighting: "uniform",
+      fit: "points",
+    });
   });
 
   it("notifies gaze subscribers and exposes the current prediction", async () => {

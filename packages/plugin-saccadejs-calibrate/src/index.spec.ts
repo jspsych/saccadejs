@@ -41,12 +41,14 @@ describe("saccade-calibrate info", () => {
     expect(p.time_per_point.default).toBe(500);
     expect(p.point_size.default).toBe(20);
     expect(p.lambda.default).toBeNull();
+    expect(p.fit.default).toBeNull();
     expect(p.clear_previous.default).toBe(true);
   });
 
-  it("documents the calibration_points, n_points, lambda and weighting fields", () => {
+  it("documents the calibration_points, n_points, lambda, weighting and fit fields", () => {
     expect(Object.keys(SaccadeCalibratePlugin.info.data).sort()).toEqual([
       "calibration_points_px",
+      "fit",
       "lambda",
       "n_points",
       "repetitions_per_point",
@@ -97,6 +99,7 @@ describe("saccade-calibrate trial", () => {
     // The trial records how the fit weighted its rows: a weighted and an unweighted
     // calibration are different analyses, and nothing else in the data says which ran.
     expect(data.weighting).toBe("uniform");
+    expect(data.fit).toBe("frames");
     expect(typeof data.rt).toBe("number");
   });
 
@@ -113,6 +116,7 @@ describe("saccade-calibrate trial", () => {
           ],
           repetitions_per_point: 3,
           lambda: 3,
+          fit: "points",
         },
       ],
       jsPsych,
@@ -121,13 +125,14 @@ describe("saccade-calibrate trial", () => {
 
     await finished;
     expect(extension.calibratePoint).toHaveBeenCalledTimes(6);
-    expect(extension.fitCalibration).toHaveBeenCalledWith(3);
+    expect(extension.fitCalibration).toHaveBeenCalledWith(3, "points");
 
     const data = getData().values()[0];
     // two targets shown three times each: six presentations, two distinct targets
     expect(data.calibration_points_px).toHaveLength(6);
     expect(data.repetitions_per_point).toBe(3);
     expect(data.lambda).toBe(3);
+    expect(data.fit).toBe("points");
     expect(data.n_points).toBe(2);
   });
 

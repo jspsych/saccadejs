@@ -6,7 +6,15 @@ import type { FrameTime, TrackerFrame } from "./pipeline";
 import { Pipeline } from "./pipeline";
 import type { SaccadeProgress, SaccadeProgressCallback } from "./progress";
 import { reportProgress } from "./progress";
-import type { CalHead, CalPoint, CalWeighting, EmbeddingModel, Gaze, ModelIdentity } from "./types";
+import type {
+  CalFit,
+  CalHead,
+  CalPoint,
+  CalWeighting,
+  EmbeddingModel,
+  Gaze,
+  ModelIdentity,
+} from "./types";
 
 export interface SaccadeTrackerOptions {
   assets?: SaccadeAssets;
@@ -45,6 +53,11 @@ export interface SaccadeTrackerOptions {
    * here -- that path is automatic, and this option overrides it when both are present.
    */
   calHead?: CalHead | null;
+  /**
+   * Which rows the calibration fit uses. `"frames"` (the default) fits every calibration
+   * frame; `"points"` fits one mean embedding per point, as up to 0.3. See `fitRidge`.
+   */
+  calibrationFit?: CalFit;
 }
 
 export interface InitResult {
@@ -379,22 +392,26 @@ export class SaccadeTracker {
   }
 
   /** Solve the ridge map from the points added so far. Null when there is nothing to fit. */
-  fitCalibration(opts: { lambda?: number; center?: number; calHead?: CalHead | null } = {}): {
+  fitCalibration(
+    opts: { lambda?: number; center?: number; calHead?: CalHead | null; fit?: CalFit } = {},
+  ): {
     lambda: number;
     nPoints: number;
     weighting: CalWeighting;
+    fit: CalFit;
   } | null {
     if (this.cal.length === 0) return null;
     const nPoints = countTargets(this.cal);
-    const lambda = opts.lambda ?? lambdaFor(nPoints);
+    const fit = opts.fit ?? this.opts.calibrationFit ?? "frames";
+    const lambda = opts.lambda ?? lambdaFor(nPoints, fit);
     const center = opts.center ?? CENTER;
     const head = opts.calHead !== undefined ? opts.calHead : (this.opts.calHead ?? null);
-    const { kernel, weighting } = fitRidge(this.cal, head, lambda, center);
+    const { kernel, weighting } = fitRidge(this.cal, head, lambda, center, fit);
     this.kernel = kernel;
     this.weighting = weighting;
     this.pipeline?.setCenter(center);
     this.pipeline?.setKernel(this.kernel);
-    return { lambda, nPoints, weighting };
+    return { lambda, nPoints, weighting, fit };
   }
 
   /** How the last fit weighted its rows, or null before one has run. */

@@ -1,5 +1,5 @@
 import { presetModules, resetModules } from "../src/assets";
-import { fitRidge, meanEmbedding } from "../src/grids";
+import { fitRidge, FRAME_LAMBDA, meanEmbedding } from "../src/grids";
 import { OrtEmbeddingModel } from "../src/model";
 import { calWeight, predict, solveRidge } from "../src/ridge";
 import { SaccadeTracker } from "../src/tracker";
@@ -181,9 +181,9 @@ describe("fitRidge row weighting", () => {
     expect(Array.from(kernel)).toEqual(Array.from(manual));
   });
 
-  it("uses the model's per-frame weights when it emits them", () => {
+  it("uses the model's per-frame weights when it emits them (per point)", () => {
     const weighted = cal.map((p, i) => ({ ...p, weights: [0.25 * (i + 1)] }));
-    const { kernel, weighting } = fitRidge(weighted, null, 1, 0.5);
+    const { kernel, weighting } = fitRidge(weighted, null, 1, 0.5, "points");
     expect(weighting).toBe("model");
     const manual = solveRidge(
       weighted.map((p, i) => ({
@@ -203,10 +203,10 @@ describe("fitRidge row weighting", () => {
     expect(() => fitRidge(mixed, null, 1, 0.5)).toThrow(/Weight every point or none/);
   });
 
-  it("lets an explicit head override the model's weights", () => {
+  it("lets an explicit head override the model's weights (per point)", () => {
     const weighted = cal.map((p) => ({ ...p, weights: [0.5] }));
     const head = { kernel: [0.2, -0.1, 0.4], bias: 0.05 };
-    const { kernel, weighting } = fitRidge(weighted, head, 1, 0.5);
+    const { kernel, weighting } = fitRidge(weighted, head, 1, 0.5, "points");
     expect(weighting).toBe("head");
     const manual = solveRidge(
       weighted.map((p) => ({
@@ -278,6 +278,83 @@ describe("OrtEmbeddingModel output handling", () => {
 
 // ---------------------------------------------------------------------------- the tracker
 
+describe("fitRidge per-frame rows", () => {
+  const f = (a: number, b: number, c: number) => Float32Array.from([a, b, c]);
+  const pt = (
+    target: { x: number; y: number },
+    embeddings: Float32Array[],
+    weights: number[] | null,
+  ) => ({
+    target,
+    embeddings,
+    weights,
+    meanEmbedding: embeddings[0],
+  });
+  const cal = [
+    pt({ x: 0.2, y: 0.2 }, [f(1, 0, 0.5), f(0.9, 0.1, 0.4)], [0.2, 0.6]),
+    pt({ x: 0.8, y: 0.3 }, [f(0, 1, 0.25), f(0.1, 0.8, 0.3), f(0, 0.9, 0.2)], [0.4, 0.4, 0.8]),
+    pt({ x: 0.5, y: 0.9 }, [f(0.5, 0.5, 1)], [0.6]),
+  ];
+
+  it("fits every frame as a row, weights rescaled to mean 1, by default", () => {
+    const { kernel, weighting } = fitRidge(cal, null, 2, 0.5);
+    expect(weighting).toBe("model");
+    const mean = (0.2 + 0.6 + 0.4 + 0.4 + 0.8 + 0.6) / 6;
+    const manual = solveRidge(
+      cal.flatMap((p) =>
+        p.embeddings.map((e, k) => ({ e, x: p.target.x, y: p.target.y, w: p.weights![k] / mean })),
+      ),
+      2,
+      0.5,
+    );
+    expect(Array.from(kernel)).toEqual(Array.from(manual));
+  });
+
+  it("is not the per-point fit", () => {
+    const frames = fitRidge(cal, null, 2, 0.5).kernel;
+    const points = fitRidge(cal, null, 2, 0.5, "points").kernel;
+    expect(Array.from(frames)).not.toEqual(Array.from(points));
+  });
+
+  it("scores each frame with a head, when one is supplied", () => {
+    const head = { kernel: [0.2, -0.1, 0.4], bias: 0.05 };
+    const { kernel, weighting } = fitRidge(cal, head, 2, 0.5);
+    expect(weighting).toBe("head");
+    const rows = cal.flatMap((p) =>
+      p.embeddings.map((e) => ({ e, x: p.target.x, y: p.target.y, w: calWeight(e, head) })),
+    );
+    const mean = rows.reduce((a, r) => a + r.w, 0) / rows.length;
+    const manual = solveRidge(
+      rows.map((r) => ({ ...r, w: r.w / mean })),
+      2,
+      0.5,
+    );
+    expect(Array.from(kernel)).toEqual(Array.from(manual));
+  });
+
+  it("falls back to equal weights for a point whose frames all scored ~0", () => {
+    const dead = [cal[0], { ...cal[1], weights: [0, 0, 0] }, cal[2]];
+    const { kernel } = fitRidge(dead, null, 2, 0.5);
+    const raw = [0.2, 0.6, 1, 1, 1, 0.6];
+    const mean = raw.reduce((a, b) => a + b, 0) / raw.length;
+    let i = 0;
+    const manual = solveRidge(
+      dead.flatMap((p) =>
+        p.embeddings.map((e) => ({ e, x: p.target.x, y: p.target.y, w: raw[i++] / mean })),
+      ),
+      2,
+      0.5,
+    );
+    expect(Array.from(kernel)).toEqual(Array.from(manual));
+  });
+
+  it("defaults lambda to FRAME_LAMBDA whatever the point count", () => {
+    const a = fitRidge(cal, null, undefined, 0.5).kernel;
+    const b = fitRidge(cal, null, FRAME_LAMBDA, 0.5).kernel;
+    expect(Array.from(a)).toEqual(Array.from(b));
+  });
+});
+
 describe("SaccadeTracker calibration weighting", () => {
   const grid = [
     { x: 0.2, y: 0.2 },
@@ -290,7 +367,7 @@ describe("SaccadeTracker calibration weighting", () => {
     const t = new SaccadeTracker();
     grid.forEach((target, i) => t.addCalibrationPoint(target, [emb(i / 3), emb(i / 3 + 0.1)]));
     const fit = t.fitCalibration();
-    expect(fit).toEqual({ lambda: 3, nPoints: 3, weighting: "uniform" });
+    expect(fit).toEqual({ lambda: 3, nPoints: 3, weighting: "uniform", fit: "frames" });
     expect(t.getKernel()).toHaveLength(6);
     expect(t.getCalWeighting()).toBe("uniform");
   });

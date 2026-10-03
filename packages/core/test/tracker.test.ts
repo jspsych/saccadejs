@@ -55,23 +55,38 @@ describe("SaccadeTracker", () => {
     expect(p.meanEmbedding[0]).toBeCloseTo((embedding(0)[0] + embedding(0.5)[0]) / 2, 6);
 
     const fit = t.fitCalibration();
-    expect(fit).toEqual({ lambda: 1, nPoints: 13, weighting: "uniform" });
+    expect(fit).toEqual({ lambda: 3, nPoints: 13, weighting: "uniform", fit: "frames" });
     expect(t.calibrated).toBe(true);
     expect(t.getKernel()!.length).toBe(256);
 
-    // Nine points or fewer get the heavier penalty.
-    const t9 = new SaccadeTracker();
+    // The per-point fit, as up to 0.3: 1 with more than nine points.
+    expect(t.fitCalibration({ fit: "points" })).toEqual({
+      lambda: 1,
+      nPoints: 13,
+      weighting: "uniform",
+      fit: "points",
+    });
+    expect(new SaccadeTracker({ calibrationFit: "points" }).fitCalibration()).toBeNull();
+
+    // Nine points or fewer get the heavier per-point penalty.
+    const t9 = new SaccadeTracker({ calibrationFit: "points" });
     validationGrid9().forEach((target, i) => t9.addCalibrationPoint(target, [embedding(i)]));
     expect(t9.fitCalibration()!.lambda).toBe(3);
+    expect(t9.fitCalibration()!.fit).toBe("points");
     expect(t9.fitCalibration({ lambda: 0.25 })!.lambda).toBe(0.25);
 
     // Repeating the nine dots doubles the rows, not the points: still the heavier penalty.
-    const t9x2 = new SaccadeTracker();
+    const t9x2 = new SaccadeTracker({ calibrationFit: "points" });
     for (let rep = 0; rep < 2; rep++) {
       validationGrid9().forEach((target, i) => t9x2.addCalibrationPoint(target, [embedding(i)]));
     }
     expect(t9x2.getCalibrationPoints()).toHaveLength(18);
-    expect(t9x2.fitCalibration()).toEqual({ lambda: 3, nPoints: 9, weighting: "uniform" });
+    expect(t9x2.fitCalibration()).toEqual({
+      lambda: 3,
+      nPoints: 9,
+      weighting: "uniform",
+      fit: "points",
+    });
 
     t.clearCalibration();
     expect(t.calibrated).toBe(false);

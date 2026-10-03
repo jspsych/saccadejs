@@ -82,6 +82,7 @@ export interface SaccadeTrackerOptions {
   executionProviders?: ("webgpu" | "wasm")[];    // default ["webgpu", "wasm"]
   onFrame?: (f: TrackerFrame) => void;
   calHead?: CalHead | null;                      // opt-in row weighting; default none
+  calibrationFit?: CalFit;                       // "frames" (default) or "points" (fit up to 0.3)
 }
 export class SaccadeTracker {
   constructor(opts?: SaccadeTrackerOptions);
@@ -98,8 +99,8 @@ export class SaccadeTracker {
   addCalibrationPoint(target: Gaze, embeddings: Float32Array[], weights?: number[] | null): void;
   clearCalibration(): void;
   getCalibrationPoints(): CalPoint[];
-  fitCalibration(opts?: { lambda?: number; center?: number; calHead?: CalHead | null }):
-    { lambda: number; nPoints: number; weighting: CalWeighting } | null;
+  fitCalibration(opts?: { lambda?: number; center?: number; calHead?: CalHead | null; fit?: CalFit }):
+    { lambda: number; nPoints: number; weighting: CalWeighting; fit: CalFit } | null;
   getCalWeighting(): CalWeighting | null;
   get calibrated(): boolean;
   setSmoothingFrames(n: number): void;
@@ -114,7 +115,9 @@ export interface CalPoint { target: Gaze; embeddings: Float32Array[];
  *  or the caller passes a CalHead. */
 export type CalWeighting = "model" | "head" | "uniform";
 export function defaultGrid13(): Gaze[]; export function trainingGrid20(): Gaze[]; export function validationGrid9(): Gaze[];
-export function lambdaFor(nPoints: number): number;   // 3 when <= 9 distinct points else 1
+/** Rows of a calibration fit: every frame ("frames", default) or one mean per point ("points"). */
+export type CalFit = "frames" | "points";
+export function lambdaFor(nPoints: number, fit?: CalFit): number;   // "frames": 3; "points": 3 when <= 9 distinct points else 1
 export function countTargets(cal: CalPoint[]): number; // distinct targets; a repeated dot counts once
 
 // ---- calibration / validation helpers (pure, DOM-free) -----------------------
@@ -229,10 +232,11 @@ indicator and fps/backend. Data: `load_time` (ms to first frame), `face_detected
 Parameters: `calibration_points` (default the 13-point grid as `[x%, y%]` pairs),
 `calibration_mode` ("view" | "click"; default "view"), `repetitions_per_point` (1),
 `randomize_calibration_order` (false), `time_to_saccade` (1000 = settle), `time_per_point`
-(500 = capture), `point_size` (20), `lambda` (null → `lambdaFor(n)`), `clear_previous` (true).
+(500 = capture), `point_size` (20), `lambda` (null → `lambdaFor(n, fit)`), `fit` (null → the
+tracker's `calibrationFit`), `clear_previous` (true).
 Behaviour: same ring/dot animation as the demo (ring shrinks during settle, turns green during
 capture). "click" mode collects on click. Fits at the end via
-`extension.fitCalibration`. Data: `calibration_points` (px), `n_points`, `lambda`.
+`extension.fitCalibration`. Data: `calibration_points` (px), `n_points`, `lambda`, `fit`.
 
 ### `saccade-validate`
 Parameters: `validation_points`, `validation_point_coordinates` ("percent" |

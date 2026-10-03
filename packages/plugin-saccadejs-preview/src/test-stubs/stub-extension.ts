@@ -129,10 +129,11 @@ export class StubSaccadeExtension implements JsPsychExtension {
     },
   );
 
-  fitCalibration = jest.fn((lambda?: number) => ({
+  fitCalibration = jest.fn((lambda?: number, fit?: "frames" | "points") => ({
     lambda: lambda ?? 1,
     nPoints: this.calibrationCalls.length,
     weighting: "uniform" as const,
+    fit: fit ?? ("frames" as const),
   }));
 
   getCalibrationPoints = () => [];

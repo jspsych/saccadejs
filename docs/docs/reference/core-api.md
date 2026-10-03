@@ -63,6 +63,7 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `onProgress` | `(p: SaccadeProgress) => void` | — | Called during `init()` as each stage starts: `camera`, `mediapipe`, `landmarker`, `ort`, `model`, `session`, `ready`. The `model` stage also reports `loaded` and `total` bytes of the ONNX download, so you can show a progress bar. Equivalent to calling `onProgress()` after construction. |
 | `stream` | `MediaStream` | — | Use this camera stream instead of calling `getUserMedia`. The tracker will not stop a stream it did not open. |
 | `model` | `EmbeddingModel` | — | Use an embedding model you have already loaded, instead of loading one from `assets.modelUrl`. Mainly useful in tests. |
+| `calibrationFit` | `"frames" \| "points"` | `"frames"` | How calibration uses the frames recorded at each dot. `"frames"` uses each frame on its own. `"points"` averages each dot's frames first, which is how saccade.js calibrated up to 0.3. See [How the calibration is fit](#how-the-calibration-is-fit). |
 
 ### Members
 
@@ -81,10 +82,10 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `nextEmbedding` | `(): Promise<Float32Array \| null>` | The next frame's `embedding`. |
 | `nextGaze` | `(): Promise<Gaze \| null>` | The next frame's `gaze`. |
 | `nextSample` | `(): Promise<{ embedding, weight } \| null>` | The next embedding with the model's per-frame weight for it; `weight` is `null` for a model that does not produce one. Calibration collects its data through this. |
-| `addCalibrationPoint` | `(target: Gaze, embeddings: Float32Array[], weights?: number[] \| null): void` | Adds one calibration point, without refitting. `weights` are the model's per-frame quality scores. They weight the frames in the point's mean embedding, and their average sets how much the point counts in the fit. |
+| `addCalibrationPoint` | `(target: Gaze, embeddings: Float32Array[], weights?: number[] \| null): void` | Adds one calibration point, without refitting. `weights` are the model's per-frame quality scores. They set how much each frame counts in the fit. |
 | `clearCalibration` | `(): void` | |
 | `getCalibrationPoints` | `(): CalPoint[]` | |
-| `fitCalibration` | `(opts?: { lambda?, center?, calHead? }) => { lambda, nPoints, weighting } \| null` | Fits the calibration (a ridge regression) to the points added so far. Returns `null` when there is nothing to fit. |
+| `fitCalibration` | `(opts?: { lambda?, center?, calHead?, fit? }) => { lambda, nPoints, weighting, fit } \| null` | Fits the calibration (a ridge regression) to the points added so far. `fit` overrides `calibrationFit` for this fit. Returns `null` when there is nothing to fit. |
 | `calibrated` | `boolean` (getter) | `gaze` stays `null` until this is true. |
 | `getKernel` | `(): Float32Array \| null` | The fitted coefficients (the kernel): `2 * d` numbers for an embedding of length `d`, with x and y interleaved. |
 | `getCalWeighting` | `(): CalWeighting \| null` | How the last fit weighted its rows; `null` before one has run. |
@@ -237,11 +238,24 @@ Targets that produced no gaze are reported with `NaN` errors rather than dropped
 defaultGrid13(): Gaze[]     // 3x3 at 5/50/95% plus 4 inner points at 27.5/72.5%
 trainingGrid20(): Gaze[]    // 4x5, denser
 validationGrid9(): Gaze[]   // 3x3 at 15/50/85%, off the calibration grid
-lambdaFor(nPoints: number): number   // 3 when nPoints <= 9, else 1
+lambdaFor(nPoints: number, fit?: CalFit): number   // "frames" (default): 3; "points": 3 when nPoints <= 9, else 1
 countTargets(cal: CalPoint[]): number   // distinct targets: nine dots shown twice is 9
 ```
 
 Validate on `validationGrid9()`, not on the calibration points.
+
+### How the calibration is fit
+
+The calibration is a ridge regression from the eye model's output to the dot's position on
+the screen. By default every frame recorded at every dot is one row of that regression. A
+participant's eyes do not move while they look at one dot, but the model's output still varies
+a little from frame to frame. Fitting every frame shows the regression which of that variation
+is noise. The ridge penalty is 3 at any number of dots.
+
+Up to version 0.3, saccade.js averaged each dot's frames into one row and used a penalty of 1,
+or 3 with nine dots or fewer. Set `calibrationFit: "points"` to get that fit back, for example
+to reproduce an earlier study. Replayed on 200 participants' recorded data, fitting every frame
+cut the median error by about 13%, and roughly halved it after a nine-dot calibration.
 
 ### Row weighting
 
@@ -249,13 +263,13 @@ This section explains how frames of different quality (for example, a frame caug
 are weighted during calibration. You only need it if you are changing the default behavior or
 describing it in a paper.
 
-Each calibration point contributes one weighted row to the ridge fit. The weight comes from the
-first of these that applies:
+Each frame (or, with `calibrationFit: "points"`, each point) is one weighted row of the ridge
+fit. The weight comes from the first of these that applies:
 
 | Source | When | `weighting` |
 | --- | --- | --- |
 | A `CalHead` you supply (a separate scoring model; see below) | `SaccadeTrackerOptions.calHead`, or `fitCalibration({ calHead })`. If both are set, the argument to `fitCalibration` wins. | `"head"` |
-| The model's second output | The loaded model produces a quality score for each frame. A point's weight is the average score over the frames recorded at it. | `"model"` |
+| The model's second output | The loaded model produces a quality score for each frame. Each frame is weighted by its own score; with `"points"`, a point's weight is the average score over its frames. | `"model"` |
 | Nothing | Neither of the above. Every point counts equally, which is plain unweighted ridge regression. | `"uniform"` |
 
 `fitCalibration()` returns which one ran, and `getCalWeighting()` reports it afterwards. Record
