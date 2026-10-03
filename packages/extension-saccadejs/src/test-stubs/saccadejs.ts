@@ -180,12 +180,13 @@ export class SaccadeTracker {
     return this.calibrationPoints;
   }
 
-  fitCalibration(opts?: { lambda?: number }) {
+  fitCalibration(opts?: { lambda?: number; fit?: "frames" | "points" }) {
     if (this.calibrationPoints.length === 0) return null;
     return {
       lambda: opts?.lambda ?? 1,
       nPoints: this.calibrationPoints.length,
       weighting: "uniform" as const,
+      fit: opts?.fit ?? ("frames" as const),
     };
   }
 

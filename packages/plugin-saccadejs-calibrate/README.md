@@ -49,7 +49,8 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-calibrate
 | `time_to_saccade`             | integer             | `1000`          | Settle time in ms before anything is recorded. The ring shrinks over this interval.                                                                                            |
 | `time_per_point`              | integer             | `500`           | Capture time in ms at each point, once the participant has settled. The ring is green for this interval.                                                                       |
 | `point_size`                  | integer             | `20`            | Diameter of the dot in pixels. The ring is four times this.                                                                                                                    |
-| `lambda`                      | float               | `null`          | Ridge penalty. `null` lets the core choose with `lambdaFor(nPoints)`: 3 for nine points or fewer, otherwise 1.                                                                 |
+| `lambda`                      | float               | `null`          | Ridge penalty. `null` lets the core choose with `lambdaFor(nPoints, fit)`: 3 for the per-frame fit.                                                                            |
+| `fit`                         | string              | `null`          | `"frames"` fits every captured frame; `"points"` one mean embedding per point (the fit up to 0.3). `null` uses the tracker's default, `"frames"`.                              |
 | `clear_previous`              | boolean             | `true`          | Discard calibration points collected earlier in the experiment before starting. Set `false` to add points to an existing calibration.                                          |
 
 ## Data generated
@@ -59,7 +60,8 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-calibrate
 | `calibration_points_px` | array   | The targets that were shown, in presentation order, as `[x, y]` pairs in viewport **pixels**. With `repetitions_per_point > 1` each target appears once per repetition. (The `calibration_points` _parameter_ stays in percent.) |
 | `n_points`              | integer | The number of distinct targets used.                                                                                                                                                                                             |
 | `repetitions_per_point` | integer | How many times the sequence was repeated.                                                                                                                                                                                        |
-| `lambda`                | float   | The ridge penalty the fit actually used, whether from the parameter or from `lambdaFor(n_points)`. `null` if the fit failed (no usable points).                                                                                  |
+| `lambda`                | float   | The ridge penalty the fit actually used, whether from the parameter or from `lambdaFor(n_points, fit)`. `null` if the fit failed (no usable points).                                                                                  |
+| `fit`                   | string  | Which rows the fit used: `"frames"` (every captured frame) or `"points"` (one mean embedding per point). `null` if the fit failed.
 | `rt`                    | integer | Time from the start of the trial until calibration finished.                                                                                                                                                                     |
 
 ## Notes

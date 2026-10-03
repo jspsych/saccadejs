@@ -53,7 +53,8 @@ or slumps afterwards, accuracy suffers.
 | `time_to_saccade` | `number` | `1000` | How long to wait at each dot before recording, in ms, so the eyes have time to get there. The ring shrinks onto the dot during this time. |
 | `time_per_point` | `number` | `500` | How long to record at each dot, in ms. The ring is green during this time. |
 | `point_size` | `number` | `20` | Diameter of the dot, in pixels. The ring is four times this size. |
-| `lambda` | `number \| null` | `null` | How strongly to keep the fit from over-fitting a small number of dots (the ridge penalty). `null` chooses automatically: 3 for nine dots or fewer, 1 for more. Most studies should leave it alone. |
+| `lambda` | `number \| null` | `null` | How strongly to keep the fit from over-fitting a small number of dots (the ridge penalty). `null` chooses automatically: 3. Most studies should leave it alone. |
+| `fit` | `"frames" \| "points" \| null` | `null` | How the frames recorded at each dot are used. `"frames"` uses each frame on its own; `"points"` averages each dot's frames first, as saccade.js did up to 0.3 (with a penalty of 3 for nine dots or fewer and 1 for more). `null` uses the tracker's setting, `"frames"` unless you changed it. |
 | `clear_previous` | `boolean` | `true` | Throw away any calibration from earlier in the experiment before starting. Set `false` to add more dots to an existing calibration. |
 
 The default thirteen dots are a 3 × 3 grid near the edges and center (at 5%, 50% and 95% across
@@ -67,6 +68,7 @@ and down), plus four more between them (at 27.5% and 72.5%).
 | `n_points` | `number` | How many different dot positions were used. |
 | `repetitions_per_point` | `number` | How many times the set of dots was shown. |
 | `lambda` | `number` | The ridge penalty used, or `null` if calibration failed. |
+| `fit` | `string` | Whether the fit used every frame (`"frames"`) or one average per dot (`"points"`), or `null` if calibration failed. |
 | `weighting` | `string` | Whether blinks and other poor frames counted for less in the fit: `"model"` (weighted by the eye model's own quality rating), `"head"` (weighted by a separate rating you supplied to the tracker), or `"uniform"` (every frame counted equally). `null` if calibration failed. Report this: a weighted and an unweighted calibration are different methods. |
 | `rt` | `number` | Milliseconds from the start of the trial to the end of calibration. |
 

@@ -1,5 +1,5 @@
 import type SaccadeExtension from "@saccadejs/extension";
-import type { CalWeighting } from "@saccadejs/extension";
+import type { CalFit, CalWeighting } from "@saccadejs/extension";
 import { JsPsych, JsPsychPlugin, ParameterType, TrialType } from "jspsych";
 
 import { version } from "../package.json";
@@ -72,9 +72,17 @@ const info = <const>{
       default: 20,
     },
     /** Ridge penalty used to fit the calibration. `null` lets the core choose with
-     * `lambdaFor(nPoints)` — 3 for nine points or fewer, otherwise 1. */
+     * `lambdaFor(nPoints, fit)`: 3 for the per-frame fit; for `"points"`, 3 for nine points or
+     * fewer, otherwise 1. */
     lambda: {
       type: ParameterType.FLOAT,
+      default: null,
+    },
+    /** Which rows the fit uses: `"frames"`, every frame captured at every point, or `"points"`,
+     * one mean embedding per point, as saccade.js fit up to 0.3. `null` uses the tracker's
+     * default, `"frames"`. */
+    fit: {
+      type: ParameterType.STRING,
       default: null,
     },
     /** Whether to discard any calibration points collected earlier in the experiment before
@@ -111,6 +119,10 @@ const info = <const>{
      * unweighted fit are different analyses, and nothing else in the data distinguishes
      * them. */
     weighting: {
+      type: ParameterType.STRING,
+    },
+    /** Which rows the fit used: `"frames"` or `"points"`. `null` if the fit failed. */
+    fit: {
       type: ParameterType.STRING,
     },
     /** Time in milliseconds from the start of the trial until calibration finished. */
@@ -165,7 +177,7 @@ class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
       });
 
     const end_trial = (
-      fit: { lambda: number; nPoints: number; weighting: CalWeighting } | null,
+      fit: { lambda: number; nPoints: number; weighting: CalWeighting; fit: CalFit } | null,
     ) => {
       ui.destroy();
       extension.hidePredictions();
@@ -179,6 +191,7 @@ class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
         repetitions_per_point: trial.repetitions_per_point,
         lambda: fit ? fit.lambda : null,
         weighting: fit ? fit.weighting : null,
+        fit: fit ? fit.fit : null,
         rt: Math.round(performance.now() - start_time),
       });
     };
@@ -219,7 +232,10 @@ class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
       }
 
       ui.hide();
-      return extension.fitCalibration(trial.lambda ?? undefined);
+      return extension.fitCalibration(
+        trial.lambda ?? undefined,
+        (trial.fit as CalFit | null) ?? undefined,
+      );
     };
 
     run().then(end_trial, (error) => {

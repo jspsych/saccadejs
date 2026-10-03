@@ -76,10 +76,16 @@ describe("calWeight", () => {
 });
 
 describe("lambdaFor", () => {
-  it("penalises harder when there are few points", () => {
+  it("uses one penalty at any point count for the per-frame fit", () => {
     expect(lambdaFor(9)).toBe(3);
-    expect(lambdaFor(13)).toBe(1);
-    expect(lambdaFor(20)).toBe(1);
+    expect(lambdaFor(13)).toBe(3);
+    expect(lambdaFor(25, "frames")).toBe(3);
+  });
+
+  it("penalises harder when there are few points, for the per-point fit", () => {
+    expect(lambdaFor(9, "points")).toBe(3);
+    expect(lambdaFor(13, "points")).toBe(1);
+    expect(lambdaFor(20, "points")).toBe(1);
   });
 });
 
@@ -95,14 +101,14 @@ describe("countTargets", () => {
 });
 
 describe("fitRidge", () => {
-  it("uses the shipped head to weight rows, matching a hand-built solve", () => {
+  it("uses the shipped head to weight per-point rows, matching a hand-built solve", () => {
     const cal = c.embeddings.slice(0, 8).map((e, i) => ({
       target: { x: c.coords[i][0], y: c.coords[i][1] },
       embeddings: [Float32Array.from(e)],
       weights: null,
       meanEmbedding: Float32Array.from(e),
     }));
-    const { kernel: k, weighting } = fitRidge(cal, c.head, c.lambda, c.center);
+    const { kernel: k, weighting } = fitRidge(cal, c.head, c.lambda, c.center, "points");
     expect(weighting).toBe("head");
     const manual = solveRidge(
       cal.map((p) => ({

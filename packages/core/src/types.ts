@@ -73,6 +73,12 @@ export interface ModelIdentity {
 export type CalWeighting = "model" | "head" | "uniform";
 
 /**
+ * Which rows a calibration fit uses: every frame of every point (`"frames"`, the default), or
+ * one weighted mean embedding per point (`"points"`, the fit up to 0.3).
+ */
+export type CalFit = "frames" | "points";
+
+/**
  * One crop, embedded.
  *
  * `weight` is the model's estimate of how usable this frame is, in [0, 1], from a second output
