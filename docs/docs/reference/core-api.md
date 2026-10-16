@@ -117,6 +117,7 @@ interface TrackerFrame {
   crop: Uint8Array | null;             // 144 x 36 grayscale, row-major
   embedding: Float32Array | null;      // the model's width (128 for eye-embedding 1.0.0)
   weight: number | null;               // the model's score for this frame, [0, 1]; null if none
+  quality: FrameQuality | null;        // distance and lighting measures; null with no eye crop
   meanEmbedding: Float32Array | null;  // averaged over smoothingFrames; `gaze` comes from this
   timings: { landmark: number; crop: number; embed: number; total: number; wait?: number };
   time: FrameTime;
@@ -125,7 +126,19 @@ interface TrackerFrame {
 }
 
 interface Gaze { x: number; y: number }   // 0-1, origin top-left
+
+interface FrameQuality {
+  interocularDistance: number;  // outer eye corners (landmarks 33, 263), normalised image units
+  eyeBrightness: number;        // mean gray of the raw eye region, 0-255
+  eyeContrast: number;          // SD of the raw eye region's gray levels, 0-255
+}
 ```
+
+`quality` holds the two measures of the recording conditions that predicted accuracy in the
+saccade.js validation study. The eye measures are of the crop at the camera's resolution, before
+it is resized and equalized, since equalization evens out exactly the contrast being measured.
+The [`saccade-preview`](plugin-preview#distance-and-lighting-feedback) plugin turns them into
+advice for the participant.
 
 `timings` is how long each processing stage took, in ms. It is for diagnostics only.
 

@@ -25,10 +25,34 @@ export interface BBox {
   bottom: number;
 }
 
-/** A preprocessed eye crop (EYE_W x EYE_H gray, row-major) and where it came from. */
+/**
+ * A preprocessed eye crop (EYE_W x EYE_H gray, row-major), where it came from, and the gray
+ * region's brightness and contrast at the camera's resolution, before resizing and CLAHE.
+ */
 export interface EyeCrop {
   data: Uint8Array;
   bbox: BBox;
+  /** Mean gray level of the raw crop, 0-255. */
+  brightness: number;
+  /** Standard deviation of the raw crop's gray levels, 0-255. */
+  contrast: number;
+}
+
+/**
+ * Measures of the recording conditions for one frame, defined as in the saccade.js paper's
+ * analysis of what predicts a participant's accuracy. CLAHE evens out the crop the model sees,
+ * so the contrast here is of the raw crop, which is what the camera and the lighting decide.
+ */
+export interface FrameQuality {
+  /**
+   * Distance between the outer eye corners (landmarks 33 and 263), in normalised image
+   * coordinates: roughly a share of the image's width. Larger is nearer the camera.
+   */
+  interocularDistance: number;
+  /** Mean gray level of the eye region before equalization, 0-255. */
+  eyeBrightness: number;
+  /** Standard deviation of the eye region's gray levels before equalization, 0-255. */
+  eyeContrast: number;
 }
 
 export type Embedding = Float32Array;

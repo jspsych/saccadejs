@@ -36,6 +36,7 @@ describe("public API", () => {
       "intervalStats",
       "splitHalves",
       "extractEyeCrop",
+      "interocularDistance",
       "clahe",
       "resizeBilinearCv",
       "solveRidge",

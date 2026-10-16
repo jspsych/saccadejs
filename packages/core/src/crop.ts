@@ -368,7 +368,29 @@ export function extractEyeCrop(
   const need = cw * ch;
   if (!cropScratch || cropScratch.length < need) cropScratch = new Uint8Array(need);
   const gray = grayRegion(frameRGBA, W, bbox, cropScratch);
+  const { mean, sd } = grayStats(gray, need);
   const resized = resizeBilinearCv(gray, cw, ch, EYE_W, EYE_H);
   const eq = clahe(resized, EYE_W, EYE_H, { clip: 2, tiles: [8, 8] });
-  return { data: new Uint8Array(eq), bbox };
+  return { data: new Uint8Array(eq), bbox, brightness: mean, contrast: sd };
+}
+
+/** Mean and population standard deviation of the first `n` gray levels. */
+function grayStats(gray: Uint8Array, n: number): { mean: number; sd: number } {
+  let sum = 0;
+  let sumSq = 0;
+  for (let i = 0; i < n; i++) {
+    const v = gray[i];
+    sum += v;
+    sumSq += v * v;
+  }
+  const mean = sum / n;
+  return { mean, sd: Math.sqrt(Math.max(0, sumSq / n - mean * mean)) };
+}
+
+/**
+ * Distance between the outer eye corners (landmarks 33 and 263) in normalised image
+ * coordinates, the paper's stand-in for how near the camera the participant sits.
+ */
+export function interocularDistance(lm: Landmark[]): number {
+  return Math.hypot(lm[33].x - lm[263].x, lm[33].y - lm[263].y);
 }

@@ -2,6 +2,7 @@ import { clickTarget, flushPromises, startTimeline } from "@jspsych/test-utils";
 import { ParameterType, initJsPsych } from "jspsych";
 
 import SaccadePreviewPlugin from ".";
+import { SetupFeedback } from "./setup-feedback";
 import { setupFraction, setupLabel } from "./setup-progress";
 import { StubSaccadeExtension, makeFrame } from "./test-stubs/stub-extension";
 
@@ -37,17 +38,93 @@ describe("saccade-preview info", () => {
     expect(p.face_timeout.default).toBeNull();
     expect(p.show_progress.default).toBe(true);
     expect(p.show_diagnostics.default).toBe(false);
+    expect(p.show_setup_feedback.default).toBe(true);
+    expect(p.min_interocular_distance.default).toBe(0.14);
+    expect(p.max_interocular_distance.default).toBe(0.32);
+    expect(p.min_eye_contrast.default).toBe(17);
     expect(typeof p.instructions.default).toBe("string");
   });
 
-  it("documents the load_time, face_detected, fps and backend fields", () => {
+  it("documents its data fields", () => {
     expect(Object.keys(SaccadePreviewPlugin.info.data).sort()).toEqual([
       "backend",
+      "distance_feedback",
+      "eye_brightness",
+      "eye_contrast",
       "face_detected",
       "fps",
+      "interocular_distance",
+      "lighting_feedback",
       "load_time",
       "rt",
     ]);
+  });
+});
+
+const quality = (interocularDistance: number, eyeContrast: number, eyeBrightness = 100) => ({
+  interocularDistance,
+  eyeContrast,
+  eyeBrightness,
+});
+
+const thresholds = {
+  minInterocularDistance: 0.14,
+  maxInterocularDistance: 0.32,
+  minEyeContrast: 17,
+};
+
+describe("setup feedback", () => {
+  it("has no reading until a frame with measures arrives", () => {
+    const f = new SetupFeedback(thresholds);
+    f.update(null);
+    expect(f.distance).toBeNull();
+    expect(f.lighting).toBeNull();
+    expect(f.interocularDistance).toBeNull();
+  });
+
+  it("asks a participant who is far away to move closer, and one too near to move back", () => {
+    const f = new SetupFeedback(thresholds);
+    f.update(quality(0.1, 30));
+    expect(f.distance).toBe("closer");
+    const g = new SetupFeedback(thresholds);
+    g.update(quality(0.4, 30));
+    expect(g.distance).toBe("farther");
+    const h = new SetupFeedback(thresholds);
+    h.update(quality(0.2, 30));
+    expect(h.distance).toBe("good");
+    expect(h.lighting).toBe("good");
+  });
+
+  it("says why the eyes lack contrast, from their brightness", () => {
+    const dark = new SetupFeedback(thresholds);
+    dark.update(quality(0.2, 10, 30));
+    expect(dark.lighting).toBe("dark");
+    const bright = new SetupFeedback(thresholds);
+    bright.update(quality(0.2, 10, 200));
+    expect(bright.lighting).toBe("bright");
+    const flat = new SetupFeedback(thresholds);
+    flat.update(quality(0.2, 10, 100));
+    expect(flat.lighting).toBe("flat");
+  });
+
+  it("averages over recent frames, so one odd frame does not change the advice", () => {
+    const f = new SetupFeedback(thresholds);
+    for (let i = 0; i < 30; i++) f.update(quality(0.2, 30));
+    f.update(quality(0.05, 2));
+    expect(f.distance).toBe("good");
+    expect(f.lighting).toBe("good");
+    expect(f.interocularDistance).toBeCloseTo((9 * 0.2 + 0.05) / 10, 10);
+  });
+
+  it("needs a reading a little past the threshold to clear a warning", () => {
+    const f = new SetupFeedback(thresholds);
+    for (let i = 0; i < 30; i++) f.update(quality(0.13, 30));
+    expect(f.distance).toBe("closer");
+    // at the threshold itself the warning stays
+    for (let i = 0; i < 30; i++) f.update(quality(0.141, 30));
+    expect(f.distance).toBe("closer");
+    for (let i = 0; i < 30; i++) f.update(quality(0.16, 30));
+    expect(f.distance).toBe("good");
   });
 });
 
@@ -114,17 +191,34 @@ describe("saccade-preview trial", () => {
 
     const face = displayElement.querySelector("#saccade-preview-face");
     expect(face.textContent).toBe("Looking for your face…");
+    const distance = displayElement.querySelector("#saccade-preview-distance");
+    const lighting = displayElement.querySelector("#saccade-preview-lighting");
+    expect(distance.textContent).toBe("Distance: checking…");
+    expect(lighting.textContent).toBe("Lighting: checking…");
     // frame rate and backend are for researchers, and hidden unless asked for
     expect(displayElement.querySelector("#saccade-preview-diagnostics")).toBeNull();
 
-    extension.tracker.emit(makeFrame({ faceFound: true, fps: 29.5 }));
+    extension.tracker.emit(
+      makeFrame({ faceFound: true, fps: 29.5, quality: quality(0.1, 10, 30) }),
+    );
     expect(button.disabled).toBe(false);
     expect(face.textContent).toBe("Face found");
     expect(face.className).toBe("saccade-face-yes");
+    expect(distance.textContent).toBe("Distance: move a little closer to the camera");
+    expect(distance.className).toContain("saccade-feedback-bad");
+    expect(lighting.textContent).toMatch(/^Lighting: too dark/);
 
     extension.tracker.emit(makeFrame({ faceFound: false, fps: 29.5 }));
     expect(face.textContent).toBe("Looking for your face…");
-    extension.tracker.emit(makeFrame({ faceFound: true, fps: 29.5 }));
+    expect(distance.textContent).toBe("Distance: checking…");
+    for (let i = 0; i < 30; i++) {
+      extension.tracker.emit(
+        makeFrame({ faceFound: true, fps: 29.5, quality: quality(0.2, 30, 110) }),
+      );
+    }
+    expect(distance.textContent).toBe("Distance: good");
+    expect(distance.className).toContain("saccade-feedback-good");
+    expect(lighting.textContent).toBe("Lighting: good");
 
     await clickTarget(button);
     await expectFinished();
@@ -133,6 +227,11 @@ describe("saccade-preview trial", () => {
     expect(data.face_detected).toBe(true);
     expect(data.fps).toBeCloseTo(29.5);
     expect(data.backend).toBe("webgpu");
+    expect(data.interocular_distance).toBeCloseTo(0.2, 4);
+    expect(data.eye_contrast).toBeCloseTo(30, 2);
+    expect(data.eye_brightness).toBeCloseTo(110, 2);
+    expect(data.distance_feedback).toBe("good");
+    expect(data.lighting_feedback).toBe("good");
     expect(typeof data.load_time).toBe("number");
     expect(typeof data.rt).toBe("number");
     expect(extension.hideVideo).toHaveBeenCalled();
@@ -166,6 +265,7 @@ describe("saccade-preview trial", () => {
     expect(displayElement.querySelector<HTMLElement>("#saccade-preview-crop").style.display).toBe(
       "none",
     );
+    expect(displayElement.querySelector("#saccade-preview-feedback")).not.toBeNull();
 
     await clickTarget(button);
     await expectFinished();
@@ -192,7 +292,10 @@ describe("saccade-preview trial", () => {
 
     await clickTarget(button);
     await finished;
-    expect(getData().values()[0].face_detected).toBe(false);
+    const data = getData().values()[0];
+    expect(data.face_detected).toBe(false);
+    expect(data.interocular_distance).toBeNull();
+    expect(data.distance_feedback).toBeNull();
   });
 
   it("shows the setup progress while the tracker loads", async () => {

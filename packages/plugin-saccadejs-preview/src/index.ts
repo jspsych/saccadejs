@@ -4,6 +4,13 @@ import type { SaccadeProgress, TrackerFrame } from "@saccadejs/core";
 
 import { version } from "../package.json";
 import { setupFraction, setupLabel } from "./setup-progress";
+import {
+  DistanceStatus,
+  LightingStatus,
+  SetupFeedback,
+  distanceText,
+  lightingText,
+} from "./setup-feedback";
 
 /** Dimensions of the eye crop the model sees. */
 const EYE_W = 144;
@@ -64,6 +71,29 @@ const CSS = `
 }
 #saccade-preview-face.saccade-face-yes { color: #16a34a; }
 #saccade-preview-face.saccade-face-no { color: #d97706; }
+#saccade-preview-feedback {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: 14px;
+}
+.saccade-feedback-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.saccade-feedback-item::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.saccade-feedback-item.saccade-feedback-good { color: #16a34a; }
+.saccade-feedback-item.saccade-feedback-bad { color: #d97706; }
+.saccade-feedback-item.saccade-feedback-none { opacity: 0.5; }
 #saccade-preview-diagnostics {
   display: flex;
   gap: 14px;
@@ -140,6 +170,38 @@ const info = <const>{
       type: ParameterType.INT,
       default: null,
     },
+    /** Whether to tell the participant, under the preview, whether they are close enough to
+     * the camera and whether their eyes are lit well enough. In the saccade.js validation study,
+     * participants who sat farther away or whose eye images had less contrast were tracked less
+     * accurately. The feedback is advice only: it never disables the continue button. The
+     * measures are recorded in the data (`interocular_distance`, `eye_contrast`,
+     * `eye_brightness`) whether or not it is shown. */
+    show_setup_feedback: {
+      type: ParameterType.BOOL,
+      default: true,
+    },
+    /** Below this interocular distance the participant is asked to move closer. The distance is
+     * between the outer eye corners, as a share of the camera image's width. The default, 0.14,
+     * is about the 10th percentile of the participants the model was trained on. */
+    min_interocular_distance: {
+      type: ParameterType.FLOAT,
+      default: 0.14,
+    },
+    /** Above this interocular distance the participant is asked to move back. The default,
+     * 0.32, is about the 99th percentile of the training participants: nearer than that, the
+     * face soon leaves the image when the head moves. */
+    max_interocular_distance: {
+      type: ParameterType.FLOAT,
+      default: 0.32,
+    },
+    /** Below this eye contrast the participant is asked to improve their lighting. Contrast is
+     * the standard deviation of the eye region's gray levels (0–255) before the model's own
+     * contrast equalization. The default, 17, is about the 10th percentile of the training
+     * participants. */
+    min_eye_contrast: {
+      type: ParameterType.FLOAT,
+      default: 17,
+    },
     /** Width of the camera preview, in pixels. */
     preview_width: {
       type: ParameterType.INT,
@@ -179,6 +241,34 @@ const info = <const>{
     backend: {
       type: ParameterType.STRING,
     },
+    /** Distance between the outer eye corners as a share of the camera image's width, averaged
+     * over about the last third of a second before the participant continued. Larger is nearer
+     * the camera.
+     * `null` if no face was found. */
+    interocular_distance: {
+      type: ParameterType.FLOAT,
+    },
+    /** Standard deviation of the eye region's gray levels (0–255), before equalization, averaged
+     * over the same frames. Lower contrast went with lower accuracy. `null` if no face
+     * was found. */
+    eye_contrast: {
+      type: ParameterType.FLOAT,
+    },
+    /** Mean gray level of the eye region (0–255), averaged over the same frames. `null`
+     * if no face was found. */
+    eye_brightness: {
+      type: ParameterType.FLOAT,
+    },
+    /** The distance feedback when the participant continued: `"good"`, `"closer"` (asked to
+     * move closer), `"farther"` (asked to move back) or `null` if no face was found. */
+    distance_feedback: {
+      type: ParameterType.STRING,
+    },
+    /** The lighting feedback when the participant continued: `"good"`, `"dark"`, `"bright"`,
+     * `"flat"` (low contrast at ordinary brightness) or `null` if no face was found. */
+    lighting_feedback: {
+      type: ParameterType.STRING,
+    },
     /** Time in milliseconds from the start of the trial until the participant clicked the button. */
     rt: {
       type: ParameterType.INT,
@@ -192,8 +282,8 @@ type Info = typeof info;
 
 /**
  * Starts the saccade.js camera and models, and lets the participant position themselves in front
- * of the webcam. Shows the mirrored camera image, the 144×36 eye crop that the model sees, and a
- * face-found indicator.
+ * of the webcam. Shows the mirrored camera image, the 144×36 eye crop that the model sees, a
+ * face-found indicator, and advice on the participant's distance from the camera and lighting.
  *
  * The `saccade` extension must be registered in `initJsPsych`.
  *
@@ -225,6 +315,11 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
     let fps: number = null;
     // once the face_timeout has elapsed, later face-less frames must not re-disable the button
     let face_gate_open = false;
+    const feedback = new SetupFeedback({
+      minInterocularDistance: trial.min_interocular_distance,
+      maxInterocularDistance: trial.max_interocular_distance,
+      minEyeContrast: trial.min_eye_contrast,
+    });
 
     injectStyle();
 
@@ -294,6 +389,11 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
         face_detected: faceFound,
         fps: fps,
         backend: extension.getBackend(),
+        interocular_distance: round(feedback.interocularDistance, 4),
+        eye_contrast: round(feedback.eyeContrast, 2),
+        eye_brightness: round(feedback.eyeBrightness, 2),
+        distance_feedback: feedback.distance,
+        lighting_feedback: feedback.lighting,
         rt: rt_start === null ? null : Math.round(performance.now() - rt_start),
       };
 
@@ -319,6 +419,16 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
               style="${cropStyle}"></canvas>
             <div id="saccade-preview-status" aria-live="polite">
               <span id="saccade-preview-face" class="saccade-face-no">${FACE_NO}</span>
+              ${
+                trial.show_setup_feedback
+                  ? `<span id="saccade-preview-feedback">
+                      <span id="saccade-preview-distance" class="saccade-feedback-item
+                        saccade-feedback-none">${distanceText(null)}</span>
+                      <span id="saccade-preview-lighting" class="saccade-feedback-item
+                        saccade-feedback-none">${lightingText(null)}</span>
+                    </span>`
+                  : ""
+              }
               ${
                 trial.show_diagnostics
                   ? `<span id="saccade-preview-diagnostics">
@@ -350,6 +460,8 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
       const cropImage = cropCtx ? cropCtx.createImageData(EYE_W, EYE_H) : null;
 
       const faceEl = display_element.querySelector("#saccade-preview-face") as HTMLElement;
+      const distanceEl = display_element.querySelector("#saccade-preview-distance") as HTMLElement;
+      const lightingEl = display_element.querySelector("#saccade-preview-lighting") as HTMLElement;
       const fpsEl = display_element.querySelector("#saccade-preview-fps") as HTMLElement;
       const backendEl = display_element.querySelector("#saccade-preview-backend") as HTMLElement;
       const button = display_element.querySelector(
@@ -370,6 +482,8 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
 
       let tick = 0;
       let shownFace = false;
+      let shownDistance: DistanceStatus | null = null;
+      let shownLighting: LightingStatus | null = null;
       unsubscribe = extension.getTracker().onFrame((frame: TrackerFrame) => {
         faceFound = frame.faceFound;
         fps = frame.fps;
@@ -394,6 +508,21 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
           faceEl.className = frame.faceFound ? "saccade-face-yes" : "saccade-face-no";
         }
         if (trial.require_face && !face_gate_open) button.disabled = !frame.faceFound;
+
+        // A face-less frame carries no measures; the last reading stands until the face is back.
+        feedback.update(frame.quality ?? null);
+        const distance = frame.faceFound ? feedback.distance : null;
+        const lighting = frame.faceFound ? feedback.lighting : null;
+        if (distanceEl && distance !== shownDistance) {
+          shownDistance = distance;
+          distanceEl.textContent = distanceText(distance);
+          distanceEl.className = `saccade-feedback-item ${statusClass(distance)}`;
+        }
+        if (lightingEl && lighting !== shownLighting) {
+          shownLighting = lighting;
+          lightingEl.textContent = lightingText(lighting);
+          lightingEl.className = `saccade-feedback-item ${statusClass(lighting)}`;
+        }
 
         if (fpsEl && tick++ % 5 === 0) fpsEl.textContent = `${frame.fps.toFixed(1)} fps`;
       });
@@ -434,6 +563,17 @@ class SaccadePreviewPlugin implements JsPsychPlugin<Info> {
       trial_complete = resolve;
     });
   }
+}
+
+function statusClass(status: string | null): string {
+  if (status === null) return "saccade-feedback-none";
+  return status === "good" ? "saccade-feedback-good" : "saccade-feedback-bad";
+}
+
+function round(value: number | null, digits: number): number | null {
+  if (value === null) return null;
+  const f = 10 ** digits;
+  return Math.round(value * f) / f;
 }
 
 /** The failure message is put in the display as markup; a message is not trusted as markup. */
