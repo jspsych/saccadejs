@@ -33,6 +33,7 @@ function stubTracker(
       crop: null,
       embedding: opts.blind ? null : e,
       weight: null,
+      quality: null,
       meanEmbedding: null,
       timings: { landmark: 0, crop: 0, embed: 0, total: 0 },
       time: {

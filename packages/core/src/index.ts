@@ -25,6 +25,7 @@ export type {
   EmbedResult,
   EmbeddingModel,
   EyeCrop,
+  FrameQuality,
   Gaze,
   Landmark,
   ModelIdentity,
@@ -52,7 +53,14 @@ export { OrtEmbeddingModel, StubEmbeddingModel } from "./model";
 
 // ---- preprocessing (bit-exact with the training pipeline) --------------------
 export type { ClaheOptions } from "./crop";
-export { clahe, cropBBox, extractEyeCrop, resizeBilinearCv, rgbaToGray } from "./crop";
+export {
+  clahe,
+  cropBBox,
+  extractEyeCrop,
+  interocularDistance,
+  resizeBilinearCv,
+  rgbaToGray,
+} from "./crop";
 
 // ---- calibration -------------------------------------------------------------
 export { calWeight, predict, solveRidge } from "./ridge";

@@ -1,8 +1,8 @@
 import { CENTER, meanEmbedding as weightedMean } from "./grids";
-import { extractEyeCrop } from "./crop";
+import { extractEyeCrop, interocularDistance } from "./crop";
 import type { Landmarker } from "./landmarker";
 import { predict } from "./ridge";
-import type { EmbedResult, EmbeddingModel, Gaze } from "./types";
+import type { EmbedResult, EmbeddingModel, FrameQuality, Gaze } from "./types";
 
 export interface TrackerTimings {
   landmark: number;
@@ -50,6 +50,8 @@ export interface TrackerFrame {
   embedding: Float32Array | null;
   /** The model's own quality score for this frame, in [0, 1]; null if it emits none. */
   weight: number | null;
+  /** How near the camera the face is and how much contrast the eyes have; null with no crop. */
+  quality: FrameQuality | null;
   meanEmbedding: Float32Array | null;
   timings: TrackerTimings;
   time: FrameTime;
@@ -82,6 +84,7 @@ interface Stage {
   crop: number;
   faceFound: boolean;
   eye: Uint8Array | null;
+  quality: FrameQuality | null;
   error: string | null;
 }
 
@@ -354,6 +357,7 @@ export class Pipeline {
         crop: null,
         embedding: null,
         weight: null,
+        quality: stage.quality,
         meanEmbedding: null,
         timings: {
           landmark: stage.landmark,
@@ -377,6 +381,7 @@ export class Pipeline {
       crop: 0,
       faceFound: false,
       eye: null,
+      quality: null,
       error: null,
     };
     const W = this.video.videoWidth;
@@ -399,7 +404,14 @@ export class Pipeline {
         stage.faceFound = true;
         const eye = extractEyeCrop(image.data, W, H, lm);
         stage.crop = performance.now() - t2;
-        if (eye) stage.eye = eye.data;
+        if (eye) {
+          stage.eye = eye.data;
+          stage.quality = {
+            interocularDistance: interocularDistance(lm),
+            eyeBrightness: eye.brightness,
+            eyeContrast: eye.contrast,
+          };
+        }
       }
     } catch (err) {
       stage.error = this.describe(err);
@@ -456,6 +468,7 @@ export class Pipeline {
       crop: p.stage.eye,
       embedding,
       weight,
+      quality: p.stage.quality,
       meanEmbedding: mean,
       timings: {
         landmark: p.stage.landmark,

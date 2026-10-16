@@ -12,6 +12,7 @@ export interface StubFrame {
   gaze: { x: number; y: number } | null;
   faceFound: boolean;
   crop: Uint8Array | null;
+  quality?: { interocularDistance: number; eyeBrightness: number; eyeContrast: number } | null;
   fps: number;
   time: { capture: number; source: string; dropped: number | null };
 }

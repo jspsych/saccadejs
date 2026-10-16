@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { clahe, cropBBox, extractEyeCrop, resizeBilinearCv, rgbaToGray } from "../src/crop";
+import {
+  clahe,
+  cropBBox,
+  extractEyeCrop,
+  interocularDistance,
+  resizeBilinearCv,
+  rgbaToGray,
+} from "../src/crop";
 import type { Landmark } from "../src/types";
 import { decodePng } from "./helpers/png";
 
@@ -118,6 +125,17 @@ describe("cropBBox", () => {
   });
 });
 
+describe("interocularDistance", () => {
+  it("is the distance between the outer eye corners in normalised coordinates", () => {
+    const lm: Landmark[] = Array.from({ length: 478 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
+    lm[33] = { x: 0.4, y: 0.5, z: 0 };
+    lm[263] = { x: 0.58, y: 0.5, z: 0 };
+    expect(interocularDistance(lm)).toBeCloseTo(0.18, 10);
+    lm[263] = { x: 0.43, y: 0.54, z: 0 };
+    expect(interocularDistance(lm)).toBeCloseTo(0.05, 10);
+  });
+});
+
 describe("extractEyeCrop", () => {
   it("matches the staged python pipeline", () => {
     const p = cases.pipeline;
@@ -147,6 +165,20 @@ describe("extractEyeCrop", () => {
     expect(out.bbox).toEqual(p.bbox);
     expect(out.data.length).toBe(144 * 36);
     expect(diff(out.data, expClahe.data)).toEqual({ max: 0, count: 0 });
+  });
+
+  it("reports the raw crop's brightness and contrast, before resizing and CLAHE", () => {
+    const p = cases.pipeline;
+    const frame = readPng(join(FIX, "pipe_frame.png"));
+    const gray = readGray(join(FIX, "pipe_crop_gray.png")).data;
+    const n = gray.length;
+    const mean = gray.reduce((a, v) => a + v, 0) / n;
+    const sd = Math.sqrt(gray.reduce((a, v) => a + (v - mean) ** 2, 0) / n);
+
+    const out = extractEyeCrop(frame.rgba, frame.w, frame.h, toLandmarks(p.landmarks))!;
+    expect(out.brightness).toBeCloseTo(mean, 6);
+    expect(out.contrast).toBeCloseTo(sd, 6);
+    expect(out.contrast).toBeGreaterThan(0);
   });
 
   it("returns null when the landmarks give no crop", () => {
