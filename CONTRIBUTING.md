@@ -80,10 +80,6 @@ npm start
 
 `docs/README.md` explains how the site is put together.
 
-One rule is specific to this project: **recommend nothing the evidence does not support.** A
-cutoff, a typical range, or a claim about what improves tracking accuracy needs a measurement
-behind it. If you are unsure whether a claim is supported, ask in the pull request.
-
 ## Contributing a gaze model
 
 saccade.js turns a picture of the eyes into an embedding with an ONNX model, then maps the
@@ -133,4 +129,4 @@ pipeline, so a maintainer will do this step.
 same input, the same preprocessing, and the same outputs is a minor release. Changing any of
 those is a major release. This includes adding or removing `cal_weight`, which switches every
 calibration between weighted and unweighted. A model that needs different preprocessing also
-needs changes to `crop.ts` and its byte-for-byte tests, so discuss that in the issue first.
+needs changes to `crop.ts` and its tests, so discuss that in the issue first.
