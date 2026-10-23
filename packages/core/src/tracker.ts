@@ -272,7 +272,6 @@ export class SaccadeTracker {
     return this.pipeline ? this.pipeline.running : false;
   }
 
-  /** Stop everything and release the camera. The tracker cannot be re-initialised after this. */
   /**
    * What model actually ran, derived from the loaded bytes -- see {@link ModelIdentity}.
    * Null before `init()`, and null for a substituted model that does not report one.
@@ -281,6 +280,7 @@ export class SaccadeTracker {
     return this.model?.identity?.() ?? null;
   }
 
+  /** Stop everything and release the camera. The tracker cannot be re-initialised after this. */
   dispose(): void {
     this.disposed = true;
     this.stop();
