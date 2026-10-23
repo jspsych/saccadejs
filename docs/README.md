@@ -89,8 +89,8 @@ HTTPS** in the repository's Pages settings.
 
 ## What goes here
 
-Only **user-facing** documentation. Interface contracts and internal design notes live in
-`CONTRACTS.md` at the repo root and are not published.
+Only **user-facing** documentation. Internal design notes live in doc comments in
+`packages/`, next to the code they describe.
 
 The landing page is `src/pages/index.tsx`, a React page rather than a doc. Everything else is
 in `docs/docs/`, at the root of the site (`routeBasePath: "/"`), matching the navbar:
@@ -111,8 +111,9 @@ Components are in `src/components/`: `Steps` (the numbered walkthrough used in G
 
 ## Notes for editors
 
-- **The reference pages are derived from `CONTRACTS.md`.** If an interface changes, change the
-  contract and the reference page together, or they drift apart silently.
+- **The reference pages are written by hand from the code.** The types in `packages/core/src`
+  and each plugin's `info` block are the source of truth. When an interface changes, update
+  the reference page in the same pull request, or they drift apart silently.
 - **`LiveDemo` is a real jsPsych experiment, and client-only.** It runs the published extension
   and plugins on the same timeline as Getting started, rendered into a `<div>` by
   `initJsPsych({ display_element })`; React only supplies the intro screen, the annotation

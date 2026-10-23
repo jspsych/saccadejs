@@ -20,5 +20,4 @@ The core (`@saccadejs/core`) has no jsPsych dependency.
 
 Docs and live demo: https://saccade.jspsych.org/
 
-Development: `npm install`, `npm run build`, `npm test`. Interface contracts for the first
-release are in `CONTRACTS.md`. See `CONTRIBUTING.md` to contribute.
+Development: `npm install`, `npm run build`, `npm test`. See `CONTRIBUTING.md` to contribute.

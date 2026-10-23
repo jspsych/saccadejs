@@ -44,14 +44,15 @@ your contribution sooner if you take care of the parts you are comfortable with.
   this normally happens on its own. The configuration (print width 100, sorted imports) is in
   the root `package.json`.
 
-- **Public interfaces must match `CONTRACTS.md`.** `CONTRACTS.md` defines the public API of
-  every package. If your change adds or alters a parameter, a data field, or a core export,
-  update `CONTRACTS.md` in the same pull request.
+- **Public interfaces are documented in the code.** The code is the source of truth for the
+  API. Give new core exports a doc comment, and give every new plugin parameter and data field
+  a `description` in the plugin's `info` block.
 
 - **Relevant documentation must be updated.** Any pages in `docs/docs/` affected by the change
   should be updated, and new pages created if needed. The reference pages in
-  `docs/docs/reference/` are derived from `CONTRACTS.md`, so change the two together. Each
-  package's `README.md` should stay accurate as well.
+  `docs/docs/reference/` are written by hand from the code, so a change to a parameter, a data
+  field, or a core export needs a matching change there. Each package's `README.md` should stay
+  accurate as well.
 
 - **A changeset must be included in the pull request.** We use
   [changesets](https://github.com/changesets/changesets/blob/main/docs/adding-a-changeset.md)
@@ -83,9 +84,53 @@ One rule is specific to this project: **recommend nothing the evidence does not 
 cutoff, a typical range, or a claim about what improves tracking accuracy needs a measurement
 behind it. If you are unsure whether a claim is supported, ask in the pull request.
 
-## Contributing to the eye-embedding model
+## Contributing a gaze model
 
-The ONNX model in `packages/core/models/` is trained and exported outside this repository, and
-every published version stays served indefinitely because experiments cite it by version.
-Please don't replace or edit the model files in a pull request. If you have found a problem
-with the model or want to propose a change to it, open an issue.
+saccade.js turns a picture of the eyes into an embedding with an ONNX model, then maps the
+embedding to the screen with each participant's own calibration. The model is the only part
+that can be swapped out. There are two ways to use a new one.
+
+### Using your own model in your own studies
+
+You don't need to contribute anything to do this. Set `assets.modelUrl` to your `.onnx` file.
+[Using your own model](https://saccade.jspsych.org/models#using-your-own-model) on the docs site
+explains what the model must accept and what it may return. In short:
+
+- **The input is fixed.** It is a float32 tensor of shape `[1, 36, 144, 1]` holding values from
+  0 to 255, built by the preprocessing in `packages/core/src/crop.ts`. Your training images must
+  be prepared in exactly the same way. A model trained on images prepared differently will load
+  and run, but its output will be nonsense, and saccade.js cannot detect this.
+- **The outputs are flexible.** The first output is the embedding and can be any length. An
+  optional second output, `cal_weight` with shape `[1, 1]` and values from 0 to 1, rates the
+  quality of each frame. When it is present, saccade.js uses it to weight calibration.
+
+The data records your model by its SHA-256 fingerprint in the `saccade_model` column, so every
+run can be traced to the exact file it used.
+
+### Proposing a model as a published release
+
+The published releases are listed in `packages/core/models/releases.json` and served from the
+docs site. Each version is served indefinitely, because experiments cite it by version. That is
+a long-term commitment, so we publish a new model only when the evidence shows it is better.
+**Open an issue before doing this work,** and include:
+
+- **How it compares with the current release.** Report gaze error from the same validation
+  protocol and participants, along with how well it does on held-out participants. Per-participant
+  results are more useful than a single average.
+- **What it costs participants.** Report the file size (the current model is about 20 MB) and the
+  time per frame to compute an embedding, on both the WebGPU and the wasm backends, on ordinary
+  hardware. The `saccade-performance` plugin's `embed_ms_median` measures the latter.
+- **That it runs in the browser.** It must load in `onnxruntime-web` with both backends and pass
+  the checks saccade.js runs at load time (see the docs page above).
+- **Where it came from.** Describe the training data, code, run and checkpoint, so the
+  `provenance` block of its `releases.json` entry can be filled in.
+
+Please don't add or replace the model files, or edit `releases.json`, in a pull request. Each
+release's export, fingerprint, and preprocessing `contractHash` are produced by the training
+pipeline, so a maintainer will do this step.
+
+**Version numbers follow the input and outputs, not the accuracy.** A retrained model with the
+same input, the same preprocessing, and the same outputs is a minor release. Changing any of
+those is a major release. This includes adding or removing `cal_weight`, which switches every
+calibration between weighted and unweighted. A model that needs different preprocessing also
+needs changes to `crop.ts` and its byte-for-byte tests, so discuss that in the issue first.
