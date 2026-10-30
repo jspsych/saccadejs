@@ -91,6 +91,13 @@ const info = <const>{
       type: ParameterType.BOOL,
       default: true,
     },
+    /** Deferred mode only: shown after the last target while the background workers finish
+     * this trial's frames, with a percentage under it. On a slow machine this can take several
+     * seconds. Never shown in live mode. */
+    processing_message: {
+      type: ParameterType.HTML_STRING,
+      default: "<p>Processing. This can take a few seconds.</p>",
+    },
   },
   data: {
     /** The calibration targets that were shown, in the order they appeared, as `[x, y]` pairs in
@@ -124,6 +131,11 @@ const info = <const>{
     /** Which rows the fit used: `"frames"` or `"points"`. `null` if the fit failed. */
     fit: {
       type: ParameterType.STRING,
+    },
+    /** Deferred mode only: how long, in ms, the participant waited after the last target for
+     * the background workers to finish this trial's frames. `null` in live mode. */
+    processing_ms: {
+      type: ParameterType.INT,
     },
     /** Time in milliseconds from the start of the trial until calibration finished. */
     rt: {
@@ -163,6 +175,7 @@ class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
     const start_time = performance.now();
     const ui = new TargetUi(display_element, trial.point_size);
     const shown_points: [number, number][] = [];
+    let processing_ms: number | null = null;
 
     const sleep = (ms: number) =>
       new Promise<void>((resolve) => this.jsPsych.pluginAPI.setTimeout(resolve, ms));
@@ -192,6 +205,7 @@ class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
         lambda: fit ? fit.lambda : null,
         weighting: fit ? fit.weighting : null,
         fit: fit ? fit.fit : null,
+        processing_ms,
         rt: Math.round(performance.now() - start_time),
       });
     };
@@ -232,6 +246,18 @@ class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
       }
 
       ui.hide();
+      if (extension.getMode?.() === "deferred") {
+        // The points are added as the workers embed their frames; fit once they all have.
+        const waited = performance.now();
+        const total = Math.max(1, extension.getDeferredPending());
+        const render = (pending: number) =>
+          ui.showMessage(
+            `${trial.processing_message}<p>${Math.round(100 * Math.max(0, 1 - pending / total))}%</p>`,
+          );
+        render(total);
+        await extension.finishCalibration(render);
+        processing_ms = Math.round(performance.now() - waited);
+      }
       return extension.fitCalibration(
         trial.lambda ?? undefined,
         (trial.fit as CalFit | null) ?? undefined,

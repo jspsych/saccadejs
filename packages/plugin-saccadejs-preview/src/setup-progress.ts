@@ -21,6 +21,9 @@ const SETUP_STAGES: { stage: SaccadeProgressStage; label: string; weight: number
   { stage: "ort", label: "Loading", weight: 2 },
   { stage: "model", label: "Downloading the eye tracker", weight: 10 },
   { stage: "session", label: "Almost ready", weight: 2 },
+  // Only in deferred mode, after `ready`: starting and timing the background workers. The bar
+  // never moves backwards, so it waits near the end rather than dropping from 100%.
+  { stage: "deferred", label: "Your computer needs a little longer to get ready", weight: 2 },
 ];
 const SETUP_TOTAL_WEIGHT = SETUP_STAGES.reduce((total, s) => total + s.weight, 0);
 

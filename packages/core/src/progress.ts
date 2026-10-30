@@ -16,11 +16,14 @@
  * 6. `session` — creating the inference session and warming it up
  * 7. `ready` — init has finished
  *
+ * `deferred` is reported after `ready`, and only by a tracker switching to deferred mode
+ * (`enableDeferred`): starting and timing the background workers. `ready` follows it again.
+ *
  * A stage can be reported more than once (`model` reports on every chunk) and stages the caller
  * has taken over — a supplied `stream` or `model` — are skipped.
  */
 export type SaccadeProgressStage =
-  "camera" | "mediapipe" | "landmarker" | "ort" | "model" | "session" | "ready";
+  "camera" | "mediapipe" | "landmarker" | "ort" | "model" | "session" | "ready" | "deferred";
 
 /** One progress report. `loaded`/`total` are bytes, and only the `model` stage has them. */
 export interface SaccadeProgress {

@@ -30,6 +30,7 @@ describe("SaccadeExtension.info", () => {
     expect(typeof SaccadeExtension.info.version).toBe("string");
     expect(Object.keys(SaccadeExtension.info.data).sort()).toEqual([
       "saccade_data",
+      "saccade_deferred",
       "saccade_targets",
       "saccade_timing",
     ]);
@@ -667,12 +668,12 @@ describe("recording which model produced the gaze", () => {
     expect(props).toHaveLength(0); // initialize() must not touch the camera or the data
 
     await extension.start();
-    expect(props).toEqual([{ saccade_model: "eye-embedding@1.0.0" }]);
+    expect(props).toEqual([{ saccade_model: "eye-embedding@1.0.0" }, { saccade_mode: "live" }]);
 
     // Idempotent: restarting must not add a second copy to every trial.
     await extension.start();
     await extension.start();
-    expect(props).toHaveLength(1);
+    expect(props).toHaveLength(2);
   });
 
   it("stamps a tracker it was handed, which an experiment may never start() itself", async () => {
@@ -723,5 +724,198 @@ describe("recording which model produced the gaze", () => {
     const extension = new SaccadeExtension(broken);
     await extension.initialize();
     await expect(extension.start()).resolves.toBeUndefined();
+  });
+});
+
+describe("deferred mode", () => {
+  let display: HTMLElement;
+
+  beforeEach(() => {
+    display = document.createElement("div");
+    document.body.appendChild(display);
+    SaccadeTracker.instances.length = 0;
+  });
+
+  afterEach(() => {
+    display.remove();
+    jest.restoreAllMocks();
+  });
+
+  /** A started extension whose tracker is in deferred mode and calibrated. */
+  async function deferredExtension(params: Record<string, any> = {}) {
+    const props: Record<string, unknown>[] = [];
+    const extension = new SaccadeExtension(makeJsPsych(display, props));
+    await extension.initialize({ mode: "deferred", ...params });
+    await extension.start();
+    const tracker = SaccadeTracker.instances[0];
+    tracker.addCalibrationPoint({ x: 0.5, y: 0.5 }, [new Float32Array(2)]);
+    return { extension, tracker, props };
+  }
+
+  function frame(capture: number) {
+    return makeFrame({
+      gaze: null,
+      embedding: null,
+      crop: new Uint8Array(144 * 36),
+      time: { capture } as any,
+    });
+  }
+
+  it("stays live, without measuring anything, unless asked", async () => {
+    const extension = new SaccadeExtension(makeJsPsych(display));
+    await extension.initialize();
+    await extension.start();
+    const tracker = SaccadeTracker.instances[0];
+    expect(tracker.measureEmbedMs).not.toHaveBeenCalled();
+    expect(tracker.enableDeferred).not.toHaveBeenCalled();
+    expect(extension.getMode()).toBe("live");
+  });
+
+  it("switches to deferred when asked, and records the mode on every trial", async () => {
+    const { extension, tracker, props } = await deferredExtension({ deferred_workers: 2 });
+    expect(tracker.enableDeferred).toHaveBeenCalledWith({ workers: 2 });
+    expect(extension.getMode()).toBe("deferred");
+    expect(props).toContainEqual({ saccade_mode: "deferred" });
+  });
+
+  it("decides by timing the model in auto mode", async () => {
+    const extension = new SaccadeExtension(makeJsPsych(display));
+    await extension.initialize({ mode: "auto" });
+    const tracker = new SaccadeTracker();
+    // Too slow for a 30 fps camera: 85% of 33 ms is under the 30 ms floor, so the limit is 30.
+    tracker.embedTiming = { ep: "webgpu", embedMs: 45, samples: 5 };
+    SaccadeTracker.instances.length = 0;
+    (extension as any).tracker = tracker;
+    await extension.start();
+    expect(extension.getMode()).toBe("deferred");
+    expect(extension.getModeDecision()).toMatchObject({ reason: "too slow", embedMs: 45 });
+
+    const fast = new SaccadeExtension(makeJsPsych(display));
+    await fast.initialize({ mode: "auto" });
+    await fast.start();
+    expect(fast.getMode()).toBe("live");
+    expect(fast.getModeDecision()).toMatchObject({ mode: "live", reason: "fast enough" });
+  });
+
+  it("falls back to live when the workers will not start", async () => {
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const extension = new SaccadeExtension(makeJsPsych(display));
+    await extension.initialize({ mode: "deferred" });
+    const tracker = new SaccadeTracker();
+    tracker.deferredFails = true;
+    (extension as any).tracker = tracker;
+    await extension.start();
+    expect(extension.getMode()).toBe("live");
+    expect(extension.getModeDecision()).toMatchObject({ mode: "live", error: "no worker started" });
+  });
+
+  it("returns saccade_data empty and fills it in once the frames are embedded", async () => {
+    const { extension, tracker } = await deferredExtension();
+    extension.on_start({ targets: [] });
+    extension.on_load();
+    const start = (extension as any).currentTrialStart;
+    tracker.emit(frame(start + 100));
+    tracker.emit(frame(start + 133));
+    tracker.emit(makeFrame({ faceFound: false, gaze: null, crop: null }));
+    const result = extension.on_finish();
+
+    expect(result.saccade_data).toEqual([]);
+    expect(result.saccade_deferred).toEqual({ frames: 2, embedded: 0, lost: 0, complete: false });
+
+    tracker.deferred!.answer(0.25, 0.5);
+    await extension.catchUp();
+    expect(result.saccade_deferred).toEqual({ frames: 2, embedded: 2, lost: 0, complete: true });
+    expect(result.saccade_data).toEqual([
+      { x: Math.round(0.25 * window.innerWidth), y: Math.round(0.5 * window.innerHeight), t: 100 },
+      { x: Math.round(0.25 * window.innerWidth), y: Math.round(0.5 * window.innerHeight), t: 133 },
+    ]);
+  });
+
+  it("queues nothing before there is a calibration to map the frames with", async () => {
+    const { extension, tracker } = await deferredExtension();
+    tracker.clearCalibration();
+    extension.on_start({ targets: [] });
+    extension.on_load();
+    tracker.emit(frame(performance.now()));
+    const result = extension.on_finish();
+    expect(result.saccade_deferred).toEqual({ frames: 0, embedded: 0, lost: 0, complete: true });
+    expect(tracker.deferred!.pending).toBe(0);
+  });
+
+  it("gives up at max_wait, and saves the lost crops only when asked", async () => {
+    const { extension, tracker } = await deferredExtension();
+    const record = () => {
+      extension.on_start({ targets: [] });
+      extension.on_load();
+      const start = (extension as any).currentTrialStart;
+      tracker.emit(frame(start + 10));
+      return extension.on_finish();
+    };
+
+    const dropped = record();
+    const first = await extension.catchUp({ max_wait_ms: 0 });
+    expect(first).toMatchObject({
+      mode: "deferred",
+      frames_waiting: 1,
+      frames_lost: 1,
+      timed_out: true,
+      crops_saved: 0,
+    });
+    expect(dropped.saccade_deferred).toMatchObject({ lost: 1, complete: true });
+    expect(dropped.saccade_deferred!.crops).toBeUndefined();
+
+    const saved = record();
+    const second = await extension.catchUp({ max_wait_ms: 0, save_unprocessed_crops: true });
+    expect(second.crops_saved).toBe(1);
+    const crops = saved.saccade_deferred!.crops!;
+    expect(crops).toMatchObject({ t: [10], width: 144, height: 36, kernel: [1, 0, 0, 1] });
+    expect(atob(crops.data)).toHaveLength(144 * 36);
+  });
+
+  it("resolves catchUp at once in live mode", async () => {
+    const extension = new SaccadeExtension(makeJsPsych(display));
+    await extension.initialize();
+    await extension.start();
+    await expect(extension.catchUp()).resolves.toMatchObject({
+      mode: "live",
+      frames_waiting: 0,
+      timed_out: false,
+    });
+  });
+
+  it("adds calibration points only once their frames are embedded", async () => {
+    const { extension, tracker } = await deferredExtension();
+    tracker.clearCalibration();
+    tracker.nextFrame = async () => frame(0) as any;
+    const queued = await extension.calibratePoint(100, 100, undefined, 20);
+    expect(queued).toBeGreaterThan(0);
+    expect(tracker.calibrationPoints).toHaveLength(0);
+
+    const finishing = extension.finishCalibration();
+    tracker.deferred!.answer(0.1, 0.1);
+    await finishing;
+    expect(tracker.calibrationPoints).toHaveLength(1);
+    expect(tracker.calibrationPoints[0].embeddings).toHaveLength(queued);
+  });
+
+  it("collects gaze for validation from the embedded frames", async () => {
+    const { extension, tracker } = await deferredExtension();
+    const stop = extension.collectGaze();
+    tracker.emit(frame(500));
+    const collecting = stop();
+    tracker.deferred!.answer(0.5, 0.25);
+    const rows = await collecting;
+    expect(rows).toEqual([
+      { x: Math.round(0.5 * window.innerWidth), y: Math.round(0.25 * window.innerHeight), t: 500 },
+    ]);
+  });
+
+  it("collects live gaze the same way in live mode", async () => {
+    const { extension, tracker } = await makeExtension(display);
+    const stop = extension.collectGaze();
+    tracker.emit(makeFrame({ gaze: { x: 0.5, y: 0.5 }, time: { capture: 42 } as any }));
+    const rows = await stop();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].t).toBe(42);
   });
 });

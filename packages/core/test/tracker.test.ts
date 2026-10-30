@@ -152,6 +152,72 @@ describe("SaccadeTracker", () => {
     expect(t.video.srcObject).toBeNull();
   }, 15000);
 
+  it("switches to deferred mode: frames carry crops, and workers embed what is submitted", async () => {
+    presetModules(undefined, fakeVision());
+    const t = new SaccadeTracker({ stream: fakeStream(), model: new StubEmbeddingModel() });
+    t.video.play = async () => undefined;
+    Object.defineProperty(t.video, "videoWidth", { value: 64, configurable: true });
+    Object.defineProperty(t.video, "videoHeight", { value: 48, configurable: true });
+    await t.init();
+    t.start();
+    expect(t.mode).toBe("live");
+    await expect(t.embedDeferred(new Uint8Array(144 * 36))).rejects.toThrow("deferred mode");
+
+    // A worker that answers every crop with a fixed 128-d embedding.
+    const worker = {
+      onmessage: null as ((e: MessageEvent) => void) | null,
+      onerror: null,
+      terminated: false,
+      postMessage(message: { type: string; id?: number }) {
+        const data =
+          message.type === "init"
+            ? { type: "ready", dim: 128, emitsWeight: false }
+            : { type: "result", id: message.id, embedding: new Float32Array(128).buffer, ms: 50 };
+        queueMicrotask(() => this.onmessage?.({ data } as MessageEvent));
+      },
+      terminate() {
+        this.terminated = true;
+      },
+    };
+    const stages: string[] = [];
+    t.onProgress((p) => stages.push(p.stage));
+    const embedder = await t.enableDeferred({
+      workers: 1,
+      modelBytes: new Uint8Array(8),
+      createWorker: () => worker,
+    });
+    expect(t.mode).toBe("deferred");
+    expect(t.deferred).toBe(embedder);
+    expect(stages.slice(-2)).toEqual(["deferred", "ready"]);
+
+    // Skip a frame that may have been embedded inline before the switch.
+    await t.nextFrame();
+    const frame = await t.nextFrame();
+    expect(frame.embedding).toBeNull();
+    expect(frame.gaze).toBeNull();
+    expect(frame.crop!.length).toBe(144 * 36);
+    const result = await t.embedDeferred(frame.crop!);
+    expect(result.embedding.length).toBe(128);
+
+    t.disableDeferred();
+    expect(t.mode).toBe("live");
+    expect(worker.terminated).toBe(true);
+    await t.nextFrame();
+    expect((await t.nextFrame()).embedding!.length).toBe(128);
+    t.dispose();
+  }, 15000);
+
+  it("will not move a substituted model to the workers", async () => {
+    presetModules(undefined, fakeVision());
+    const t = new SaccadeTracker({ stream: fakeStream(), model: new StubEmbeddingModel() });
+    t.video.play = async () => undefined;
+    Object.defineProperty(t.video, "videoWidth", { value: 64, configurable: true });
+    Object.defineProperty(t.video, "videoHeight", { value: 48, configurable: true });
+    await expect(t.enableDeferred()).rejects.toThrow("cannot use a model substituted");
+    expect(t.mode).toBe("live");
+    t.dispose();
+  });
+
   it("keeps its video in the document, and puts it back if it is detached", () => {
     const t = new SaccadeTracker();
     expect(t.video.isConnected).toBe(false);

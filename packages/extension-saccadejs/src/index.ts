@@ -2,18 +2,23 @@ import { JsPsych, JsPsychExtension, JsPsychExtensionInfo, ParameterType } from "
 import {
   DEFAULT_FRAME_TIMEOUT_MS,
   SaccadeTracker,
+  chooseMode,
   formatModelIdentity,
+  predictSeries,
   withFrameTimeout,
 } from "@saccadejs/core";
 import type {
   CalPoint,
   CalFit,
   CalWeighting,
+  EmbedResult,
   FrameTime,
   LoopbackResult,
+  ModeDecision,
   SaccadeAssets,
   SaccadeProgress,
   SaccadeProgressCallback,
+  TimedEmbedding,
   TrackerFrame,
 } from "@saccadejs/core";
 
@@ -56,6 +61,78 @@ export interface SaccadeTimingInfo {
   trial_start: number;
 }
 
+/**
+ * How a deferred-mode trial's gaze is coming along. In deferred mode `saccade_data` is filled
+ * in after the trial ends, once the background workers have embedded its frames; this object
+ * is updated in place as that happens.
+ */
+export interface SaccadeDeferredInfo {
+  /** Camera frames with a face that the trial queued for the workers. */
+  frames: number;
+  /** Of those, how many have been embedded. */
+  embedded: number;
+  /** Frames that never will be: cancelled by a catch-up deadline, or dropped from a full queue. */
+  lost: number;
+  /** True once every frame is either embedded or lost, and `saccade_data` is final. */
+  complete: boolean;
+  /**
+   * The lost frames' eye crops, when `saccade-catch-up` was told to save them, so they can be
+   * embedded offline. `data` is base64 of the crops end to end, `width` x `height` gray bytes
+   * each, row-major; `t` is each crop's capture time on the same axis as `saccade_data`'s `t`;
+   * `kernel` and `center` are the calibration that would have been applied to them (x and y
+   * interleaved, `predict()` in `@saccadejs/core`), which gives gaze as viewport fractions;
+   * `viewport` is the window size in pixels that the rest of the trial was converted with.
+   * Absent otherwise.
+   */
+  crops?: {
+    t: number[];
+    width: number;
+    height: number;
+    data: string;
+    kernel: number[] | null;
+    center: number;
+    viewport: { width: number; height: number };
+  };
+}
+
+/** What `catchUp()` (and the `saccade-catch-up` plugin) report. */
+export interface SaccadeCatchUpResult {
+  /** The mode the tracker is in. In live mode there is never anything to catch up on. */
+  mode: "live" | "deferred";
+  /** Frames that were still queued or being embedded when the catch-up started. */
+  frames_waiting: number;
+  /** Frames given up on because `max_wait` ran out, or lost earlier from a full queue. */
+  frames_lost: number;
+  /** Whether `max_wait` ran out before the queue emptied. */
+  timed_out: boolean;
+  /** Lost frames whose eye crops were written into their trials' `saccade_deferred.crops`. */
+  crops_saved: number;
+  /** How long the catch-up took, in ms. */
+  wait_ms: number;
+}
+
+interface OwedFrame {
+  time: number;
+  crop: Uint8Array;
+  job: Promise<EmbedResult>;
+}
+
+/** A deferred-mode trial whose gaze is still being computed. */
+interface DeferredTrial {
+  frames: OwedFrame[];
+  data: SaccadeGazeSample[];
+  info: SaccadeDeferredInfo;
+  kernel: Float32Array | null;
+  center: number;
+  smoothing: number;
+  zero: number;
+  offset: number;
+  width: number;
+  height: number;
+  lost: OwedFrame[];
+  done: Promise<void>;
+}
+
 export interface InitializeParameters {
   /**
    * Whether to round the predicted x, y coordinates to the nearest integer pixel. Recommended,
@@ -83,6 +160,29 @@ export interface InitializeParameters {
    * when the same tracker is shared with non-jsPsych code on the page.
    */
   tracker?: SaccadeTracker;
+  /**
+   * Where the eye model runs.
+   *
+   * - `"live"`: in the frame loop, on every camera frame. Gaze is available as it happens.
+   * - `"deferred"`: in background workers. Frames are queued while a trial records and
+   *   embedded when the workers get to them, so `saccade_data` is filled in after the trial
+   *   ends. Keeps slow machines responsive, but nothing gaze-contingent works (the live gaze
+   *   API and the gaze dot stay empty), and a `saccade-catch-up` trial must run before the data
+   *   is saved.
+   * - `"auto"`: decided when the camera starts, by timing the model on this machine. Live if it
+   *   runs on WebGPU and keeps up with the camera, deferred otherwise (`chooseMode` in
+   *   `@saccadejs/core`).
+   *
+   * The mode in effect is recorded in every trial as `saccade_mode`.
+   * @default "live"
+   */
+  mode?: "live" | "deferred" | "auto";
+  /**
+   * Deferred mode: how many background workers to run. Each holds its own copy of the model.
+   * Default: the cores minus two, at most three, and one on a machine with 4 GB of memory or
+   * less (`recommendedWorkers` in `@saccadejs/core`).
+   */
+  deferred_workers?: number;
 }
 
 interface OnStartParameters {
@@ -216,6 +316,24 @@ class SaccadeExtension implements JsPsychExtension {
           trial_start: { type: ParameterType.FLOAT },
         },
       },
+      /**
+       * Deferred mode only. `saccade_data` starts empty and is filled in after the trial, once
+       * the background workers have embedded its frames; this object tracks that. `frames` is
+       * how many frames the trial queued, `embedded` how many have been embedded, `lost` how
+       * many never will be, and `complete` turns true when `saccade_data` is final. A
+       * `saccade-catch-up` trial waits for every trial to complete. If it gave up on some
+       * frames and was told to save them, `crops` holds their eye crops for offline processing.
+       */
+      saccade_deferred: {
+        type: ParameterType.COMPLEX,
+        nested: {
+          frames: { type: ParameterType.INT },
+          embedded: { type: ParameterType.INT },
+          lost: { type: ParameterType.INT },
+          complete: { type: ParameterType.BOOL },
+          crops: { type: ParameterType.COMPLEX },
+        },
+      },
     },
     // prettier-ignore
     citations: '__CITATIONS__',
@@ -227,6 +345,18 @@ class SaccadeExtension implements JsPsychExtension {
   private round_predictions = true;
   private smoothing_frames = 1;
   private assets: SaccadeAssets = {};
+  private requestedMode: "live" | "deferred" | "auto" = "live";
+  private deferredWorkers: number | undefined = undefined;
+  private modeDecision: (ModeDecision & { error?: string }) | null = null;
+  private modeRecorded = false;
+  /** Deferred mode: trials whose gaze is still being computed, or whose frames were lost. */
+  private deferredTrials = new Set<DeferredTrial>();
+  /** Deferred mode: the current recording trial's queued frames. */
+  private currentTrialFrames: OwedFrame[] = [];
+  private currentTrialKernel: Float32Array | null = null;
+  private currentTrialCenter = 0;
+  /** Deferred mode: calibration points waiting for their frames to be embedded. */
+  private pendingCalibration = new Set<Promise<void>>();
 
   // ---- tracker state -------------------------------------------------------------------------
   private tracker: SaccadeTracker | null = null;
@@ -279,10 +409,14 @@ class SaccadeExtension implements JsPsychExtension {
     smoothing_frames = 1,
     assets = {},
     tracker,
+    mode = "live",
+    deferred_workers,
   }: InitializeParameters = {}): Promise<void> => {
     this.round_predictions = round_predictions;
     this.smoothing_frames = smoothing_frames;
     this.assets = assets;
+    this.requestedMode = mode;
+    this.deferredWorkers = deferred_workers;
     this.gazeUpdateCallbacks = [];
 
     if (tracker) {
@@ -304,6 +438,7 @@ class SaccadeExtension implements JsPsychExtension {
 
   on_start = (params?: OnStartParameters): void => {
     this.currentTrialData = [];
+    this.currentTrialFrames = [];
     this.currentTrialTargets = {};
     this.currentTrialSelectors = params?.targets ?? [];
     this.targetsPending = this.currentTrialSelectors.length > 0;
@@ -322,6 +457,9 @@ class SaccadeExtension implements JsPsychExtension {
       if (!this.tracker.running) {
         this.tracker.start();
       }
+      // The calibration this trial's deferred frames will be mapped with, when they come back.
+      this.currentTrialKernel = this.tracker.getKernel();
+      this.currentTrialCenter = this.tracker.getCenter();
       // Per-trial sampling: subscribe for the duration of the trial only.
       this.trialUnsubscribe = this.tracker.onFrame(this.handleTrialFrame);
     } else {
@@ -333,6 +471,7 @@ class SaccadeExtension implements JsPsychExtension {
     saccade_data: SaccadeGazeSample[];
     saccade_targets: Record<string, SaccadeTargetRect>;
     saccade_timing: SaccadeTimingInfo;
+    saccade_deferred?: SaccadeDeferredInfo;
   } => {
     this.trialUnsubscribe?.();
     this.trialUnsubscribe = null;
@@ -342,8 +481,11 @@ class SaccadeExtension implements JsPsychExtension {
     // Everything must have been recorded while the trial was on screen.
     this.domObserver?.disconnect();
 
+    const deferred = this.tracker?.mode === "deferred" ? this.deferTrial() : null;
+
     return {
-      saccade_data: this.currentTrialData,
+      ...(deferred ? { saccade_deferred: deferred.info } : {}),
+      saccade_data: deferred ? deferred.data : this.currentTrialData,
       saccade_targets: this.currentTrialTargets,
       saccade_timing: {
         offset_ms: this.timingOffset,
@@ -376,6 +518,7 @@ class SaccadeExtension implements JsPsychExtension {
       this.backend = ep;
       this.recordModel(tracker);
       this.watchFrames();
+      await this.applyMode(tracker);
       tracker.start();
       this.initialized = true;
     })();
@@ -405,6 +548,66 @@ class SaccadeExtension implements JsPsychExtension {
       saccade_model: formatModelIdentity(tracker.getModelIdentity()),
     });
   }
+
+  /**
+   * Put the tracker in the mode `initialize({ mode })` asked for, timing the model first for
+   * `"auto"`. A deferred pool that will not start leaves the tracker live: slow but correct,
+   * and the reason is kept in `getModeDecision().error`.
+   */
+  private async applyMode(tracker: SaccadeTracker): Promise<void> {
+    if (this.requestedMode !== "live" && tracker.mode === "live" && !this.modeDecision) {
+      let decision: ModeDecision & { error?: string };
+      if (this.requestedMode === "auto") {
+        // Timing the model is part of getting ready, as far as a participant can tell; without
+        // this a setup screen would say "Ready" for the seconds it takes.
+        this.handleProgress({ stage: "session" });
+        const { ep, embedMs } = await tracker.measureEmbedMs();
+        const cameraFps = await tracker.measureCameraFps();
+        decision = chooseMode({ ep, embedMs, cameraFps });
+      } else {
+        decision = {
+          mode: "deferred",
+          reason: "requested",
+          ep: (this.backend as "webgpu" | "wasm") ?? "wasm",
+          embedMs: NaN,
+          cameraFps: null,
+          limitMs: NaN,
+        };
+      }
+      if (decision.mode === "deferred") {
+        try {
+          await tracker.enableDeferred({ workers: this.deferredWorkers });
+        } catch (err) {
+          console.error("saccade: the background workers would not start; staying live.", err);
+          decision = { ...decision, mode: "live", error: String((err as Error)?.message ?? err) };
+        }
+      }
+      this.modeDecision = decision;
+    }
+    this.recordMode(tracker);
+  }
+
+  /** Stamp the mode onto every trial, once, as `saccade_mode`. Same reasoning as the model's. */
+  private recordMode(tracker: SaccadeTracker): void {
+    if (this.modeRecorded) return;
+    this.modeRecorded = true;
+    this.jsPsych?.data?.addProperties?.({ saccade_mode: tracker.mode });
+  }
+
+  /**
+   * How the mode was chosen: the measured encode time, the camera's frame rate, the limit, and
+   * the reason. `null` in live mode unless `"auto"` measured and chose live.
+   */
+  getModeDecision = (): (ModeDecision & { error?: string }) | null => this.modeDecision;
+
+  /** `"live"` or `"deferred"`; see the `mode` initialize parameter. */
+  getMode = (): "live" | "deferred" => this.tracker?.mode ?? "live";
+
+  /**
+   * Deferred mode: frames queued for, or being embedded by, the background workers right now.
+   * Always 0 in live mode. Plugins poll this to show progress while they wait.
+   */
+  getDeferredPending = (): number => this.tracker?.deferred?.pending ?? 0;
 
   /** Stop processing camera frames. The camera stream stays open. */
   pause = (): void => {
@@ -488,6 +691,33 @@ class SaccadeExtension implements JsPsychExtension {
       y: y / this.viewportHeight(),
     };
 
+    if (!embeddings && tracker.mode === "deferred") {
+      // The frames are queued now and the point is added when the workers have embedded them;
+      // `finishCalibration()` waits for that before anything is fitted.
+      const frames: Promise<EmbedResult>[] = [];
+      const until = performance.now() + captureMs;
+      while (performance.now() < until) {
+        const f = await withFrameTimeout(tracker.nextFrame(), timeoutMs);
+        if (f.faceFound && f.crop) frames.push(this.owe(tracker, f.crop));
+      }
+      if (frames.length === 0) return 0;
+      const added = Promise.allSettled(frames).then((settled) => {
+        const done = settled
+          .filter((s): s is PromiseFulfilledResult<EmbedResult> => s.status === "fulfilled")
+          .map((s) => s.value);
+        if (done.length === 0) return;
+        const w = done.every((r) => r.weight != null) ? done.map((r) => r.weight as number) : null;
+        tracker.addCalibrationPoint(
+          target,
+          done.map((r) => r.embedding),
+          w,
+        );
+      });
+      this.pendingCalibration.add(added);
+      void added.finally(() => this.pendingCalibration.delete(added));
+      return frames.length;
+    }
+
     let collected = embeddings;
     // Only frames this call collected have weights to go with them; embeddings handed in by
     // the caller come with none, and are fitted unweighted.
@@ -508,6 +738,26 @@ class SaccadeExtension implements JsPsychExtension {
     if (collected.length === 0) return 0;
     tracker.addCalibrationPoint(target, collected, weights);
     return collected.length;
+  };
+
+  /**
+   * Deferred mode: wait until every point `calibratePoint` queued has been embedded and added,
+   * so `fitCalibration` sees all of them. Resolves at once in live mode.
+   *
+   * @param onProgress Called every 100 ms with the frames still waiting for a worker, so a
+   *   trial can show the participant that something is happening.
+   */
+  finishCalibration = async (onProgress?: (pending: number) => void): Promise<void> => {
+    if (this.pendingCalibration.size === 0) return;
+    const timer = onProgress ? setInterval(() => onProgress(this.getDeferredPending()), 100) : null;
+    onProgress?.(this.getDeferredPending());
+    try {
+      while (this.pendingCalibration.size > 0) {
+        await Promise.all(Array.from(this.pendingCalibration));
+      }
+    } finally {
+      if (timer) clearInterval(timer);
+    }
   };
 
   /**
@@ -552,6 +802,100 @@ class SaccadeExtension implements JsPsychExtension {
     this.gazeUpdateCallbacks.push(callback);
     return () => {
       this.gazeUpdateCallbacks = this.gazeUpdateCallbacks.filter((item) => item !== callback);
+    };
+  };
+
+  /**
+   * Collect gaze until the returned function is called; that function resolves with the
+   * samples, with the same absolute `t` as `onGazeUpdate`. In live mode the samples are the
+   * ones `onGazeUpdate` delivered. In deferred mode the frames are queued for the background
+   * workers, and the promise resolves once they have been embedded, with gaze from the
+   * calibration in place when collection started. `saccade-validate` collects through this.
+   */
+  collectGaze = (): (() => Promise<SaccadeGazeSample[]>) => {
+    const tracker = this.tracker;
+    if (!tracker || tracker.mode === "live") {
+      const rows: SaccadeGazeSample[] = [];
+      const off = this.onGazeUpdate((sample) => rows.push(sample));
+      return () => {
+        off();
+        return Promise.resolve(rows);
+      };
+    }
+    const kernel = tracker.getKernel();
+    const center = tracker.getCenter();
+    const frames: OwedFrame[] = [];
+    const off = tracker.onFrame((f) => {
+      if (kernel && f.faceFound && f.crop) {
+        frames.push({ time: f.time.capture, crop: f.crop, job: this.owe(tracker, f.crop) });
+      }
+    });
+    return async () => {
+      off();
+      if (!kernel) return [];
+      const { embedded } = await this.settleFrames(frames);
+      const width = this.viewportWidth();
+      const height = this.viewportHeight();
+      const offset = this.timingOffset ?? 0;
+      return predictSeries(embedded, kernel, tracker.getSmoothingFrames(), center).map((s) =>
+        this.pixelSample(s.gaze.x, s.gaze.y, s.time - offset, width, height),
+      );
+    };
+  };
+
+  /**
+   * Deferred mode: wait for the background workers to finish every queued frame, so that every
+   * trial's `saccade_data` is complete before the data is saved. The `saccade-catch-up` plugin
+   * calls this; it resolves at once in live mode.
+   *
+   * If `max_wait_ms` runs out first, the frames still queued are given up on. With
+   * `save_unprocessed_crops`, their eye crops are written into their trials'
+   * `saccade_deferred.crops` so they can be embedded offline; otherwise they are counted in
+   * `saccade_deferred.lost` and discarded. A 144 x 36 strip across both eyes is a recognisable
+   * picture of a person, so think about your data sharing before saving them.
+   */
+  catchUp = async (
+    opts: {
+      max_wait_ms?: number | null;
+      save_unprocessed_crops?: boolean;
+      onProgress?: (pending: number, total: number) => void;
+    } = {},
+  ): Promise<SaccadeCatchUpResult> => {
+    const started = performance.now();
+    const embedder = this.tracker?.deferred ?? null;
+    const frames_waiting = embedder?.pending ?? 0;
+    let timed_out = false;
+    if (embedder) {
+      const drained = await embedder.drain({
+        deadlineMs: opts.max_wait_ms ?? null,
+        onProgress: opts.onProgress,
+      });
+      if (drained.timedOut) {
+        timed_out = true;
+        embedder.cancel();
+      }
+    }
+    // Every trial and calibration point has settled once its frames have.
+    await Promise.all(Array.from(this.deferredTrials, (trial) => trial.done));
+    await this.finishCalibration();
+
+    let frames_lost = 0;
+    let crops_saved = 0;
+    for (const trial of Array.from(this.deferredTrials)) {
+      frames_lost += trial.lost.length;
+      if (opts.save_unprocessed_crops && trial.lost.length) {
+        trial.info.crops = this.encodeCrops(trial);
+        crops_saved += trial.lost.length;
+      }
+      this.deferredTrials.delete(trial);
+    }
+    return {
+      mode: this.getMode(),
+      frames_waiting,
+      frames_lost,
+      timed_out,
+      crops_saved,
+      wait_ms: Math.round(performance.now() - started),
     };
   };
 
@@ -622,6 +966,11 @@ class SaccadeExtension implements JsPsychExtension {
     this.tracker = null;
     this.ownsTracker = false;
     this.initialized = false;
+    this.modeDecision = null;
+    this.modeRecorded = false;
+    this.deferredTrials.clear();
+    this.pendingCalibration.clear();
+    this.currentTrialFrames = [];
     this.starting = null;
     this.backend = null;
     this.warnedNotStarted = false;
@@ -729,9 +1078,153 @@ class SaccadeExtension implements JsPsychExtension {
     // the trial. Until then it is the only hook that runs after an image lays out and before
     // jsPsych tears the display down.
     if (this.targetsPending) this.recordTargets();
+    const tracker = this.tracker;
+    if (tracker?.mode === "deferred") {
+      // Queued now, turned into `saccade_data` rows when the workers are done (`deferTrial`).
+      // Frames before calibration are not worth embedding: there is nothing to map them with.
+      if (frame.faceFound && frame.crop && this.currentTrialKernel) {
+        this.currentTrialFrames.push({
+          time: frame.time.capture,
+          crop: frame.crop,
+          job: this.owe(tracker, frame.crop),
+        });
+      }
+      return;
+    }
     const sample = this.toSample(frame, this.currentTrialStart);
     if (sample) this.currentTrialData.push(sample);
   };
+
+  /** Queue a crop for the workers. Its rejection is handled wherever the job is awaited. */
+  private owe(tracker: SaccadeTracker, crop: Uint8Array): Promise<EmbedResult> {
+    const job = tracker.embedDeferred(crop);
+    job.catch(() => undefined);
+    return job;
+  }
+
+  /** Wait for a run of queued frames; split them into embedded (in order) and lost. */
+  private async settleFrames(
+    frames: OwedFrame[],
+    onSettled?: (ok: boolean) => void,
+  ): Promise<{ embedded: TimedEmbedding[]; lost: OwedFrame[] }> {
+    const embedded: TimedEmbedding[] = [];
+    const lost: OwedFrame[] = [];
+    const results = await Promise.all(
+      frames.map((f) =>
+        f.job.then(
+          (r) => {
+            onSettled?.(true);
+            return r;
+          },
+          () => {
+            onSettled?.(false);
+            return null;
+          },
+        ),
+      ),
+    );
+    results.forEach((r, i) => {
+      if (r) embedded.push({ ...r, time: frames[i].time });
+      else lost.push(frames[i]);
+    });
+    return { embedded, lost };
+  }
+
+  /**
+   * Close out a deferred-mode trial: `saccade_data` is returned empty and filled in, in place,
+   * once the workers have embedded the trial's frames. jsPsych stores the object a trial's
+   * `on_finish` returns by reference, so the rows appear in the trial's data when they arrive.
+   */
+  private deferTrial(): { data: SaccadeGazeSample[]; info: SaccadeDeferredInfo } {
+    const frames = this.currentTrialFrames;
+    this.currentTrialFrames = [];
+    const info: SaccadeDeferredInfo = {
+      frames: frames.length,
+      embedded: 0,
+      lost: 0,
+      complete: frames.length === 0,
+    };
+    const data: SaccadeGazeSample[] = [];
+    if (frames.length === 0) return { data, info };
+
+    const trial: DeferredTrial = {
+      frames,
+      data,
+      info,
+      kernel: this.currentTrialKernel,
+      center: this.currentTrialCenter,
+      smoothing: this.tracker?.getSmoothingFrames() ?? this.smoothing_frames,
+      zero: this.currentTrialStart,
+      offset: this.timingOffset ?? 0,
+      width: this.viewportWidth(),
+      height: this.viewportHeight(),
+      lost: [],
+      done: Promise.resolve(),
+    };
+    trial.done = this.settleFrames(frames, (ok) => {
+      if (ok) info.embedded++;
+      else info.lost++;
+    }).then(({ embedded, lost }) => {
+      if (trial.kernel) {
+        for (const s of predictSeries(embedded, trial.kernel, trial.smoothing, trial.center)) {
+          data.push(
+            this.pixelSample(
+              s.gaze.x,
+              s.gaze.y,
+              s.time - trial.zero - trial.offset,
+              trial.width,
+              trial.height,
+            ),
+          );
+        }
+      }
+      trial.lost = lost;
+      trial.frames = [];
+      info.complete = true;
+      // Kept only while something might still want the lost frames' crops (`catchUp`).
+      if (lost.length === 0) this.deferredTrials.delete(trial);
+    });
+    this.deferredTrials.add(trial);
+    return { data, info };
+  }
+
+  /** The lost frames of a trial, packed for `saccade_deferred.crops`. */
+  private encodeCrops(trial: DeferredTrial): NonNullable<SaccadeDeferredInfo["crops"]> {
+    const width = 144;
+    const height = 36;
+    const all = new Uint8Array(trial.lost.length * width * height);
+    trial.lost.forEach((f, i) => all.set(f.crop, i * width * height));
+    let binary = "";
+    for (let i = 0; i < all.length; i += 0x8000) {
+      binary += String.fromCharCode.apply(null, Array.from(all.subarray(i, i + 0x8000)));
+    }
+    return {
+      t: trial.lost.map((f) => Math.round(f.time - trial.zero - trial.offset)),
+      width,
+      height,
+      data: btoa(binary),
+      kernel: trial.kernel ? Array.from(trial.kernel) : null,
+      center: trial.center,
+      viewport: { width: trial.width, height: trial.height },
+    };
+  }
+
+  /** A gaze estimate in viewport fractions, as a pixel sample rounded the way the data is. */
+  private pixelSample(
+    gx: number,
+    gy: number,
+    t: number,
+    width: number,
+    height: number,
+  ): SaccadeGazeSample {
+    const x = gx * width;
+    const y = gy * height;
+    return {
+      x: this.round_predictions ? Math.round(x) : x,
+      y: this.round_predictions ? Math.round(y) : y,
+      t: Math.round(t),
+    };
+  }
 
   /**
    * Convert a tracker frame into a viewport-pixel sample, or `null` if there is no gaze.
