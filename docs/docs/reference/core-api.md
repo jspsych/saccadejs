@@ -93,6 +93,7 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `setSmoothingFrames` / `getSmoothingFrames` | `(n: number): void` / `(): number` | Changeable while running. |
 | `getCurrentGaze` | `(): { gaze: Gaze; time: FrameTime } \| null` | The most recent gaze estimate and its timing. |
 | `sampleLuminance` | `(): number` | Mean luminance of the current camera frame. |
+| `getModelIdentity` | `(): ModelIdentity \| null` | Which model actually ran, identified from the bytes that were loaded: its SHA-256, the published version it matched (if any), its embedding length and whether it rates frame quality. `null` before `init()`. See [The model](/models#recording-which-model-you-used). |
 | `mode` | `"live" \| "deferred"` (getter) | See [Deferred mode](#deferred-mode). |
 | `enableDeferred` / `disableDeferred` | `(opts?) => Promise<DeferredEmbedder>` / `(): void` | Switch to deferred mode and back. See [Deferred mode](#deferred-mode). |
 | `embedDeferred` | `(crop: Uint8Array) => Promise<EmbedResult>` | Deferred mode: queue one frame's `crop` for the background threads. |

@@ -3,7 +3,7 @@
  *
  * `jest.config.cjs` maps `saccadejs` onto this file, so the extension's tests exercise the
  * extension itself rather than the real tracker (which needs a camera, WebGPU and a 3 MB ONNX
- * model). The shape follows the core API fixed in `CONTRACTS.md`.
+ * model). Keep its shape in step with the real types in `packages/core/src`.
  */
 
 export interface StubFrame {
