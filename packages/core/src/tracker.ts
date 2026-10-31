@@ -1,4 +1,6 @@
 import type { SaccadeAssets } from "./assets";
+import type { DeferredEmbedderOptions } from "./deferred";
+import { DeferredEmbedder } from "./deferred";
 import { CENTER, countTargets, fitRidge, lambdaFor, meanEmbedding } from "./grids";
 import { Landmarker } from "./landmarker";
 import { OrtEmbeddingModel } from "./model";
@@ -11,10 +13,12 @@ import type {
   CalHead,
   CalPoint,
   CalWeighting,
+  EmbedResult,
   EmbeddingModel,
   Gaze,
   ModelIdentity,
 } from "./types";
+import { EYE_H, EYE_W } from "./types";
 
 export interface SaccadeTrackerOptions {
   assets?: SaccadeAssets;
@@ -100,6 +104,8 @@ export class SaccadeTracker {
   private initResult: InitResult | null = null;
   private cal: CalPoint[] = [];
   private kernel: Float32Array | null = null;
+  private center = CENTER;
+  private deferredEmbedder: DeferredEmbedder | null = null;
   private weighting: CalWeighting | null = null;
   private lastGaze: { gaze: Gaze; time: FrameTime } | null = null;
   private subscribers = new Set<(f: TrackerFrame) => void>();
@@ -284,6 +290,8 @@ export class SaccadeTracker {
   dispose(): void {
     this.disposed = true;
     this.stop();
+    this.deferredEmbedder?.dispose();
+    this.deferredEmbedder = null;
     if (this.attachTimer != null) {
       clearInterval(this.attachTimer);
       this.attachTimer = null;
@@ -408,6 +416,7 @@ export class SaccadeTracker {
     const head = opts.calHead !== undefined ? opts.calHead : (this.opts.calHead ?? null);
     const { kernel, weighting } = fitRidge(this.cal, head, lambda, center, fit);
     this.kernel = kernel;
+    this.center = center;
     this.weighting = weighting;
     this.pipeline?.setCenter(center);
     this.pipeline?.setKernel(this.kernel);
@@ -426,6 +435,165 @@ export class SaccadeTracker {
   /** The fitted kernel, `2 * d` long (x and y interleaved), or null. */
   getKernel(): Float32Array | null {
     return this.kernel;
+  }
+
+  /** The centering constant the last fit used; `predict` needs it alongside the kernel. */
+  getCenter(): number {
+    return this.center;
+  }
+
+  // ---------------------------------------------------------------- deferred mode
+
+  /**
+   * `"live"`: every frame is embedded in the frame loop and carries its gaze. `"deferred"`:
+   * frames carry their eye crop instead, and a pool of background workers embeds the crops a
+   * caller submits with `embedDeferred()`. See `enableDeferred()`.
+   */
+  get mode(): "live" | "deferred" {
+    return this.deferredEmbedder ? "deferred" : "live";
+  }
+
+  /** The worker pool, in deferred mode; null in live mode. */
+  get deferred(): DeferredEmbedder | null {
+    return this.deferredEmbedder;
+  }
+
+  /**
+   * Switch to deferred mode: start a pool of background workers, time them, and stop embedding
+   * in the frame loop. From then on every frame arrives with `crop` set and `embedding` and
+   * `gaze` null; submit the crops you want embedded with `embedDeferred()`.
+   *
+   * For a machine too slow to run the model live (see `chooseMode`). The frame loop then does
+   * only the camera readback, the face landmarks and the eye crop, which keeps the page
+   * responsive, but gaze arrives late: nothing gaze-contingent works in this mode.
+   *
+   * Rejects, and leaves the tracker live, if no worker starts.
+   */
+  async enableDeferred(
+    opts: Omit<DeferredEmbedderOptions, "assets"> = {},
+  ): Promise<DeferredEmbedder> {
+    if (this.deferredEmbedder) return this.deferredEmbedder;
+    await this.init();
+    if (this.opts.model && !opts.createWorker) {
+      throw new Error(
+        "deferred mode runs the model at assets.modelUrl in background workers, so it cannot " +
+          "use a model substituted with the `model` option.",
+      );
+    }
+    reportProgress(this.emitProgress, { stage: "deferred" });
+    const embedder = new DeferredEmbedder({ ...opts, assets: this.assets });
+    try {
+      await embedder.init();
+      const dim = this.getModelIdentity()?.dim;
+      if (dim != null && embedder.info && embedder.info.dim !== dim) {
+        throw new Error(
+          `the background workers' model produced ${embedder.info.dim}-d embeddings, the live ` +
+            `model ${dim}-d; they must be the same model.`,
+        );
+      }
+      await embedder.measure();
+    } catch (err) {
+      embedder.dispose();
+      reportProgress(this.emitProgress, { stage: "ready" });
+      throw err;
+    }
+    if (this.disposed) {
+      embedder.dispose();
+      throw new Error("tracker disposed");
+    }
+    this.deferredEmbedder = embedder;
+    this.lastGaze = null;
+    this.pipeline?.setInlineEmbedding(false);
+    reportProgress(this.emitProgress, { stage: "ready" });
+    return embedder;
+  }
+
+  /**
+   * Go back to live mode. Frames still waiting for a worker are dropped (their
+   * `embedDeferred()` promises reject), and the workers are stopped.
+   */
+  disableDeferred(): void {
+    if (!this.deferredEmbedder) return;
+    this.deferredEmbedder.dispose();
+    this.deferredEmbedder = null;
+    this.pipeline?.setInlineEmbedding(true);
+  }
+
+  /**
+   * Queue one frame's crop for the background workers. Resolves with its embedding when a
+   * worker has run it; rejects with a `DeferredFrameDropped` if none ever will. Live mode
+   * rejects: there the frame already carries its embedding.
+   */
+  embedDeferred(crop: Uint8Array): Promise<EmbedResult> {
+    if (!this.deferredEmbedder) {
+      return Promise.reject(new Error("embedDeferred() needs deferred mode; see enableDeferred()"));
+    }
+    return this.deferredEmbedder.submit(crop);
+  }
+
+  /**
+   * Time the live model on this machine: the median of at least 5 and at most 15 encodes,
+   * stopping after 1.5 s once the minimum is met. The frame loop is paused while it runs,
+   * because the model has one session and one input buffer.
+   */
+  async measureEmbedMs(): Promise<{ ep: "webgpu" | "wasm"; embedMs: number; samples: number }> {
+    const { ep } = await this.init();
+    const model = this.model;
+    if (!model) throw new Error("tracker not initialised");
+    const wasRunning = this.wantRunning;
+    this.pipeline?.stop();
+    await this.pipeline?.settle();
+    try {
+      const crop = new Uint8Array(EYE_W * EYE_H);
+      for (let i = 0; i < crop.length; i++) crop[i] = (i * 37) % 256;
+      // WebGPU compiles shaders lazily, so the first few are not representative.
+      for (let i = 0; i < 5; i++) await model.embed(crop);
+      const times: number[] = [];
+      const started = performance.now();
+      while (times.length < 5 || (times.length < 15 && performance.now() - started < 1500)) {
+        const t0 = performance.now();
+        await model.embed(crop);
+        times.push(performance.now() - t0);
+      }
+      times.sort((a, b) => a - b);
+      const mid = times.length >> 1;
+      const embedMs = times.length % 2 ? times[mid] : (times[mid - 1] + times[mid]) / 2;
+      return { ep, embedMs, samples: times.length };
+    } finally {
+      if (wasRunning && !this.disposed) this.pipeline?.start();
+    }
+  }
+
+  /**
+   * How fast the camera delivers frames, counted on the video itself for `ms`. Null when the
+   * browser has no `requestVideoFrameCallback`, or when fewer than two frames arrived.
+   */
+  async measureCameraFps(ms = 1000): Promise<number | null> {
+    await this.init();
+    const video = this.video as HTMLVideoElement & {
+      requestVideoFrameCallback?: (
+        cb: (now: number, meta: { presentedFrames?: number }) => void,
+      ) => number;
+    };
+    if (!video.requestVideoFrameCallback) return null;
+    const stamps: { t: number; n: number | null }[] = [];
+    let open = true;
+    const onFrame = (now: number, meta: { presentedFrames?: number }): void => {
+      if (!open) return;
+      stamps.push({ t: now, n: meta?.presentedFrames ?? null });
+      video.requestVideoFrameCallback?.(onFrame);
+    };
+    video.requestVideoFrameCallback(onFrame);
+    await new Promise((resolve) => setTimeout(resolve, ms));
+    open = false;
+    if (stamps.length < 2) return null;
+    const first = stamps[0];
+    const last = stamps[stamps.length - 1];
+    const dt = (last.t - first.t) / 1000;
+    if (!(dt > 0)) return null;
+    // presentedFrames counts frames the callback missed too, which is the camera's real rate.
+    const frames = first.n != null && last.n != null ? last.n - first.n : stamps.length - 1;
+    return frames / dt;
   }
 
   setSmoothingFrames(n: number): void {

@@ -138,6 +138,8 @@ export class Pipeline {
   private waiters: ((frame: TrackerFrame) => void)[] = [];
   private inflight: InFlight | null = null;
   private epoch = 0;
+  /** False in deferred mode: frames are emitted with their crop, and nothing is embedded here. */
+  private inline = true;
   onFrame: ((frame: TrackerFrame) => void) | null;
 
   constructor(
@@ -205,6 +207,22 @@ export class Pipeline {
     this.model = model;
     this.ring = [];
     this.epoch++;
+  }
+
+  /**
+   * Turn the inline encode off (deferred mode) or back on. Off, every frame is emitted as soon
+   * as its crop is cut, with `embedding` and `gaze` null, and embedding is the caller's job.
+   */
+  setInlineEmbedding(inline: boolean): void {
+    this.inline = inline;
+    this.ring = [];
+    this.epoch++;
+  }
+
+  /** Resolves once no embed is in flight, so a caller can use the model without racing it. */
+  async settle(): Promise<void> {
+    const pending = this.inflight;
+    if (pending) await pending.promise.catch(() => undefined);
   }
 
   clearBuffer(): void {
@@ -348,13 +366,14 @@ export class Pipeline {
     this.inflight = null;
     const retired = pending ? await this.retire(pending) : null;
     if (!this.active) return;
-    const started = this.startEmbed(stage);
+    const started = this.inline && this.startEmbed(stage);
     if (retired) this.emit(retired);
     if (!started) {
       this.emit({
         gaze: null,
         faceFound: stage.faceFound,
-        crop: null,
+        // Null unless the frame had an eye crop; in deferred mode, the crop to embed later.
+        crop: stage.eye,
         embedding: null,
         weight: null,
         quality: stage.quality,

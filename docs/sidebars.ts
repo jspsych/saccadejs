@@ -10,6 +10,7 @@ const sidebars: SidebarsConfig = {
     "guides/browser-compatibility",
     "guides/timing-and-synchrony",
     "guides/hosting-the-assets",
+    "guides/deferred-mode",
     "guides/how-it-works",
   ],
   reference: [
@@ -25,6 +26,7 @@ const sidebars: SidebarsConfig = {
         "reference/plugin-time-sync",
         "reference/plugin-calibrate",
         "reference/plugin-validate",
+        "reference/plugin-catch-up",
       ],
     },
     "models",

@@ -125,6 +125,20 @@ export class StubSaccadeExtension implements JsPsychExtension {
     return () => {};
   };
 
+  /** Set to put the stub in deferred mode. */
+  mode: "live" | "deferred" = "live";
+  /** Frames the stub reports as still waiting for a worker. */
+  deferredPending = 0;
+  getMode = () => this.mode;
+  getDeferredPending = () => this.deferredPending;
+  finishCalibration = jest.fn(async (onProgress?: (pending: number) => void) => {
+    onProgress?.(0);
+    this.deferredPending = 0;
+  });
+  /** In deferred mode, what each `collectGaze()` collection resolves with. */
+  collectedGaze: Array<{ x: number; y: number; t: number }> = [];
+  collectGaze = jest.fn(() => async () => this.collectedGaze);
+
   getTracker = () => this.tracker as any;
   getTimingOffset = () => this.offset;
   setTimingOffset = jest.fn((ms: number | null) => {

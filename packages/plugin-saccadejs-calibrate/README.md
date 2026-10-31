@@ -40,18 +40,19 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-calibrate
 
 ## Parameters
 
-| Parameter                     | Type                | Default         | Description                                                                                                                                                                    |
-| ----------------------------- | ------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `calibration_points`          | array of `[x, y]`   | _13-point grid_ | Targets as percentages of the viewport width and height. The default is a 3×3 grid at 5/50/95 % plus four interior points at 27.5/72.5 %. |
-| `calibration_mode`            | `"view"`\|`"click"` | `"view"`        | `"view"` shows each point for a fixed time; `"click"` leaves it up until the participant clicks it, then captures.                                                             |
-| `repetitions_per_point`       | integer             | `1`             | How many times to repeat the whole sequence.                                                                                                                                   |
-| `randomize_calibration_order` | boolean             | `false`         | Shuffle the order of the targets on each repetition.                                                                                                                           |
-| `time_to_saccade`             | integer             | `1000`          | Settle time in ms before anything is recorded. The ring shrinks over this interval.                                                                                            |
-| `time_per_point`              | integer             | `500`           | Capture time in ms at each point, once the participant has settled. The ring is green for this interval.                                                                       |
-| `point_size`                  | integer             | `20`            | Diameter of the dot in pixels. The ring is four times this.                                                                                                                    |
-| `lambda`                      | float               | `null`          | Ridge penalty. `null` lets the core choose with `lambdaFor(nPoints, fit)`: 3 for the per-frame fit.                                                                            |
-| `fit`                         | string              | `null`          | `"frames"` fits every captured frame; `"points"` one mean embedding per point (the fit up to 0.3). `null` uses the tracker's default, `"frames"`.                              |
-| `clear_previous`              | boolean             | `true`          | Discard calibration points collected earlier in the experiment before starting. Set `false` to add points to an existing calibration.                                          |
+| Parameter                     | Type                | Default                                    | Description                                                                                                                                       |
+| ----------------------------- | ------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `calibration_points`          | array of `[x, y]`   | _13-point grid_                            | Targets as percentages of the viewport width and height. The default is a 3×3 grid at 5/50/95 % plus four interior points at 27.5/72.5 %.         |
+| `calibration_mode`            | `"view"`\|`"click"` | `"view"`                                   | `"view"` shows each point for a fixed time; `"click"` leaves it up until the participant clicks it, then captures.                                |
+| `repetitions_per_point`       | integer             | `1`                                        | How many times to repeat the whole sequence.                                                                                                      |
+| `randomize_calibration_order` | boolean             | `false`                                    | Shuffle the order of the targets on each repetition.                                                                                              |
+| `time_to_saccade`             | integer             | `1000`                                     | Settle time in ms before anything is recorded. The ring shrinks over this interval.                                                               |
+| `time_per_point`              | integer             | `500`                                      | Capture time in ms at each point, once the participant has settled. The ring is green for this interval.                                          |
+| `point_size`                  | integer             | `20`                                       | Diameter of the dot in pixels. The ring is four times this.                                                                                       |
+| `lambda`                      | float               | `null`                                     | Ridge penalty. `null` lets the core choose with `lambdaFor(nPoints, fit)`: 3 for the per-frame fit.                                               |
+| `fit`                         | string              | `null`                                     | `"frames"` fits every captured frame; `"points"` one mean embedding per point (the fit up to 0.3). `null` uses the tracker's default, `"frames"`. |
+| `clear_previous`              | boolean             | `true`                                     | Discard calibration points collected earlier in the experiment before starting. Set `false` to add points to an existing calibration.             |
+| `processing_message`          | HTML string         | "Processing. This can take a few seconds." | Deferred mode only: shown after the last target while the background workers finish this trial's frames, with a percentage.                       |
 
 ## Data generated
 
@@ -60,8 +61,9 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-calibrate
 | `calibration_points_px` | array   | The targets that were shown, in presentation order, as `[x, y]` pairs in viewport **pixels**. With `repetitions_per_point > 1` each target appears once per repetition. (The `calibration_points` _parameter_ stays in percent.) |
 | `n_points`              | integer | The number of distinct targets used.                                                                                                                                                                                             |
 | `repetitions_per_point` | integer | How many times the sequence was repeated.                                                                                                                                                                                        |
-| `lambda`                | float   | The ridge penalty the fit actually used, whether from the parameter or from `lambdaFor(n_points, fit)`. `null` if the fit failed (no usable points).                                                                                  |
-| `fit`                   | string  | Which rows the fit used: `"frames"` (every captured frame) or `"points"` (one mean embedding per point). `null` if the fit failed.
+| `lambda`                | float   | The ridge penalty the fit actually used, whether from the parameter or from `lambdaFor(n_points, fit)`. `null` if the fit failed (no usable points).                                                                             |
+| `fit`                   | string  | Which rows the fit used: `"frames"` (every captured frame) or `"points"` (one mean embedding per point). `null` if the fit failed.                                                                                               |
+| `processing_ms`         | integer | Deferred mode only: how long the participant waited after the last target for the frames to be processed. `null` in live mode.                                                                                                   |
 | `rt`                    | integer | Time from the start of the trial until calibration finished.                                                                                                                                                                     |
 
 ## Notes

@@ -150,3 +150,10 @@ Counting those frames would report a rate the computer cannot keep up once it is
 tracking a face. They are reported separately as `frames_without_face`. A large number there means
 the participant was out of view for part of the measurement, so the result is based on less time
 than it seems.
+
+### In deferred mode
+
+In [deferred mode](../guides/deferred-mode) the model does not run in the frame loop, so the
+frame rate measures only reading the camera and finding the face, and `embed_ms_median` is `0`.
+The rate then says how many frames are being queued, not how fast gaze is produced. Put this
+trial before anything that depends on the mode, and read the data's `saccade_mode` alongside it.
