@@ -28,7 +28,7 @@ section are in parentheses.
    `saccade_data` means something: the participant blinked, looked away, or left the frame.
 
 3. **Cut out the eyes.** The frame is cropped to a single strip covering both eyes, shrunk to
-   144 × 36 pixels, and converted to grayscale. Its contrast is then adjusted region by region
+   converted to grayscale, and shrunk to 144 × 36 pixels. Its contrast is then adjusted region by region
    (CLAHE, contrast-limited adaptive histogram equalization), which evens out differences in
    lighting between rooms. This small strip is the only thing the model ever sees. Color and the
    rest of the face are thrown away.
@@ -47,6 +47,10 @@ section are in parentheses.
    graphics card when the browser allows it (WebGPU) and on the processor otherwise
    (WebAssembly), which is slower.
 
+   In [deferred mode](deferred-mode), this step runs later, in background threads on the
+   processor, while the experiment carries on; steps 5 and 6 then run once it finishes. The
+   `saccade_mode` column records which mode a trial used.
+
 5. **Optionally, average a few frames.** A single frame's estimate can be jumpy. saccade.js can
    average the numbers from the last few frames before making an estimate, which is steadier.
    Frames are weighted by their usability rating, so a blink contributes little instead of
@@ -63,21 +67,26 @@ section are in parentheses.
 ## Calibration and validation
 
 **Calibration** is how step 6 gets fitted. saccade.js shows a dot, waits one second for the
-participant's eyes to reach it, then records the eye numbers for half a second and averages them.
-That average, paired with the dot's position, becomes one example. The default is thirteen dots,
-so thirteen examples.
+participant's eyes to reach it, then records the eye numbers for half a second. Every frame
+recorded there, paired with the dot's position, becomes one example. The default is thirteen
+dots, so a few hundred examples at 30 frames a second. Because the frames of one dot differ
+while the gaze position does not, they also show the fit which differences in the numbers are
+noise.
 
-The frame usability rating is used twice. It weights frames within each dot's average, and it
-also sets how much each dot counts toward the final fit. A dot the participant blinked through
-counts for less than a clean one. The calibration trial records whether this weighting was used
-in a `weighting` column. Report it: a weighted fit and an unweighted fit are different analyses,
-and nothing else in the data tells them apart.
+The frame usability rating sets how much each frame counts toward the fit. A frame caught
+mid-blink counts for less than a clean one. The calibration trial records whether this weighting
+was used in a `weighting` column. Report it: a weighted fit and an unweighted fit are different
+analyses, and nothing else in the data tells them apart.
 
 A note on the fitting. The equation has 128 coefficients for each of `x` and `y`, one per number
-the model produces, but only about a dozen examples to fit them from. Fitted naively, it would
-match those dozen examples perfectly and predict everything else badly. Ridge regression adds a
-penalty that keeps the coefficients small and prevents this. The strength of the penalty is set
-automatically from the number of dots, unless you set `lambda` yourself.
+the model produces, but the examples come from only about a dozen dots. Fitted naively, it would
+match those dots perfectly and predict everything else badly. Ridge regression adds a penalty
+that keeps the coefficients small and prevents this. The penalty is fixed at 3 unless you set
+`lambda` yourself.
+
+Earlier versions (`@saccadejs/core` before 0.4.0) averaged each dot's frames into a single example instead. That
+fit is still available as `fit: "points"`, for reproducing earlier data. The calibration trial
+records which one ran in a `fit` column; report it alongside `weighting`.
 
 **Validation** checks the result on a second set of nine dots, set in from the edges of the
 screen. Eight of the nine are in positions calibration did not use; the ninth is the center of
@@ -96,8 +105,9 @@ The `saccade-time-sync` trial measures the two together, like this:
 1. For fifteen seconds, the page switches between black and white at random moments, with at
    least half a second between switches.
 2. saccade.js records the exact time of each switch.
-3. At the same time, the camera watches the screen, and saccade.js records how bright each camera
-   frame is and when it was captured.
+3. At the same time, the camera watches the participant, whose face and surroundings get brighter
+   and darker with the screen. saccade.js records how bright each camera frame is and when it was
+   captured.
 4. The delay is the time shift that best lines up the switches with the jumps in brightness.
 
 Because the camera only takes a picture every 33 ms or so, any delay within that window lines up

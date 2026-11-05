@@ -6,7 +6,10 @@ description: Build a complete jsPsych experiment that calibrates a webcam eye tr
 ---
 
 import Link from "@docusaurus/Link";
+import CodeBlock from "@theme/CodeBlock";
 import { Steps, Step } from "@site/src/components/Steps";
+import { headSnippet, wholeFile } from "@site/src/snippets/getting-started";
+import { versions } from "@site/src/versions";
 
 # Getting started
 
@@ -51,30 +54,16 @@ saccade.js adds two kinds of things to a jsPsych experiment:
 Each part of saccade.js is its own small package. Load them in your page's `<head>`, alongside
 jsPsych:
 
-```html
-<!doctype html>
-<html>
-  <head>
-    <script src="https://unpkg.com/jspsych@8"></script>
-    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2"></script>
-    <script src="https://unpkg.com/@saccadejs/core@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/extension@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-preview@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-time-sync@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-calibrate@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-validate@0.1.0"></script>
-    <link rel="stylesheet" href="https://unpkg.com/jspsych@8/css/jspsych.css" />
-  </head>
-  <body></body>
-</html>
-```
+<CodeBlock language="html">{headSnippet}</CodeBlock>
 
 Two things to notice:
 
 - `@saccadejs/core` comes first. The other packages depend on it.
-- Every URL names an exact version (`@0.1.0`). Keep it that way. If you wrote `@saccadejs/core`
-  with no version, participants who arrive after a new release would get a different tracker
-  from those who came before, and you would end up with two datasets mixed together.
+- Every URL names an exact version, such as <code>@saccadejs/core@{versions.core}</code>. Keep it
+  that way. If you wrote `@saccadejs/core` with no version, participants who arrive after a new
+  release would get a different tracker from those who came before, and you would end up with two
+  datasets mixed together. The packages are versioned separately, so their numbers differ; the
+  ones above are the latest at the time this page was built.
 
 </Step>
 <Step>
@@ -126,9 +115,9 @@ camera captures a picture of the participant reacting to it. The delay differs f
 to the next, and the browser has no way to report it.
 
 This trial measures it. For fifteen seconds the screen switches between black and white at
-random moments while the camera watches the screen. Comparing when the screen changed with when
-the camera saw it gives the delay, and saccade.js then subtracts it from every gaze timestamp
-recorded afterwards.
+random moments, and the camera picks up the light it throws on the participant's face. Comparing
+when the screen changed with when the camera saw the change gives the delay, and saccade.js then
+subtracts it from every gaze timestamp recorded afterwards.
 
 **Do you need it?** If your question is _where_ people looked (which picture, which word), you
 can skip this trial. If it is _when_ they looked (how fast they moved their eyes to a target),
@@ -194,54 +183,7 @@ without having to work out the layout later.
 
 Here is everything above in one page:
 
-```html
-<!doctype html>
-<html>
-  <head>
-    <script src="https://unpkg.com/jspsych@8"></script>
-    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2"></script>
-    <script src="https://unpkg.com/@saccadejs/core@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/extension@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-preview@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-time-sync@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-calibrate@0.1.0"></script>
-    <script src="https://unpkg.com/@saccadejs/plugin-validate@0.1.0"></script>
-    <link rel="stylesheet" href="https://unpkg.com/jspsych@8/css/jspsych.css" />
-  </head>
-  <body></body>
-  <script>
-    const jsPsych = initJsPsych({
-      extensions: [{ type: jsPsychExtensionSaccade }],
-      on_finish: () => jsPsych.data.displayData(),
-    });
-
-    const timeline = [
-      // Ask for the camera, download the model, and let the participant line up their face.
-      { type: jsPsychSaccadePreview },
-      // Measure this computer's screen-to-camera delay, so later timestamps can be corrected.
-      { type: jsPsychSaccadeTimeSync },
-      // Calibrate on 13 dots, then check accuracy on 9 different dots.
-      { type: jsPsychSaccadeCalibrate },
-      { type: jsPsychSaccadeValidate },
-      // The task. The `extensions` line is what turns gaze recording on for this trial.
-      {
-        type: jsPsychHtmlKeyboardResponse,
-        stimulus: `
-          <div style="display:flex; gap:20vw; justify-content:center">
-            <img id="left" src="left.png" width="300" />
-            <img id="right" src="right.png" width="300" />
-          </div>
-          <p>Look at whichever picture you prefer, then press any key.</p>`,
-        extensions: [
-          { type: jsPsychExtensionSaccade, params: { targets: ["#left", "#right"] } },
-        ],
-      },
-    ];
-
-    jsPsych.run(timeline);
-  </script>
-</html>
-```
+<CodeBlock language="html">{wholeFile}</CodeBlock>
 
 Open it in Chrome or Edge over `https://` or from `localhost`. Opening the file directly (a
 `file://` address) will not work, because the browser will not allow the camera. To use

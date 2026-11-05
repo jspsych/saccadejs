@@ -154,6 +154,6 @@ than it seems.
 ### In deferred mode
 
 In [deferred mode](../guides/deferred-mode) the model does not run in the frame loop, so the
-frame rate measures only reading the camera and finding the face, and `embed_ms_median` is `0`.
+frame rate measures only reading the camera and finding the face, and `embed_ms_median` is `null`.
 The rate then says how many frames are being queued, not how fast gaze is produced. Put this
 trial before anything that depends on the mode, and read the data's `saccade_mode` alongside it.

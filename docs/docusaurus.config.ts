@@ -19,6 +19,8 @@ const config: Config = defineJspsychConfig({
   projectName: "saccadejs",
   githubUrl: "https://github.com/jspsych/saccadejs",
   favicon: "img/saccadejs-icon.svg",
+  // Link previews (Open Graph / Twitter). 1200 × 630; social sites do not render SVG.
+  image: "img/saccadejs-social-card.png",
 
   docs: {
     sidebarPath: "./sidebars.ts",
