@@ -535,9 +535,8 @@ class SaccadeExtension implements JsPsychExtension {
    * A value like `"eye-embedding@1.0.0"` means the loaded bytes hash-matched that published
    * release; anything else is reported as `"sha256:<prefix>"`, so a custom model still
    * identifies itself. Written with `addProperties` rather than into each trial's own data
-   * because it is one fact about the session, not a per-trial measurement -- but note that
-   * only trials run *after* the model loads carry it. Those before it have no gaze data
-   * anyway: the camera is not touched until the first `saccade-preview` or `start()`.
+   * because it is one fact about the session, not a per-trial measurement. `addProperties`
+   * also writes it into every trial already stored, so the whole session carries it.
    */
   private recordModel(tracker: SaccadeTracker): void {
     if (this.modelRecorded) return;

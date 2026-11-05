@@ -80,7 +80,7 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-preview
 | `eye_brightness`       | float   | Mean gray level of the raw eye region (0–255), averaged the same way.                                                                   |
 | `distance_feedback`    | string  | `"good"`, `"closer"` or `"farther"` when the participant continued; `null` if no face was found.                                        |
 | `lighting_feedback`    | string  | `"good"`, `"dark"`, `"bright"` or `"flat"` when the participant continued; `null` if no face was found.                                 |
-| `rt`                   | integer | Time from the start of the trial until the button was clicked.                                                                          |
+| `rt`                   | integer | Time from the camera image appearing until the button was clicked.                                                                      |
 
 If the camera cannot be started (permission denied, no camera, WebGPU and wasm both unavailable),
 the trial shows an explanation and the underlying error message, and does not continue: there is

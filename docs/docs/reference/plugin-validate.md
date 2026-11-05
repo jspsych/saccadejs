@@ -57,7 +57,7 @@ timeline.push({ type: jsPsychSaccadeValidate });
 | --- | --- | --- |
 | `median_error_viewport` | `number \| null` | **The number to report.** The typical error across dots, as a fraction of the window's diagonal. Comparable across screen sizes and shapes. `null` if no gaze was recorded at any dot. |
 | `median_error_px` | `number \| null` | The same error in pixels on this participant's screen. For each dot, the distance from the dot to the average of the gaze samples recorded there; then the median across dots. |
-| `samples_per_sec` | `number` | The average number of gaze samples per second while recording. |
+| `samples_per_sec` | `number \| null` | The average number of gaze samples per second while recording. `null` if no dot got two samples. |
 | `processing_ms` | `number \| null` | [Deferred mode](../guides/deferred-mode) only: how long the participant waited after the last dot for the frames to be processed. `null` in live mode. |
 | `rt` | `number` | Milliseconds from the start of the trial to the end of validation. |
 
@@ -65,9 +65,9 @@ timeline.push({ type: jsPsychSaccadeValidate });
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `validation_points` | `[number, number][]` | The dot positions used. |
-| `average_offset` | `{x, y, r}[]` | How far off the estimates were at each dot, on average. `x` and `y` are the average offset from the dot in pixels (the _accuracy_). `r` is how spread out the individual samples were around that average, as the median distance from it (the _precision_). |
-| `percent_in_roi` | `number[]` | The percentage of samples that landed within `roi_radius` pixels of the dot. |
+| `validation_points` | `[number, number][]` | The dot positions used, in the units of the `validation_point_coordinates` parameter (percent or pixels from center), not converted to pixels as [`saccade-calibrate`](plugin-calibrate) records them. `[]` if validation failed partway; `raw_gaze` may still hold the dots recorded before the failure. |
+| `average_offset` | `{x, y, r}[]` | How far off the estimates were at each dot, on average. `x` and `y` are the average offset from the dot in pixels (the _accuracy_). `r` is how spread out the individual samples were around that average, as the median distance from it (the _precision_). `{x: null, y: null, r: null}` for a dot with no samples. |
+| `percent_in_roi` | `number[]` | The percentage of samples that landed within `roi_radius` pixels of the dot. `0` for a dot with no samples. |
 | `raw_gaze` | `{x, y, dx, dy, t}[][]` | Every gaze sample recorded at each dot. `x` and `y` are pixels on the screen; `dx` and `dy` are how far that sample was from the dot; `t` is milliseconds since the trial started. |
 
 Accuracy and precision are different things. An `average_offset` of `{x: 60, y: 0, r: 10}` means

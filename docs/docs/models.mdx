@@ -86,9 +86,8 @@ saccade.js identifies the file by its contents, not by its name or URL. So a ren
 published release is still recognized, and a model of your own is still identified, by its
 fingerprint.
 
-Only trials that run after the model loads have this column. The model is not loaded until your
-first `saccade-preview` trial (or your own call to `start()`), and trials before that have no gaze
-data either.
+The column is set when the model loads, at your first `saccade-preview` trial (or your own call
+to `start()`), and jsPsych then adds it to every trial, including the ones that ran before.
 
 For the full details, ask the tracker directly:
 
@@ -132,16 +131,20 @@ against the list above.
 **The outputs are flexible.** The first output is the embedding. It can be any length, as long as
 it is the same length on every frame of a session. saccade.js reads the length from the model.
 
-A second output is optional. If your model has an output named `cal_weight` with shape `[1, 1]`,
-saccade.js reads it as a quality score for each frame between 0 and 1, and uses it to weight both
-the averaging of frames and the calibration. Without it, every frame counts equally.
+A second output is optional. If your model has an output named `cal_weight`, `weight` or
+`quality`, saccade.js reads it as a quality score for each frame between 0 and 1, and uses it to
+weight both the averaging of frames and the calibration. An output with any other name is read the
+same way if it is the model's only other output and holds a single number. Without one, every
+frame counts equally. Live and [deferred mode](/guides/deferred-mode) apply the same rule.
 
-**What saccade.js checks.** Three problems stop it when the model loads, before any participant
+**What saccade.js checks.** Two problems stop it when the model loads, before any participant
 data is collected:
 
 - an input shape it cannot provide,
-- an embedding whose length changes during a session,
-- a `cal_weight` outside the range 0 to 1.
+- a quality score outside the range 0 to 1 on the warm-up frame.
+
+A third stops it during the session, on the frame where it happens: an embedding whose length
+changes from one frame to the next.
 
 Two things it cannot check. It cannot tell how your training pictures were prepared. And it does
 not compare the `contract` number shown in the release table with the one it implements; that

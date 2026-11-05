@@ -128,5 +128,7 @@ Most web servers handle these correctly already. If something does not load, che
    - the `.wasm` files show `Content-Type: application/wasm`,
    - nothing is downloaded from a server you did not expect.
 
-Finally, check the data from the [preview trial](../reference/plugin-preview). If `backend` is
-`"wasm"` on a computer that should support WebGPU, a wrong asset URL is the first thing to check.
+Finally, check the data from the [preview trial](../reference/plugin-preview). A wrong asset URL
+usually stops the preview with an error rather than slowing it down. If `backend` is `"wasm"` on a
+computer that should support WebGPU, the browser's WebGPU was unavailable; see
+[Browser compatibility](browser-compatibility#webgpu-the-difference-that-matters-most).

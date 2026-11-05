@@ -30,7 +30,7 @@ first sit through calibration.
 | Package | `@saccadejs/plugin-performance` |
 | Browser global | `jsPsychSaccadePerformance` |
 | Trial type | `saccade-performance` |
-| Requires | the [extension](extension) and a running camera, so it comes after [`saccade-preview`](plugin-preview) |
+| Requires | the [extension](extension). It starts the camera itself if nothing has yet, but normally comes after [`saccade-preview`](plugin-preview) |
 
 ## Parameters
 
@@ -52,14 +52,14 @@ browser or screen size, this is one more check written the same way.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `fps_median` | `number` | **The main result:** the typical number of gaze estimates per second (the median rate). `null` if it could not be measured, because a face was never in view for two frames in a row. |
-| `fps_mean` | `number` | The average number of estimates per second over the whole measurement. |
-| `fps_p10` | `number` | The rate at the slow end: one frame in ten was slower than this (the 10th percentile rate). See [below](#fps_p10-catches-what-the-median-hides). |
+| `fps_median` | `number \| null` | **The main result:** the typical number of gaze estimates per second (the median rate). `null` if it could not be measured, because a face was never in view for two frames in a row. |
+| `fps_mean` | `number \| null` | The average number of estimates per second, counting only the gaps between consecutive frames that both had a face in them. `null` when `fps_median` is. |
+| `fps_p10` | `number \| null` | The rate at the slow end: one frame in ten was slower than this (the 10th percentile rate). `null` when `fps_median` is. See [below](#fps_p10-catches-what-the-median-hides). |
 | `frames` | `number` | How many frames had a face in them. The rates are calculated from these. |
 | `frames_without_face` | `number` | How many frames had no face in them. |
 | `dropped` | `number` | Camera frames that arrived but were never processed because the tracker was still busy. Shows how far behind the camera the tracker fell. |
-| `embed_ms_median` | `number` | The typical time the eye model took per frame, in ms. |
-| `backend` | `"webgpu" \| "wasm"` | Whether the model ran on the graphics card (`"webgpu"`) or the slower processor path (`"wasm"`). |
+| `embed_ms_median` | `number \| null` | The typical time the eye model took per frame, in ms. `null` if no frame with a face reached the model, and always in [deferred mode](#in-deferred-mode). |
+| `backend` | `"webgpu" \| "wasm" \| null` | Whether the model ran on the graphics card (`"webgpu"`) or the slower processor path (`"wasm"`). `null` if the tracker never started (the camera was refused, or the model failed to load). |
 | `rt` | `number` | Milliseconds from the start of the trial to the end of the measurement. |
 
 ## Example

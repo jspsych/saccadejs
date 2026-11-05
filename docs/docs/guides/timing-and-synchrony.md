@@ -53,7 +53,7 @@ To check what happened, every trial that records gaze also carries a `saccade_ti
 
 | Field | What it tells you |
 | --- | --- |
-| `offset_ms` | The lag that was subtracted from `t`, in ms. `null` if time sync never ran. |
+| `offset_ms` | The lag that was subtracted from `t`, in ms. `null` if time sync never ran, or if its verdict was not `OK`. |
 | `corrected` | `true` if the lag was subtracted. |
 | `clock` | Where the camera timestamps came from. `"captureTime"` is what you want; see [Reading the verdict](#reading-the-verdict). |
 | `dropped_frames` | How many camera frames the browser reported dropping during the trial. |
@@ -78,6 +78,7 @@ to trust.
 | `verdict: "UNRELIABLE"`, and `plateau_width_ms` is wide | There were not enough brightness changes to pin down the lag. A longer run (the `duration` parameter) gives more. |
 | `verdict: "UNRELIABLE"`, and the two `halves_ms` values are far apart | The first and second halves of the run gave different answers, so the lag changed while it was being measured. |
 | `verdict: "INCONCLUSIVE"` | No usable camera frames, or fewer than two brightness changes seen. The `reason` field says which. |
+| `clock_source: "receiveTime"` | The browser reported when frames arrived rather than when they were captured. The difference is part of the measured lag, so an `OK` result is still usable. |
 | `clock_source: "callback"` | The browser did not report when frames were captured, so the number is not a real measurement. See [Browser compatibility](browser-compatibility#capture-timestamps). |
 
 Only an `OK` measurement is applied. After any other verdict the lag is saved but not subtracted,
@@ -105,7 +106,7 @@ const maxDroppedShare = 0.05; // placeholder: choose from your pilot data
 
 const untrustworthy = (d) =>
   !d.saccade_timing.corrected ||
-  d.saccade_timing.clock !== "captureTime" ||
+  d.saccade_timing.clock !== "captureTime" || // also drops "receiveTime"; allow it if you wish
   d.saccade_timing.fps < minFps ||
   d.saccade_timing.dropped_frames > maxDroppedShare * d.saccade_data.length;
 ```
@@ -172,6 +173,13 @@ plus the time your own code takes to redraw, plus the display delay again on the
 the participant. Expect the full loop, from eye movement to changed screen, to take well over
 100 ms. Averaging frames makes it longer, so leave `smoothing_frames` at its default of 1 and
 accept a slightly noisier estimate.
+
+Gaze-contingent designs need live mode. With the extension's `mode` set to `"auto"` or
+`"deferred"`, a computer running in [deferred mode](deferred-mode) produces no gaze until after
+the trial, so `onGazeUpdate` and `getCurrentPrediction` stay silent and the design quietly
+stops responding. Leave `mode` at `"live"` and use
+[`saccade-performance`](../reference/plugin-performance) to turn away computers that are too
+slow.
 
 Every field on this page is documented in the
 [`saccade-time-sync` reference](../reference/plugin-time-sync).

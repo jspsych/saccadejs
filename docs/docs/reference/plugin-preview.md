@@ -44,7 +44,7 @@ timeline.push({ type: jsPsychSaccadePreview });
 | `require_face` | `boolean` | `true` | Only enable the button while a face is being found. |
 | `face_timeout` | `number \| null` | `null` | After this many milliseconds, enable the button even if no face has been found, so the participant is never stuck. `null` waits forever. |
 | `preview_width` | `number` | `320` | Width of the camera image, in pixels. |
-| `show_progress` | `boolean` | `true` | Show a progress bar and a label for each loading stage. `false` shows "Starting the camera…" instead. |
+| `show_progress` | `boolean` | `true` | Show a progress bar and a label saying what the participant is waiting for (camera permission, "Loading…", the model download with its size, "Almost ready…"). `false` shows "Starting the camera…" instead. |
 | `show_setup_feedback` | `boolean` | `true` | Show the distance and lighting advice under the camera image. It is advice only and never disables the button. The measures are saved in the data either way. |
 | `min_interocular_distance` | `number` | `0.14` | Below this distance between the eyes (as a share of the camera image's width), ask the participant to move closer. |
 | `max_interocular_distance` | `number` | `0.32` | Above this, ask the participant to move back. |
@@ -56,7 +56,7 @@ timeline.push({ type: jsPsychSaccadePreview });
 | Field | Type | Description |
 | --- | --- | --- |
 | `load_time` | `number` | Milliseconds from the start of the trial to the first camera frame. Includes the time the participant took to grant permission, the download, and start-up. |
-| `face_detected` | `boolean` | Whether a face was being found when the participant pressed the button. `false` means they continued only because `face_timeout` ran out. |
+| `face_detected` | `boolean` | Whether a face was being found when the participant pressed the button. `false` means they continued without one: because `face_timeout` ran out, or because `require_face` is `false`. |
 | `fps` | `number` | Camera frames per second being processed at that moment. |
 | `backend` | `"webgpu" \| "wasm"` | Whether the model is running on the graphics card (`"webgpu"`) or the slower processor path (`"wasm"`). See [Browser compatibility](../guides/browser-compatibility#webgpu-the-difference-that-matters-most). |
 | `interocular_distance` | `number \| null` | Distance between the outer corners of the eyes, as a share of the camera image's width, averaged over about the last third of a second before the button press. Larger means nearer the camera. `null` if no face was ever found. |

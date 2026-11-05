@@ -20,16 +20,26 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-catch-up
 
 ## Usage
 
-```js
-const jsPsych = initJsPsych({
-  extensions: [{ type: jsPsychExtensionSaccade, params: { mode: "auto" } }],
-});
+```html
+<script src="https://unpkg.com/jspsych@8"></script>
+<script src="https://unpkg.com/@saccadejs/core"></script>
+<script src="https://unpkg.com/@saccadejs/extension"></script>
+<script src="https://unpkg.com/@saccadejs/plugin-preview"></script>
+<script src="https://unpkg.com/@saccadejs/plugin-calibrate"></script>
+<script src="https://unpkg.com/@saccadejs/plugin-catch-up"></script>
+<script>
+  const jsPsych = initJsPsych({
+    extensions: [{ type: jsPsychExtensionSaccade, params: { mode: "auto" } }],
+  });
 
-timeline.push({ type: jsPsychSaccadePreview });
-timeline.push({ type: jsPsychSaccadeCalibrate });
-// ... trials that record gaze ...
-timeline.push({ type: jsPsychSaccadeCatchUp });
-// ... then save the data
+  jsPsych.run([
+    { type: jsPsychSaccadePreview },
+    { type: jsPsychSaccadeCalibrate },
+    // ... trials that record gaze ...
+    { type: jsPsychSaccadeCatchUp },
+    // ... then save the data
+  ]);
+</script>
 ```
 
 ## Parameters
