@@ -271,10 +271,21 @@ describe("OrtEmbeddingModel progress", () => {
     };
 
     const current = releases.releases[releases.releases.length - 1];
-    const versioned = `https://example.org/models/${releases.id}/${current.version}/${current.file}`;
+    const versioned = `https://example.org/models/${releases.id}/${current.version}/eye_embedding.onnx`;
     expect(await totals()).toEqual([current.bytes, current.bytes]);
     expect(await totals(`${versioned}?v=1`)).toEqual([current.bytes, current.bytes]);
     expect(await totals("/my/own/model.onnx")).toEqual([undefined, undefined]);
+
+    // A superseded release keeps its bytes in models/<version>/, but the site still serves it as
+    // <id>/<version>/eye_embedding.onnx.
+    const older = { ...current, version: "0.9.0", file: "0.9.0/eye_embedding.onnx", bytes: 123 };
+    releases.releases.unshift(older);
+    try {
+      const url = `https://example.org/models/${releases.id}/0.9.0/eye_embedding.onnx`;
+      expect(await totals(url)).toEqual([123, 123]);
+    } finally {
+      releases.releases.shift();
+    }
   });
 
   it("reuses the one download across every execution-provider attempt", async () => {

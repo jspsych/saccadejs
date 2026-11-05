@@ -5,8 +5,22 @@ type Release = (typeof releases.releases)[number];
 
 const SITE = "https://saccade.jspsych.org";
 
+/**
+ * The site serves every version under the same file name (docs/scripts/copy-model.mjs), whatever
+ * `file` says: `file` is where the bytes sit in packages/core/models/, not the served path.
+ */
 function urlFor(r: Release): string {
-  return `${SITE}/models/${releases.id}/${r.version}/${r.file}`;
+  return `${SITE}/models/${releases.id}/${r.version}/eye_embedding.onnx`;
+}
+
+/**
+ * Where to find a retired version on npm. The model's version is not a package version, so name
+ * the window instead: every `@saccadejs/core` published while this model was current ships it as
+ * `models/eye_embedding.onnx`.
+ */
+function npmWindow(r: Release): string {
+  const next = releases.releases[releases.releases.indexOf(r) + 1];
+  return next ? `between ${r.date} and ${next.date}` : `since ${r.date}`;
 }
 
 function mb(bytes: number): string {
@@ -38,11 +52,10 @@ export default function ModelReleases(): React.ReactElement {
           ) : (
             <p>
               <em>
-                No longer served from this site. Fetch this version from npm (
-                <code>
-                  @saccadejs/core@{r.version}/models/{r.file}
-                </code>
-                ) or the archived copy.
+                No longer served from this site. Any version of{" "}
+                <code>@saccadejs/core</code> published {npmWindow(r)} includes
+                it as <code>models/eye_embedding.onnx</code>. Check the file
+                against the fingerprint below.
               </em>
             </p>
           )}

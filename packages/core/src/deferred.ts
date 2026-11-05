@@ -35,7 +35,8 @@ const CROP_LEN = EYE_W * EYE_H;
  *
  * Its preprocessing and output handling are `OrtEmbeddingModel`'s: the raw 0-255 crop widened to
  * float32, the embedding from the first output, and a per-frame weight from a second output
- * named like one. Change one, change both.
+ * named like one, or else from the only other output when it holds exactly one number. Change
+ * one, change both.
  */
 export const EMBED_WORKER_SOURCE = `
 const EYE_W = ${EYE_W};
@@ -74,6 +75,7 @@ async function run(crop) {
   if (crop.length !== CROP_LEN) throw new Error("crop length " + crop.length + " != " + CROP_LEN);
   for (let i = 0; i < CROP_LEN; i++) inputData[i] = crop[i];
   const out = await session.run({ [inputName]: inputTensor });
+  resolveWeightOutput(out);
   const embedding = Float32Array.from(out[outputName].data);
   if (embedding.length === 0) throw new Error("model produced an empty embedding");
   if (dim == null) dim = embedding.length;
@@ -87,6 +89,17 @@ async function run(crop) {
     weight = w;
   }
   return { embedding, weight };
+}
+
+// OrtEmbeddingModel.resolveWeightOutput: an output with an unrecognised name is taken as the
+// weight only in the unambiguous case, the one other output holding exactly one number. The
+// warm-up run in init() settles it before the worker reports ready.
+function resolveWeightOutput(out) {
+  if (weightName) return;
+  const others = session.outputNames.filter((n) => n !== outputName);
+  if (others.length !== 1) return;
+  const t = out[others[0]];
+  if (t && t.data.length === 1) weightName = others[0];
 }
 
 self.onmessage = async (event) => {

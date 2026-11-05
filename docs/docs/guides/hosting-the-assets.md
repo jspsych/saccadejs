@@ -50,9 +50,8 @@ curl -o public/assets/face_landmarker.task \
   https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 ```
 
-By default saccade.js loads the face finder from Google's `latest` address, which Google could
-point at a new model. The command above downloads version `1` by its own address (today the two
-are the same file), so your copy cannot change under you.
+This is the same versioned address saccade.js loads by default. Google also serves the face
+finder at a `latest` address, which it could point at a new model; avoid that one.
 
 **2. Point saccade.js at them.** Pass the locations when you register the extension:
 
