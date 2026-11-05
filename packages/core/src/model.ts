@@ -64,14 +64,14 @@ function identify(sha256: string | null, url: string): ModelIdentity {
 /**
  * Decoded size of the file at `url`, when it is a published release: the package's own model
  * (no `modelUrl` given, so the current release) or a versioned site URL ending in
- * `<id>/<version>/<file>`. Download progress needs it because servers compress the .onnx, and
+ * `<id>/<version>/eye_embedding.onnx`, the name the site serves every version under. Download progress needs it because servers compress the .onnx, and
  * then `Content-Length` is not the size of the file. Null for any other model.
  */
 function expectedModelBytes(assets: SaccadeAssets, url: string): number | null {
   const list = releases.releases;
   if (!assets.modelUrl) return list[list.length - 1]?.bytes ?? null;
   const path = url.split(/[?#]/)[0];
-  const known = list.find((r) => path.endsWith(`/${releases.id}/${r.version}/${r.file}`));
+  const known = list.find((r) => path.endsWith(`/${releases.id}/${r.version}/eye_embedding.onnx`));
   return known?.bytes ?? null;
 }
 

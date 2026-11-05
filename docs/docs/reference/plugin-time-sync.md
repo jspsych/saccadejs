@@ -29,7 +29,7 @@ timeline.push({ type: jsPsychSaccadeTimeSync });
 | Package | `@saccadejs/plugin-time-sync` |
 | Browser global | `jsPsychSaccadeTimeSync` |
 | Trial type | `saccade-time-sync` |
-| Requires | the [extension](extension) and a running camera, so it comes after [`saccade-preview`](plugin-preview) |
+| Requires | the [extension](extension). It starts the camera itself if nothing has yet, but normally comes after [`saccade-preview`](plugin-preview) |
 | Built on | [`runLoopback`](core-api#runloopback) from the core library |
 
 ## Parameters
@@ -52,7 +52,7 @@ timeline.push({ type: jsPsychSaccadeTimeSync });
 | Field | Type | Description |
 | --- | --- | --- |
 | `lag_ms` | `number` | The measured delay from screen to camera, in ms. This is what gets subtracted. |
-| `verdict` | `"OK" \| "INCONCLUSIVE" \| "UNRELIABLE"` | Whether the measurement can be trusted. See [how the verdict is decided](#how-the-verdict-is-decided). |
+| `verdict` | `"OK" \| "INCONCLUSIVE" \| "UNRELIABLE" \| null` | Whether the measurement can be trusted. See [how the verdict is decided](#how-the-verdict-is-decided). |
 | `reason` | `string \| null` | When the verdict is not `"OK"`, why. |
 | `applied` | `boolean` | Whether the delay was passed on to be subtracted from later trials. |
 | `clock_source` | `"captureTime" \| "receiveTime" \| "callback"` | Where the browser's frame timestamps came from. Only `"captureTime"` gives a real measurement; with anything else, treat `lag_ms` as a rough guide. |
@@ -75,14 +75,20 @@ timeline.push({ type: jsPsychSaccadeTimeSync });
 | `raf_period_ms` | `number` | The average time between screen redraws, in ms. In practice, the screen's refresh interval: about 16.7 ms at 60 Hz. |
 | `rt` | `number` | Milliseconds from the start of the trial to the end of the measurement. |
 
+If the measurement fails outright (the camera is refused, say), the trial still ends so the
+experiment can continue, and every field is `null` except `applied`, which is `false`, and `rt`.
+
 ### How the verdict is decided
 
-The verdict is `"OK"` when all three of these are true:
+The verdict is `"INCONCLUSIVE"` if there was nothing to measure from: no usable camera frames, or
+fewer than two screen changes. Otherwise it is `"OK"` when all three of these are true, and
+`"UNRELIABLE"` when any is not:
 
 - `peak_d` is at least 0.5 (the camera clearly saw the changes),
 - `plateau_width_ms` is at most 34 ms (the delay is pinned down to within about one camera frame),
 - the two `halves_ms` agree: within 8 ms if each half saw at least 15 screen changes, or within
-  20 ms if fewer.
+  20 ms if fewer. If there were too few camera frames to measure each half separately, this check
+  fails.
 
 [Timing and synchrony](../guides/timing-and-synchrony#reading-the-verdict) explains what to do
 when it is not.

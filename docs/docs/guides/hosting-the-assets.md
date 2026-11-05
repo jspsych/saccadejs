@@ -50,9 +50,8 @@ curl -o public/assets/face_landmarker.task \
   https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 ```
 
-By default saccade.js loads the face finder from Google's `latest` address, which Google could
-point at a new model. The command above downloads version `1` by its own address (today the two
-are the same file), so your copy cannot change under you.
+This is the same versioned address saccade.js loads by default. Google also serves the face
+finder at a `latest` address, which it could point at a new model; avoid that one.
 
 **2. Point saccade.js at them.** Pass the locations when you register the extension:
 
@@ -129,5 +128,7 @@ Most web servers handle these correctly already. If something does not load, che
    - the `.wasm` files show `Content-Type: application/wasm`,
    - nothing is downloaded from a server you did not expect.
 
-Finally, check the data from the [preview trial](../reference/plugin-preview). If `backend` is
-`"wasm"` on a computer that should support WebGPU, a wrong asset URL is the first thing to check.
+Finally, check the data from the [preview trial](../reference/plugin-preview). A wrong asset URL
+usually stops the preview with an error rather than slowing it down. If `backend` is `"wasm"` on a
+computer that should support WebGPU, the browser's WebGPU was unavailable; see
+[Browser compatibility](browser-compatibility#webgpu-the-difference-that-matters-most).

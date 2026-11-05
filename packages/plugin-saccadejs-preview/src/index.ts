@@ -269,7 +269,8 @@ const info = <const>{
     lighting_feedback: {
       type: ParameterType.STRING,
     },
-    /** Time in milliseconds from the start of the trial until the participant clicked the button. */
+    /** Time in milliseconds from the camera image appearing (the end of `load_time`) until the
+     * participant clicked the button. */
     rt: {
       type: ParameterType.INT,
     },

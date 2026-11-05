@@ -24,8 +24,8 @@ limit of three flashes per second. The timing information is in the edges, not t
 15-second run has about 20 of them.
 
 Requires the [`@saccadejs/extension`](../extension-saccadejs) extension to be registered in
-`initJsPsych`. Run it once, before your gaze-recording trials; put it after
-[`saccade-preview`](../plugin-saccadejs-preview) so the camera is already running.
+`initJsPsych`. Run it once, before your gaze-recording trials, normally after
+[`saccade-preview`](../plugin-saccadejs-preview). It starts the camera itself if nothing has yet.
 
 ## Installation
 
@@ -84,21 +84,21 @@ applied.
 | `dropped_frames`   | integer | Camera frames the browser reported dropping during the run.                                                                                  |
 | `raf_period_ms`    | float   | Mean interval between animation frames (16.7 on a 60 Hz display).                                                                            |
 | `clock_source`     | string  | `"captureTime"` (best), `"receiveTime"`, or `"callback"` (the browser gave no capture timestamp at all).                                     |
-| `verdict`          | string  | `"OK"`, `"INCONCLUSIVE"` or `"UNRELIABLE"`. See below.                                                                                       |
+| `verdict`          | string  | `"OK"`, `"INCONCLUSIVE"` or `"UNRELIABLE"` (`null` if the measurement threw). See below.                                                     |
 | `reason`           | string  | A short explanation of a non-`OK` verdict; `null` when the verdict is `OK`.                                                                  |
 | `applied`          | boolean | Whether the lag was applied to the extension.                                                                                                |
 | `rt`               | integer | Time from the start of the trial until the measurement finished.                                                                             |
 
-Every field is `null` if the measurement threw (no camera, for instance); the trial still ends so
-the experiment can continue.
+If the measurement threw (no camera, for instance), every field is `null` except `applied`
+(`false`) and `rt`; the trial still ends so the experiment can continue.
 
 ## Verdicts
 
-| Verdict          | Meaning                                                                                                                                                                                                           |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"OK"`           | The estimate is well constrained: a strong edge signal (`peak_d ≥ 0.5`), a plateau no wider than one camera frame (≤ 34 ms), and the two halves of the run agreeing.                                              |
-| `"INCONCLUSIVE"` | There was nothing to estimate from: no usable camera samples, or fewer than two luminance edges.                                                                                                                  |
-| `"UNRELIABLE"`   | An estimate exists but fails at least one of the checks above: a weak edge signal, a plateau wider than a camera frame, or halves that disagree. `reason` says which. `lag_ms` from such a run cannot be trusted. |
+| Verdict          | Meaning                                                                                                                                                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"OK"`           | The estimate is well constrained: a strong edge signal (`peak_d ≥ 0.5`), a plateau no wider than one camera frame (≤ 34 ms), and the two halves of the run agreeing.                                                                                          |
+| `"INCONCLUSIVE"` | There was nothing to estimate from: no usable camera samples, or fewer than two luminance edges.                                                                                                                                                              |
+| `"UNRELIABLE"`   | An estimate exists but fails at least one of the checks above: a weak edge signal, a plateau wider than a camera frame, or halves that disagree (or too few camera samples to compare them). `reason` says which. `lag_ms` from such a run cannot be trusted. |
 
 `apply_offset` applies only an `OK` result. To use your own rule instead — for example, to apply
 an `UNRELIABLE` lag rather than none — turn it off and apply the lag yourself:

@@ -55,6 +55,8 @@ Each trial with saved pictures has them in `saccade_deferred.crops`:
 | Field      | Description                                                                                                                          |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `data`     | The pictures end to end, base64-encoded. Each is `width` × `height` (144 × 36) grayscale bytes, row by row.                          |
+| `width`    | Width of each picture in pixels (144).                                                                                               |
+| `height`   | Height of each picture in pixels (36).                                                                                               |
 | `t`        | Each picture's timestamp, on the same axis as the trial's `saccade_data` `t`.                                                        |
 | `kernel`   | The calibration in effect during the trial: `2 × d` numbers for a `d`-long embedding, x and y interleaved. `null` if there was none. |
 | `center`   | The centering constant that goes with `kernel`.                                                                                      |
@@ -65,3 +67,23 @@ To turn a picture into gaze, run the model on it (input `[1, 36, 144, 1]` float3
 `y = center + Σ embedding[i] × kernel[2i + 1]`. Gaze comes out as a fraction of the browser
 window; multiply by `viewport.width` and `viewport.height` for pixels. This is what `predict()` in the
 [core API](core-api) does.
+
+That gives one estimate per frame. The tracker's own estimates average the last
+`smoothing_frames` embeddings (recorded in the trial's `saccade_timing`), each timed at the mean
+capture time of the frames averaged. If that was above 1, use `predictSeries()` from the core
+API to match it:
+
+```js
+import { predictSeries } from "@saccadejs/core";
+
+// frames: [{ embedding: Float32Array, weight: number | null, time: t[i] }, ...] in order
+const gaze = predictSeries(
+  frames,
+  Float32Array.from(crops.kernel),
+  trial.saccade_timing.smoothing_frames,
+  crops.center,
+);
+// each result is { gaze: { x, y }, time }, x and y as fractions of the window
+```
+
+`weight` is the model's second output, if it has one; pass `null` otherwise.

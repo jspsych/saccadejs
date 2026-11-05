@@ -40,7 +40,7 @@ The `mode` setting takes three values:
 | `mode`             | What happens                                                                                                                                                                                                                                    |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `"live"` (default) | The model runs on every frame as it arrives.                                                                                                                                                                                                    |
-| `"auto"`           | When the camera starts, saccade.js times the model on this computer. It runs live if the model uses WebGPU and each frame takes less than 85% of the time between camera frames (but never more than 80 ms). Otherwise it switches to deferred. |
+| `"auto"`           | When the camera starts, saccade.js times the model on this computer. It runs live if the model uses WebGPU and each frame takes at most 85% of the time between camera frames, a limit kept between 30 and 80 ms (and 30 ms if the camera's frame rate cannot be measured). Otherwise it switches to deferred. |
 | `"deferred"`       | Always deferred. Useful for testing your experiment on a fast computer.                                                                                                                                                                         |
 
 Every trial records which mode was in effect as `saccade_mode`. After `start()`,
@@ -115,7 +115,7 @@ To keep those frames instead, set `save_unprocessed_crops: true`. Their eye pict
 saved in the data, in their trials' `saccade_deferred.crops`, along with each picture's
 timestamp and the calibration that applies to it. You can run the model on them later yourself,
 outside the browser, and nothing is lost. Each picture is a 144 × 36 grayscale strip across both
-eyes, about 5 KB, and **it is a recognisable picture of the participant's eyes**. Check what your
+eyes, about 5 KB (about 7 KB once encoded as text in the data), and **it is a recognisable picture of the participant's eyes**. Check what your
 consent form and data-sharing plan allow before you turn this on, and delete the pictures once
 you have processed them.
 
@@ -129,9 +129,10 @@ timeline.push({
 
 ## How many background threads
 
-By default saccade.js starts one thread for every processor core beyond two, up to three. It
-starts one on a computer with 4 GB of memory or less: in piloting for the validation study, those
-computers could not handle more. Each thread holds its own copy of the model, about 20 MB, plus
+By default saccade.js starts as many threads as the computer has processor cores, minus two,
+and at least one and at most three. It starts one on a computer with 4 GB of memory or less: in
+piloting for the validation study, those computers could not handle more. Only Chrome and Edge
+report memory, so in other browsers the number of cores alone decides. Each thread holds its own copy of the model, about 20 MB, plus
 the runtime that runs it. Override the number with `deferred_workers`:
 
 ```js

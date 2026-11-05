@@ -23,6 +23,7 @@
     "@saccadejs/core": "file:../packages/core",
     "@saccadejs/extension": "file:../packages/extension-saccadejs",
     "@saccadejs/plugin-calibrate": "file:../packages/plugin-saccadejs-calibrate",
+    "@saccadejs/plugin-catch-up": "file:../packages/plugin-saccadejs-catch-up",
     "@saccadejs/plugin-preview": "file:../packages/plugin-saccadejs-preview",
     "@saccadejs/plugin-time-sync": "file:../packages/plugin-saccadejs-time-sync",
     "@saccadejs/plugin-validate": "file:../packages/plugin-saccadejs-validate",

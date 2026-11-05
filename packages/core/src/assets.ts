@@ -33,8 +33,13 @@ export const DEFAULT_ORT_WASM_URL = `${JSDELIVR}/onnxruntime-web@${ORT_VERSION}/
 const DEFAULT_ORT_MODULE = "ort.bundle.min.mjs";
 export const DEFAULT_MEDIAPIPE_WASM_URL = `${JSDELIVR}/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`;
 const DEFAULT_MEDIAPIPE_MODULE_URL = `${JSDELIVR}/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/vision_bundle.mjs`;
+/**
+ * Google's float16 face landmarker, version 1, by its versioned address. Google also serves it at
+ * `float16/latest/`, which it could repoint at a new model mid-study; on 2026-11-05 the two were
+ * the same file (sha256 64184e22...).
+ */
 export const DEFAULT_FACE_LANDMARKER_URL =
-  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
+  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
 export interface SaccadeAssets {
   /**
@@ -46,7 +51,7 @@ export interface SaccadeAssets {
   ortWasmUrl?: string;
   /** Directory URL for @mediapipe/tasks-vision's wasm. Default: jsdelivr `tasks-vision@<pinned>/wasm`. */
   mediapipeWasmUrl?: string;
-  /** URL of `face_landmarker.task`. Default: Google's hosted float16 model. */
+  /** URL of `face_landmarker.task`. Default: Google's hosted float16 model, version 1. */
   faceLandmarkerUrl?: string;
   /**
    * Extension to the published contract: explicit ESM URL for onnxruntime-web. Only consulted

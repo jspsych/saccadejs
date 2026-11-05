@@ -124,7 +124,9 @@ const info = <const>{
     samples_per_sec: {
       type: ParameterType.FLOAT,
     },
-    /** The list of validation points, in the order they were shown. */
+    /** The list of validation points, in the order they were shown, in the units of
+     * `validation_point_coordinates` (not converted to pixels). `[]` if validation failed
+     * partway; `raw_gaze` may still hold the points recorded before the failure. */
     validation_points: {
       type: ParameterType.INT,
       array: true,

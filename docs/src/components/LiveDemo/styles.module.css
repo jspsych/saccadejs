@@ -58,6 +58,28 @@
   gap: 1.25rem;
 }
 
+/* Live or deferred. A plain fieldset rather than a card: it is a setting for every card below,
+   not an activity of its own. */
+.modeSetting {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.modeLegend {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  padding: 0;
+}
+
+.modeOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+}
+
 /* Four cards, two up on anything wider than a phone. They are the whole navigation of the
    demo: each one says what an activity costs, what it is for, and what it measured last time. */
 .cards {

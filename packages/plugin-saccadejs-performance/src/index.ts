@@ -81,18 +81,19 @@ const info = <const>{
   },
   data: {
     /** The median frame rate over the measurement window, in Hz. **The headline number**, and
-     * the one `minimum_fps` is compared against. `null` if no two consecutive frames with a
-     * face in them were seen. */
+     * the one an `inclusion_function` should usually test. `null` if no two consecutive frames
+     * with a face in them were seen. */
     fps_median: {
       type: ParameterType.FLOAT,
     },
-    /** Frames per second averaged over the whole window. */
+    /** Mean frame rate over the intervals between consecutive frames that both had a face in
+     * them. `null` when `fps_median` is. */
     fps_mean: {
       type: ParameterType.FLOAT,
     },
     /** The rate at the slow end: the 10th percentile of frame rate, i.e. the 90th percentile of
      * the interval between frames. A machine that stalls periodically has a healthy
-     * `fps_median` and a poor `fps_p10`. */
+     * `fps_median` and a poor `fps_p10`. `null` when `fps_median` is. */
     fps_p10: {
       type: ParameterType.FLOAT,
     },
@@ -114,11 +115,13 @@ const info = <const>{
     },
     /** Median time in ms spent in the model for one frame. Together with `fps_median` this
      * separates a slow model from a slow camera: a low frame rate with a small
-     * `embed_ms_median` is a camera that is not delivering frames any faster. */
+     * `embed_ms_median` is a camera that is not delivering frames any faster. `null` if no
+     * frame reached the model, which is always the case in deferred mode. */
     embed_ms_median: {
       type: ParameterType.FLOAT,
     },
-    /** The execution provider the model is running on: `"webgpu"` or `"wasm"`. */
+    /** The execution provider the model is running on: `"webgpu"` or `"wasm"`. `null` if the
+     * tracker never started. */
     backend: {
       type: ParameterType.STRING,
     },
@@ -143,7 +146,7 @@ type Info = typeof info;
  * data, and an experiment that ends there when the two disagree. A study that already gates on
  * browser and screen size gains one more gate written the same way.
  *
- * Put it after `saccade-preview` (the camera and the model have to be running) and before
+ * Put it after `saccade-preview` (it starts the tracker itself if nothing has) and before
  * `saccade-calibrate`, so that a participant who is going to be excluded is not first made to
  * sit through a calibration.
  *
@@ -228,7 +231,8 @@ class SaccadePerformancePlugin implements JsPsychPlugin<Info> {
     begin.then(measure).then(
       () => end_trial(null),
       // Whatever went wrong — the camera was never granted, the model would not load — the
-      // trial still ends, with null statistics and `passed: false` where a threshold was set.
+      // trial still ends, with null statistics, and the `inclusion_function` decides as usual.
+      // (`null >= threshold` is false, so the usual comparison excludes the participant.)
       // Freezing here would strand the participant on a screen with no way forward.
       (err: unknown) => end_trial(String((err as Error)?.message ?? err)),
     );

@@ -156,9 +156,11 @@ const info = <const>{
     clock_source: {
       type: ParameterType.STRING,
     },
-    /** `"OK"`, `"INCONCLUSIVE"` or `"UNRELIABLE"`. `OK` means the estimate is well constrained;
-     * `INCONCLUSIVE` means the signal was too weak or too few edges were seen; `UNRELIABLE` means
-     * the run produced an estimate that contradicts itself and should not be used. */
+    /** `"OK"`, `"INCONCLUSIVE"` or `"UNRELIABLE"`; `null` if the measurement threw. `OK` means
+     * the estimate is well constrained; `INCONCLUSIVE` means there was nothing to estimate from
+     * (no usable camera samples, or fewer than two edges); `UNRELIABLE` means the estimate failed
+     * a check (weak peak, wide plateau, halves that disagree or could not be compared) and
+     * should not be used. */
     verdict: {
       type: ParameterType.STRING,
     },

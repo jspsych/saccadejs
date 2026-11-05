@@ -15,7 +15,7 @@ Its exclusion machinery is
 and an experiment that ends there when the two disagree.
 
 Requires the [`@saccadejs/extension`](../extension-saccadejs) extension to be registered in
-`initJsPsych`, and the tracker to be running — put this trial after
+`initJsPsych`. It starts the tracker itself if nothing has yet, but it normally goes after
 [`saccade-preview`](../plugin-saccadejs-preview).
 
 ## Installation
@@ -75,13 +75,13 @@ threshold they justify once you know what your participants' machines look like.
 | Name                  | Type    | Description                                                                                                                               |
 | --------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `fps_median`          | float   | The median frame rate over the window, in Hz. **The headline number.** `null` if no two consecutive frames with a face in them were seen. |
-| `fps_mean`            | float   | Frames per second averaged over the whole window — what `frames / duration` would give.                                                   |
-| `fps_p10`             | float   | The rate at the slow end: the 10th percentile of frame rate, i.e. the 90th percentile of the interval between frames.                     |
+| `fps_mean`            | float   | Mean frame rate over the intervals between consecutive frames that both had a face. `null` when `fps_median` is.                          |
+| `fps_p10`             | float   | The rate at the slow end: the 90th percentile of the interval between frames, as a rate. `null` when `fps_median` is.                     |
 | `frames`              | integer | Frames with a face in them during the window — the frames the rates are computed from.                                                    |
 | `frames_without_face` | integer | Frames in the window with no face in them.                                                                                                |
 | `dropped`             | integer | Camera frames presented but never processed, as reported by `requestVideoFrameCallback`. How far behind the camera the tracker fell.      |
-| `embed_ms_median`     | float   | Median time in ms spent in the model for one frame.                                                                                       |
-| `backend`             | string  | The execution provider the model is running on: `"webgpu"` or `"wasm"`.                                                                   |
+| `embed_ms_median`     | float   | Median time in ms spent in the model for one frame. `null` if no frame reached the model (always, in deferred mode).                      |
+| `backend`             | string  | The execution provider the model is running on: `"webgpu"` or `"wasm"`. `null` if the tracker never started.                              |
 | `rt`                  | integer | Time in ms from the start of the trial until the measurement finished.                                                                    |
 
 ## Interpreting the numbers

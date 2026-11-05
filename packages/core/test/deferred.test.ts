@@ -222,6 +222,53 @@ describe("DeferredEmbedder", () => {
     // browser. Parsing it as a function body catches them here.
     expect(() => new Function(EMBED_WORKER_SOURCE.replace(/await import\(/g, "("))).not.toThrow();
   });
+
+  describe("worker source", () => {
+    /**
+     * Runs the shipped worker text against a stub ONNX Runtime: `import(ortUrl)` is swapped for
+     * the stub, and `self` collects what the worker posts back.
+     */
+    async function runWorker(outputs: Record<string, number[]>) {
+      const posted: any[] = [];
+      const self: any = { postMessage: (m: any) => posted.push(m) };
+      const session = {
+        inputNames: ["eye_image"],
+        outputNames: Object.keys(outputs),
+        run: async () =>
+          Object.fromEntries(Object.entries(outputs).map(([k, v]) => [k, { data: v }])),
+      };
+      const ort = {
+        env: { wasm: {} },
+        Tensor: class {},
+        InferenceSession: { create: async () => session },
+      };
+      new Function("self", "__ort", EMBED_WORKER_SOURCE.replace("import(message.ortUrl)", "__ort"))(
+        self,
+        ort,
+      );
+      await self.onmessage({ data: { type: "init", model: new ArrayBuffer(0) } });
+      await self.onmessage({ data: { type: "embed", id: 1, crop: new ArrayBuffer(CROP_LEN) } });
+      return posted;
+    }
+
+    it("reads a weight output by name", async () => {
+      const [ready, result] = await runWorker({ embedding: [1, 2], quality: [0.25] });
+      expect(ready).toMatchObject({ type: "ready", dim: 2, emitsWeight: true });
+      expect(result).toMatchObject({ type: "result", id: 1, weight: 0.25 });
+    });
+
+    it("takes an unrecognised single-number output as the weight, as the live model does", async () => {
+      const [ready, result] = await runWorker({ embedding: [1, 2], score: [0.5] });
+      expect(ready).toMatchObject({ emitsWeight: true });
+      expect(result).toMatchObject({ weight: 0.5 });
+    });
+
+    it("leaves an ambiguous second output alone", async () => {
+      const [ready, result] = await runWorker({ embedding: [1, 2], extra: [0.5, 0.5] });
+      expect(ready).toMatchObject({ emitsWeight: false });
+      expect(result).toMatchObject({ weight: null });
+    });
+  });
 });
 
 describe("recommendedWorkers", () => {

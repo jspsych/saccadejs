@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import BrowserOnly from "@docusaurus/BrowserOnly";
 import Head from "@docusaurus/Head";
+import Link from "@docusaurus/Link";
 import useBaseUrl from "@docusaurus/useBaseUrl";
 import clsx from "clsx";
 import type { JsPsych } from "jspsych";
@@ -32,6 +33,13 @@ import styles from "./styles.module.css";
  * from one activity to the next. Each activity is its own short `jsPsych.run`, and the results
  * are lifted out of its data afterwards and kept here.
  *
+ * A setting above the cards chooses where the model runs: `"live"`, on every frame as it
+ * arrives, or `"deferred"`, in background threads with each trial's gaze filled in afterwards,
+ * which is what a study's `mode: "auto"` falls back to on a slow computer. The first activity
+ * hands it to the extension, whose `start()` (run by the preview trial) applies it; after that the
+ * shared tracker is switched directly, since no later activity starts the extension again.
+ * Free viewing and the live gaze dot need live gaze, so they wait for live mode.
+ *
  * The one thing a study does that the menu does not offer is `saccade-time-sync`, which measures
  * this computer's screen-to-camera lag so gaze can be lined up with stimulus timing. Nothing
  * here depends on it, and it costs a visitor a minute on a measurement they never see.
@@ -59,6 +67,7 @@ interface Modules {
   preview: typeof import("@saccadejs/plugin-preview").default;
   calibrate: typeof import("@saccadejs/plugin-calibrate").default;
   validate: typeof import("@saccadejs/plugin-validate").default;
+  catchUp: typeof import("@saccadejs/plugin-catch-up").default;
   button: typeof import("@jspsych/plugin-html-button-response").default;
   keyboard: typeof import("@jspsych/plugin-html-keyboard-response").default;
 }
@@ -80,18 +89,22 @@ function loadModules(): Promise<Modules> {
       import("@saccadejs/plugin-preview"),
       import("@saccadejs/plugin-calibrate"),
       import("@saccadejs/plugin-validate"),
+      import("@saccadejs/plugin-catch-up"),
       import("@jspsych/plugin-html-button-response"),
       import("@jspsych/plugin-html-keyboard-response"),
-    ]).then(([jspsych, core, extension, preview, calibrate, validate, button, keyboard]) => ({
-      initJsPsych: jspsych.initJsPsych,
-      SaccadeTracker: core.SaccadeTracker,
-      extension: extension.default,
-      preview: preview.default,
-      calibrate: calibrate.default,
-      validate: validate.default,
-      button: button.default,
-      keyboard: keyboard.default,
-    }));
+    ]).then(
+      ([jspsych, core, extension, preview, calibrate, validate, catchUp, button, keyboard]) => ({
+        initJsPsych: jspsych.initJsPsych,
+        SaccadeTracker: core.SaccadeTracker,
+        extension: extension.default,
+        preview: preview.default,
+        calibrate: calibrate.default,
+        validate: validate.default,
+        catchUp: catchUp.default,
+        button: button.default,
+        keyboard: keyboard.default,
+      }),
+    );
     modulesPromise.catch(() => {
       modulesPromise = null;
     });
@@ -311,6 +324,9 @@ function mountScanpath(
 /** The four things a visitor can choose. `explore` is the one that is not a jsPsych trial. */
 type Activity = "calibrate" | "validate" | "scanpath" | "explore";
 
+/** Where the model runs: on each frame as it arrives, or later, in background threads. */
+type Mode = "live" | "deferred";
+
 /**
  * Whether there is a gaze model to use. `"failed"` is a calibration that ran to the end and
  * fitted nothing — no usable points, or the camera stalled part way — which has to stay locked
@@ -324,6 +340,8 @@ interface ValidationResult {
   errorPx: number | null;
   /** Median distance of a point's samples from their own mean: how scattered, not how wrong. */
   precisionPx: number | null;
+  /** The mode the check ran in, so a visitor comparing the two can tell which result is which. */
+  mode: Mode;
 }
 
 /** One of the two views: the question it was recorded under, and what came out of it. */
@@ -337,9 +355,12 @@ interface ScanpathResult {
   views: ScanpathView[];
   /** Samples per second over both views together — the rate a study would record at. */
   hz: number | null;
+  mode: Mode;
 }
 
 interface Session {
+  /** The mode the next activity runs in. */
+  mode: Mode;
   calibration: CalibrationState;
   validation: ValidationResult | null;
   scanpath: ScanpathResult | null;
@@ -350,6 +371,7 @@ interface Session {
 }
 
 const EMPTY_SESSION: Session = {
+  mode: "live",
   calibration: "none",
   validation: null,
   scanpath: null,
@@ -376,6 +398,7 @@ function absorb(
   activity: Activity,
   jsPsych: JsPsych,
   fixations: Fixation[][],
+  mode: Mode,
 ): Session {
   const data = jsPsych.data.get();
   const first = (trial_type: string): any => data.filter({ trial_type }).values()[0] ?? {};
@@ -398,6 +421,7 @@ function absorb(
         : null,
       errorPx: Number.isFinite(validation.median_error_px) ? validation.median_error_px : null,
       precisionPx: precisionOf(validation),
+      mode,
     };
   }
 
@@ -414,6 +438,7 @@ function absorb(
     next.scanpath = {
       views,
       hz: samples ? samples / ((scenes.length * SCENE_MS) / 1000) : null,
+      mode,
     };
   }
 
@@ -450,7 +475,8 @@ function Demo() {
   // The versioned path, which is the only one the site serves: using it here means that URL
   // is exercised on every deploy instead of being a link nobody walks.
   const current = releases.releases.filter((r) => r.served).at(-1)!;
-  const modelUrl = useBaseUrl(`/models/${releases.id}/${current.version}/${current.file}`);
+  // Every version is served as `eye_embedding.onnx`; `file` is where its bytes sit in the repo.
+  const modelUrl = useBaseUrl(`/models/${releases.id}/${current.version}/eye_embedding.onnx`);
   const sceneUrl = useBaseUrl("/img/repin-unexpected-visitors.jpg");
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -462,6 +488,8 @@ function Demo() {
   const scanpathTeardownRef = useRef<() => void>(() => {});
   /** Guards every `setState` after an await: the visitor may have navigated away mid-run. */
   const mountedRef = useRef(true);
+  /** Bumped whenever an activity ends, so a run still awaiting something knows it was abandoned. */
+  const runIdRef = useRef(0);
 
   const [supported] = useState(
     () => window.isSecureContext && !!navigator.mediaDevices?.getUserMedia,
@@ -481,6 +509,7 @@ function Demo() {
    * put on the page. It does not dispose the tracker, because it did not create it.
    */
   const endActivity = useCallback(() => {
+    runIdRef.current += 1;
     scanpathTeardownRef.current();
     scanpathTeardownRef.current = () => {};
     const jsPsych = jsPsychRef.current;
@@ -549,11 +578,15 @@ function Demo() {
       // Free viewing is not a jsPsych trial: it takes over the page itself, and it has nothing
       // to show without a tracker that has already been calibrated.
       if (activity === "explore") {
-        if (trackerRef.current) setPhase("explore");
+        if (trackerRef.current && session.mode === "live") {
+          trackerRef.current.disableDeferred();
+          setPhase("explore");
+        }
         return;
       }
 
       endActivity();
+      const runId = runIdRef.current;
       setError(null);
       setPhase("running");
 
@@ -573,9 +606,32 @@ function Demo() {
         if (!trackerRef.current) trackerRef.current = new m.SaccadeTracker({ assets });
         const tracker = trackerRef.current;
 
+        // Before the camera has started, `mode` goes to the extension below and the preview
+        // trial's `start()` applies it, behind the setup progress bar. Once it is running, only
+        // a new `start()` would look at `mode` again, and no later activity calls one, so the
+        // tracker is switched here instead.
+        if (tracker.initialized && tracker.mode !== session.mode) {
+          if (session.mode === "live") {
+            tracker.disableDeferred();
+          } else {
+            display.innerHTML = instructions(
+              "Starting the background threads",
+              "<p>Loading a copy of the model into each one. This takes a few seconds.</p>",
+            );
+            try {
+              await tracker.enableDeferred();
+            } catch (err) {
+              const reason = err instanceof Error ? err.message : String(err);
+              throw new Error(`Deferred mode couldn't start its background threads: ${reason}`);
+            }
+            if (!mountedRef.current || runIdRef.current !== runId) return;
+            display.innerHTML = "";
+          }
+        }
+
         const jsPsych = m.initJsPsych({
           display_element: display,
-          extensions: [{ type: m.extension, params: { tracker, assets } }],
+          extensions: [{ type: m.extension, params: { tracker, assets, mode: session.mode } }],
           // The experiment sits in the middle of a documentation page. Every trial begins by
           // putting it where the participant can see all of it — gaze is recorded in viewport
           // coordinates, so a stage half off the bottom of the window would be recorded
@@ -622,7 +678,9 @@ function Demo() {
               type: m.validate,
               show_validation_data: true,
               on_load: () => {
-                if (session.showGazeDuringCheck) extensionRef.current?.showPredictions();
+                if (session.showGazeDuringCheck && session.mode === "live") {
+                  extensionRef.current?.showPredictions();
+                }
               },
               on_finish: () => extensionRef.current?.hidePredictions(),
             },
@@ -650,6 +708,10 @@ function Demo() {
                 extensions: [{ type: m.extension, params: { targets: ["#scene"] } }],
               },
             ]),
+            // In deferred mode the two views' gaze is still being computed; this waits for it,
+            // with a progress bar, so the comparison below has something to draw. In live mode
+            // it ends at once.
+            { type: m.catchUp },
             // Both recordings, given back side by side. Drawn from the same fixations the
             // results card then counts.
             {
@@ -677,7 +739,7 @@ function Demo() {
         await jsPsych.run(timelines[activity]);
         if (!mountedRef.current || jsPsychRef.current !== jsPsych) return;
 
-        setSession((prev) => absorb(prev, activity, jsPsych, fixations));
+        setSession((prev) => absorb(prev, activity, jsPsych, fixations, tracker.mode));
         endActivity();
         setPhase("menu");
       } catch (err) {
@@ -687,8 +749,19 @@ function Demo() {
         endActivity();
       }
     },
-    [endActivity, modelUrl, sceneUrl, session.validation, session.showGazeDuringCheck],
+    [
+      endActivity,
+      modelUrl,
+      sceneUrl,
+      session.mode,
+      session.validation,
+      session.showGazeDuringCheck,
+    ],
   );
+
+  const setMode = useCallback((mode: Mode) => {
+    setSession((prev) => ({ ...prev, mode }));
+  }, []);
 
   const setSmoothing = useCallback((smoothingFrames: number) => {
     setSession((prev) => ({ ...prev, smoothingFrames }));
@@ -719,6 +792,7 @@ function Demo() {
           onRun={run}
           onReset={reset}
           onShowGazeDuringCheckChange={setShowGazeDuringCheck}
+          onModeChange={setMode}
         />
       ) : null}
 
@@ -816,6 +890,61 @@ function Card({ title, cost, blurb, result, option, cta, disabled, onRun }: Card
   );
 }
 
+const MODES: { mode: Mode; label: string; help: string }[] = [
+  {
+    mode: "live",
+    label: "Live",
+    help: "The model runs on every camera frame as it arrives, so gaze is available at once.",
+  },
+  {
+    mode: "deferred",
+    label: "Deferred",
+    help:
+      "The model runs in background threads and each activity's gaze is filled in afterwards, " +
+      "as on a computer too slow to keep up. Free viewing and the live gaze dot need live mode.",
+  },
+];
+
+/** Live or deferred, for the next activity. Switching keeps the calibration. */
+function ModeSetting({
+  mode,
+  disabled,
+  onChange,
+}: {
+  mode: Mode;
+  disabled: boolean;
+  onChange: (mode: Mode) => void;
+}) {
+  return (
+    <fieldset className={styles.modeSetting} disabled={disabled}>
+      <legend className={styles.modeLegend}>Where the model runs</legend>
+      <div className={styles.modeOptions}>
+        {MODES.map((m) => (
+          <label key={m.mode} className={styles.toggle}>
+            <input
+              type="radio"
+              name="saccade-demo-mode"
+              value={m.mode}
+              checked={mode === m.mode}
+              onChange={() => onChange(m.mode)}
+            />
+            {m.label}
+          </label>
+        ))}
+      </div>
+      <p className={styles.controlHelp}>
+        {MODES.find((m) => m.mode === mode)?.help} It applies from the next activity, and the
+        calibration carries over. <Link to="/guides/deferred-mode">About deferred mode</Link>
+      </p>
+    </fieldset>
+  );
+}
+
+/** Which mode a result was measured in, under the number. */
+function measuredIn(mode: Mode): string {
+  return `measured in ${mode} mode`;
+}
+
 function Menu({
   session,
   calibrated,
@@ -823,6 +952,7 @@ function Menu({
   onRun,
   onReset,
   onShowGazeDuringCheckChange,
+  onModeChange,
 }: {
   session: Session;
   calibrated: boolean;
@@ -830,12 +960,16 @@ function Menu({
   onRun: (activity: Activity) => void;
   onReset: () => void;
   onShowGazeDuringCheckChange: (show: boolean) => void;
+  onModeChange: (mode: Mode) => void;
 }) {
   const { calibration, validation, scanpath } = session;
+  const live = session.mode === "live";
 
   return (
     <div className={styles.menu}>
       <Preamble supported={supported} />
+
+      <ModeSetting mode={session.mode} disabled={!supported} onChange={onModeChange} />
 
       <div className={styles.cards}>
         <Card
@@ -872,6 +1006,7 @@ function Menu({
                     ? null
                     : ` · ${validation.precisionPx.toFixed(0)} px scatter`}
                 </span>
+                <span className={styles.cardAside}>{measuredIn(validation.mode)}</span>
               </>
             ) : null
           }
@@ -879,11 +1014,11 @@ function Menu({
             <label className={styles.toggle}>
               <input
                 type="checkbox"
-                checked={session.showGazeDuringCheck}
-                disabled={!calibrated || !supported}
+                checked={session.showGazeDuringCheck && live}
+                disabled={!calibrated || !supported || !live}
                 onChange={(e) => onShowGazeDuringCheckChange(e.target.checked)}
               />
-              Show my gaze live during the check
+              {live ? "Show my gaze live during the check" : "Live gaze needs live mode"}
             </label>
           }
           cta={!calibrated ? "Calibrate first" : validation ? "Check again" : "Check the accuracy"}
@@ -904,6 +1039,7 @@ function Menu({
                     {view.task}: {view.fixations} fixations
                   </span>
                 ))}
+                <span className={styles.cardAside}>{measuredIn(scanpath.mode)}</span>
               </>
             ) : null
           }
@@ -916,9 +1052,13 @@ function Menu({
           title="Free viewing"
           cost="as long as you like"
           blurb="Watch a dot follow your gaze around the page."
-          result={<span className={styles.cardPending}>Nothing is recorded</span>}
-          cta={!calibrated ? "Calibrate first" : "Look around"}
-          disabled={!calibrated || !supported}
+          result={
+            <span className={styles.cardPending}>
+              {live ? "Nothing is recorded" : "Needs live mode: deferred gaze arrives too late"}
+            </span>
+          }
+          cta={!calibrated ? "Calibrate first" : !live ? "Switch to live mode" : "Look around"}
+          disabled={!calibrated || !supported || !live}
           onRun={() => onRun("explore")}
         />
       </div>
