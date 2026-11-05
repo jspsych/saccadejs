@@ -47,6 +47,7 @@ describe("saccade-validate info", () => {
       "median_error_px",
       "median_error_viewport",
       "percent_in_roi",
+      "processing_ms",
       "raw_gaze",
       "rt",
       "samples_per_sec",
@@ -61,6 +62,39 @@ describe("saccade-validate trial", () => {
     expect(() => plugin.trial(document.createElement("div"), {} as any)).toThrow(
       /requires the saccade extension/,
     );
+  });
+
+  it("collects through collectGaze in deferred mode and scores what comes back", async () => {
+    const jsPsych = setup();
+    const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
+    extension.mode = "deferred";
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    extension.collectedGaze = [
+      { x: cx + 10, y: cy, t: performance.now() },
+      { x: cx + 10, y: cy, t: performance.now() + 33 },
+    ];
+    const { getData, finished } = await startTimeline(
+      [
+        {
+          type: SaccadeValidatePlugin,
+          ...FAST,
+          validation_points: [
+            [50, 50],
+            [50, 50],
+          ],
+        },
+      ],
+      jsPsych,
+    );
+    await finished;
+    expect(extension.collectGaze).toHaveBeenCalledTimes(2);
+    const data = getData().values()[0];
+    expect(data.raw_gaze).toHaveLength(2);
+    expect(data.raw_gaze[0]).toHaveLength(2);
+    expect(data.average_offset[0].x).toBeCloseTo(10, 6);
+    expect(data.median_error_px).toBeCloseTo(10, 6);
+    expect(typeof data.processing_ms).toBe("number");
   });
 
   it("records one nested array of samples per validation point", async () => {

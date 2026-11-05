@@ -94,6 +94,28 @@ export {
   withFrameTimeout,
 } from "./calibration";
 
+// ---- deferred mode -----------------------------------------------------------
+export type {
+  DeferredEmbedderOptions,
+  DeferredStats,
+  DrainResult,
+  ModeDecision,
+  TimedEmbedding,
+  WorkerLike,
+} from "./deferred";
+export {
+  DeferredEmbedder,
+  DeferredFrameDropped,
+  EMBED_WORKER_SOURCE,
+  LIVE_CEILING_MS,
+  LIVE_FLOOR_MS,
+  LIVE_FRAME_SHARE,
+  MAX_DEFAULT_WORKERS,
+  chooseMode,
+  predictSeries,
+  recommendedWorkers,
+} from "./deferred";
+
 // ---- timing loopback ---------------------------------------------------------
 export type {
   CurvePoint,

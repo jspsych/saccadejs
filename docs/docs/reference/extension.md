@@ -47,6 +47,8 @@ These go in `params` where you register the extension, and apply to the whole ex
 | `smoothing_frames` | `number` | `1` | How many camera frames to average into each gaze estimate. `1` means no averaging. Higher values give steadier estimates that lag slightly behind the eyes. Keep it at `1` if the display reacts to gaze. |
 | `assets` | `SaccadeAssets` | `{}` | Where to download the model and its supporting files from. See [Hosting the assets](../guides/hosting-the-assets). |
 | `tracker` | `SaccadeTracker` | — | Use a tracker you have already created with the [core API](core-api), instead of letting the extension create one. The extension will not shut down a tracker it did not create. |
+| `mode` | `"live" \| "deferred" \| "auto"` | `"live"` | Where the model runs. `"live"` runs it on every frame as it arrives. `"deferred"` runs it in background threads and fills in gaze after each trial, for computers too slow to keep up. `"auto"` times the model when the camera starts and picks one. See [Slow computers and deferred mode](../guides/deferred-mode). |
+| `deferred_workers` | `number` | see description | Deferred mode only: how many background threads to run. The default is one per processor core beyond two, at most three, and one on a computer with 4 GB of memory or less. |
 
 Registering the extension does not turn on the camera. The permission request and the model
 download happen at the first [`saccade-preview`](plugin-preview) trial, where the participant
@@ -71,10 +73,12 @@ A trial with the extension attached gets these fields:
 | `saccade_data` | `{x, y, t}[]` | The gaze samples. One row per camera frame in which a face was found (and calibration had run). `x` and `y` are pixels from the top-left of the browser window. `t` is milliseconds since the trial started. |
 | `saccade_targets` | `{ [selector]: {x, y, width, height, top, bottom, left, right} }` | Where each `targets` element was, in the same pixel coordinates as `saccade_data`. |
 | `saccade_timing` | `{offset_ms, corrected, clock, dropped_frames, fps, smoothing_frames, trial_start}` | How the timestamps were produced, and how well the camera kept up. `trial_start` is the moment `t` counts from. See [Timing and synchrony](../guides/timing-and-synchrony). |
+| `saccade_deferred` | `{frames, embedded, lost, complete, crops?}` | Deferred mode only. `saccade_data` is filled in after the trial ends; this tracks how far along it is, and `complete` turns `true` when it is final. See [Slow computers and deferred mode](../guides/deferred-mode#what-changes-in-deferred-mode). |
 
-The extension also adds one column to **every** trial that runs after the model has loaded,
+The extension also adds two columns to **every** trial that runs after the model has loaded,
 whether or not it records gaze: `saccade_model`, naming the eye model in use, for example
-`"eye-embedding@1.0.0"`. See [Recording which model you used](../models#recording-which-model-you-used).
+`"eye-embedding@1.0.0"` (see [Recording which model you used](../models#recording-which-model-you-used)),
+and `saccade_mode`, which is `"live"` or `"deferred"`.
 
 **How `t` is calculated.** It is the time the camera captured the frame, minus the trial's start
 time, minus the screen-to-camera lag if [`saccade-time-sync`](plugin-time-sync) has measured one.
@@ -144,6 +148,20 @@ Note that `t` here is **not** measured from the trial start, unlike `t` in `sacc
 a `performance.now()` time, and it is reported in every trial, whether or not that trial is
 recording. It is calculated as `(time.meanCapture ?? time.capture) - (offset ?? 0)`. To get a time
 relative to some event, subtract that event's own `performance.now()` time.
+
+In deferred mode there is no live gaze: these methods return nothing, and the gaze dot stays
+hidden.
+
+### Deferred mode
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `getMode()` | `"live" \| "deferred"` | The mode in effect. |
+| `getModeDecision()` | `ModeDecision \| null` | How `mode: "auto"` decided: `embedMs` (the median time to run the model on one frame), `cameraFps`, `limitMs`, `ep` and `reason`. Has an `error` if deferred mode was chosen but its threads would not start. `null` in live mode unless `"auto"` measured and chose live. |
+| `getDeferredPending()` | `number` | Frames waiting for, or being processed by, the background threads. Always `0` in live mode. |
+| `collectGaze()` | `() => Promise<{x, y, t}[]>` | Start collecting gaze. Call the returned function to stop; it resolves with the samples, with `t` on the `performance.now()` clock. In live mode these are the samples `onGazeUpdate` delivered. In deferred mode it resolves once the frames have been processed. `saccade-validate` collects this way. |
+| `finishCalibration(onProgress?)` | `Promise<void>` | In deferred mode, `calibratePoint` queues its frames and adds the point once they have been processed. This waits for every queued point, so call it before `fitCalibration`. Resolves at once in live mode. |
+| `catchUp(options?)` | `Promise<SaccadeCatchUpResult>` | Wait for the background threads to finish every queued frame. Options: `max_wait_ms`, `save_unprocessed_crops`, `onProgress(pending, total)`. This is what [`saccade-catch-up`](plugin-catch-up) runs, and its result is that trial's data. |
 
 ### Timing correction
 

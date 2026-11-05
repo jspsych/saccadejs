@@ -209,6 +209,110 @@ export class SaccadeTracker {
   sampleLuminance() {
     return 0;
   }
+
+  /** x = e[0], y = e[1] once calibrated, so a test controls gaze through the embedding. */
+  getKernel() {
+    return this.calibrationPoints.length > 0 ? new Float32Array([1, 0, 0, 1]) : null;
+  }
+
+  getCenter() {
+    return 0;
+  }
+
+  // ---- deferred mode
+
+  deferred: StubEmbedder | null = null;
+
+  get mode(): "live" | "deferred" {
+    return this.deferred ? "deferred" : "live";
+  }
+
+  /** Overridable per test: what `measureEmbedMs()` reports. */
+  embedTiming = { ep: "webgpu" as "webgpu" | "wasm", embedMs: 10, samples: 5 };
+  cameraFps: number | null = 30;
+  /** Set to make `enableDeferred()` reject, as when no worker starts. */
+  deferredFails = false;
+
+  measureEmbedMs = jest.fn(async () => this.embedTiming);
+  measureCameraFps = jest.fn(async () => this.cameraFps);
+  enableDeferred = jest.fn(async (_opts?: { workers?: number }) => {
+    if (this.deferredFails) throw new Error("no worker started");
+    this.deferred = new StubEmbedder();
+    return this.deferred;
+  });
+
+  embedDeferred(crop: Uint8Array) {
+    if (!this.deferred) return Promise.reject(new Error("live mode"));
+    return this.deferred.submit(crop);
+  }
+}
+
+/** The worker pool, reduced to a queue a test answers by hand. */
+export class StubEmbedder {
+  owed: {
+    crop: Uint8Array;
+    resolve: (r: { embedding: Float32Array; weight: number | null }) => void;
+    reject: (e: Error) => void;
+  }[] = [];
+
+  get pending() {
+    return this.owed.length;
+  }
+
+  submit(crop: Uint8Array) {
+    return new Promise<{ embedding: Float32Array; weight: number | null }>((resolve, reject) =>
+      this.owed.push({ crop, resolve, reject }),
+    );
+  }
+
+  /** Test helper: embed every queued frame as `[x, y]`, which the stub kernel maps to gaze. */
+  answer(x: number, y: number) {
+    for (const o of this.owed.splice(0)) {
+      o.resolve({ embedding: new Float32Array([x, y]), weight: null });
+    }
+  }
+
+  drain = jest.fn(async (opts: { deadlineMs?: number | null } = {}) => {
+    if (this.owed.length === 0) return { left: 0, timedOut: false };
+    return { left: this.owed.length, timedOut: opts.deadlineMs != null };
+  });
+
+  cancel() {
+    const n = this.owed.length;
+    for (const o of this.owed.splice(0)) o.reject(new Error("cancelled"));
+    return n;
+  }
+}
+
+/** The real rule, restated: live on WebGPU within 85% of a frame (30-80 ms), else deferred. */
+export function chooseMode(m: {
+  ep: "webgpu" | "wasm";
+  embedMs: number;
+  cameraFps: number | null;
+}) {
+  const limitMs = m.cameraFps ? Math.min(80, Math.max(30, 850 / m.cameraFps)) : 30;
+  const base = { ep: m.ep, embedMs: m.embedMs, cameraFps: m.cameraFps, limitMs };
+  if (m.ep !== "webgpu")
+    return { ...base, mode: "deferred" as const, reason: "no WebGPU" as const };
+  if (!(m.embedMs <= limitMs))
+    return { ...base, mode: "deferred" as const, reason: "too slow" as const };
+  return { ...base, mode: "live" as const, reason: "fast enough" as const };
+}
+
+/** The real implementation at smoothing 1, with the stub's 2-d embeddings. */
+export function predictSeries(
+  frames: { embedding: Float32Array; time: number }[],
+  kernel: Float32Array,
+  _smoothing = 1,
+  center = 0,
+) {
+  return frames.map((f) => ({
+    gaze: {
+      x: f.embedding[0] * kernel[0] + f.embedding[1] * kernel[2] + center,
+      y: f.embedding[0] * kernel[1] + f.embedding[1] * kernel[3] + center,
+    },
+    time: f.time,
+  }));
 }
 
 export const DEFAULT_FRAME_TIMEOUT_MS = 5000;

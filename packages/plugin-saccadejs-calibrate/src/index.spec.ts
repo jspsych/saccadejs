@@ -51,6 +51,7 @@ describe("saccade-calibrate info", () => {
       "fit",
       "lambda",
       "n_points",
+      "processing_ms",
       "repetitions_per_point",
       "rt",
       "weighting",
@@ -59,6 +60,35 @@ describe("saccade-calibrate info", () => {
 });
 
 describe("saccade-calibrate trial", () => {
+  it("waits for the workers before fitting in deferred mode, and records the wait", async () => {
+    const jsPsych = setup();
+    const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
+    extension.mode = "deferred";
+    extension.deferredPending = 20;
+    const { getData, finished } = await startTimeline(
+      [{ type: SaccadeCalibratePlugin, ...FAST, calibration_points: [[50, 50]] }],
+      jsPsych,
+    );
+    await finished;
+    expect(extension.finishCalibration).toHaveBeenCalledTimes(1);
+    expect(extension.finishCalibration.mock.invocationCallOrder[0]).toBeLessThan(
+      extension.fitCalibration.mock.invocationCallOrder[0],
+    );
+    expect(typeof getData().values()[0].processing_ms).toBe("number");
+  });
+
+  it("does not wait, and records no wait, in live mode", async () => {
+    const jsPsych = setup();
+    const extension = jsPsych.extensions.saccade as unknown as StubSaccadeExtension;
+    const { getData, finished } = await startTimeline(
+      [{ type: SaccadeCalibratePlugin, ...FAST, calibration_points: [[50, 50]] }],
+      jsPsych,
+    );
+    await finished;
+    expect(extension.finishCalibration).not.toHaveBeenCalled();
+    expect(getData().values()[0].processing_ms).toBeNull();
+  });
+
   it("throws a helpful error when the extension is missing", () => {
     const plugin = new SaccadeCalibratePlugin(initJsPsych());
     expect(() => plugin.trial(document.createElement("div"), {} as any)).toThrow(

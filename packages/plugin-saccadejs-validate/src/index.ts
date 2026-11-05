@@ -81,6 +81,13 @@ const info = <const>{
       type: ParameterType.BOOL,
       default: false,
     },
+    /** Deferred mode only: shown after the last target while the background workers finish
+     * this trial's frames, with a percentage under it. On a slow machine this can take several
+     * seconds. Never shown in live mode. */
+    processing_message: {
+      type: ParameterType.HTML_STRING,
+      default: "<p>Processing. This can take a few seconds.</p>",
+    },
   },
   data: {
     /** Raw gaze data, with one nested array per validation point (in the order the points were
@@ -133,6 +140,11 @@ const info = <const>{
     median_error_viewport: {
       type: ParameterType.FLOAT,
     },
+    /** Deferred mode only: how long, in ms, the participant waited after the last target for
+     * the background workers to finish this trial's frames. `null` in live mode. */
+    processing_ms: {
+      type: ParameterType.INT,
+    },
     /** Time in milliseconds from the start of the trial until validation finished. */
     rt: {
       type: ParameterType.INT,
@@ -171,6 +183,7 @@ class SaccadeValidatePlugin implements JsPsychPlugin<Info> {
     const start_time = performance.now();
     const ui = new TargetUi(display_element, trial.point_size);
     const raw_gaze: GazeRow[][] = [];
+    let processing_ms: number | null = null;
 
     const sleep = (ms: number) =>
       new Promise<void>((resolve) => this.jsPsych.pluginAPI.setTimeout(resolve, ms));
@@ -210,6 +223,7 @@ class SaccadeValidatePlugin implements JsPsychPlugin<Info> {
         validation_points: val_points,
         median_error_px: median(errorsPx.filter((v) => Number.isFinite(v))),
         median_error_viewport: median(errorsViewport.filter((v) => Number.isFinite(v))),
+        processing_ms,
         rt: Math.round(performance.now() - start_time),
       });
     };
@@ -256,6 +270,11 @@ class SaccadeValidatePlugin implements JsPsychPlugin<Info> {
         ? this.jsPsych.randomization.shuffle(declared)
         : declared;
 
+      // In deferred mode the gaze for each point arrives once the workers have embedded its
+      // frames, so the rows are collected as promises and awaited after the last point.
+      const deferred = extension.getMode?.() === "deferred";
+      const owed: Promise<GazeRow[]>[] = [];
+
       for (const pt of val_points) {
         const { x, y } = toPixels(pt);
         const css = toCss(pt);
@@ -263,24 +282,48 @@ class SaccadeValidatePlugin implements JsPsychPlugin<Info> {
         ui.setPhase("settle", trial.time_to_saccade);
         await sleep(trial.time_to_saccade);
 
-        const rows: GazeRow[] = [];
-        const unsubscribe = extension.onGazeUpdate((prediction) => {
-          rows.push({
-            x: prediction.x,
-            y: prediction.y,
-            dx: prediction.x - x,
-            dy: prediction.y - y,
-            t: Math.round(prediction.t - start_time),
-          });
+        const toRow = (prediction: { x: number; y: number; t: number }): GazeRow => ({
+          x: prediction.x,
+          y: prediction.y,
+          dx: prediction.x - x,
+          dy: prediction.y - y,
+          t: Math.round(prediction.t - start_time),
         });
 
         ui.setPhase("capture");
+        if (deferred) {
+          const stop = extension.collectGaze();
+          await sleep(trial.validation_duration);
+          owed.push(stop().then((samples) => samples.map(toRow)));
+          continue;
+        }
+        const rows: GazeRow[] = [];
+        const unsubscribe = extension.onGazeUpdate((prediction) => rows.push(toRow(prediction)));
         await sleep(trial.validation_duration);
         unsubscribe();
         raw_gaze.push(rows);
       }
 
       ui.hide();
+      if (deferred) {
+        const waited = performance.now();
+        const total = Math.max(1, extension.getDeferredPending());
+        const render = () =>
+          ui.showMessage(
+            `${trial.processing_message}<p>${Math.round(
+              100 * Math.max(0, 1 - extension.getDeferredPending() / total),
+            )}%</p>`,
+          );
+        render();
+        const timer = setInterval(render, 100);
+        try {
+          raw_gaze.push(...(await Promise.all(owed)));
+        } finally {
+          clearInterval(timer);
+        }
+        ui.showMessage("");
+        processing_ms = Math.round(performance.now() - waited);
+      }
       if (trial.show_validation_data) await showResults(val_points);
       return val_points;
     };

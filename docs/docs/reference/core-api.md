@@ -60,7 +60,7 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `smoothingFrames` | `number` | `1` | How many frames to average into each estimate. `1` means no averaging: each estimate comes from the newest frame alone. |
 | `executionProviders` | `("webgpu" \| "wasm")[]` | `["webgpu", "wasm"]` | How to run the eye model, tried in order: on the graphics card (`"webgpu"`), then on the processor (`"wasm"`). |
 | `onFrame` | `(f: TrackerFrame) => void` | — | Equivalent to calling `onFrame()` after construction. |
-| `onProgress` | `(p: SaccadeProgress) => void` | — | Called during `init()` as each stage starts: `camera`, `mediapipe`, `landmarker`, `ort`, `model`, `session`, `ready`. The `model` stage also reports `loaded` and `total` bytes of the ONNX download, so you can show a progress bar. Equivalent to calling `onProgress()` after construction. |
+| `onProgress` | `(p: SaccadeProgress) => void` | — | Called during `init()` as each stage starts: `camera`, `mediapipe`, `landmarker`, `ort`, `model`, `session`, `ready`. `enableDeferred()` reports `deferred`, then `ready` again. The `model` stage also reports `loaded` and `total` bytes of the ONNX download, so you can show a progress bar. Equivalent to calling `onProgress()` after construction. |
 | `stream` | `MediaStream` | — | Use this camera stream instead of calling `getUserMedia`. The tracker will not stop a stream it did not open. |
 | `model` | `EmbeddingModel` | — | Use an embedding model you have already loaded, instead of loading one from `assets.modelUrl`. Mainly useful in tests. |
 | `calibrationFit` | `"frames" \| "points"` | `"frames"` | How calibration uses the frames recorded at each dot. `"frames"` uses each frame on its own. `"points"` averages each dot's frames first, which is how saccade.js calibrated up to 0.3. See [How the calibration is fit](#how-the-calibration-is-fit). |
@@ -89,10 +89,17 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `calibrated` | `boolean` (getter) | `gaze` stays `null` until this is true. |
 | `getKernel` | `(): Float32Array \| null` | The fitted coefficients (the kernel): `2 * d` numbers for an embedding of length `d`, with x and y interleaved. |
 | `getCalWeighting` | `(): CalWeighting \| null` | How the last fit weighted its rows; `null` before one has run. |
+| `getCenter` | `(): number` | The centering constant of the last fit, which `predict` needs alongside the kernel. |
 | `setSmoothingFrames` / `getSmoothingFrames` | `(n: number): void` / `(): number` | Changeable while running. |
 | `getCurrentGaze` | `(): { gaze: Gaze; time: FrameTime } \| null` | The most recent gaze estimate and its timing. |
 | `sampleLuminance` | `(): number` | Mean luminance of the current camera frame. |
 | `getModelIdentity` | `(): ModelIdentity \| null` | Which model actually ran, identified from the bytes that were loaded: its SHA-256, the published version it matched (if any), its embedding length and whether it rates frame quality. `null` before `init()`. See [The model](/models#recording-which-model-you-used). |
+| `mode` | `"live" \| "deferred"` (getter) | See [Deferred mode](#deferred-mode). |
+| `enableDeferred` / `disableDeferred` | `(opts?) => Promise<DeferredEmbedder>` / `(): void` | Switch to deferred mode and back. See [Deferred mode](#deferred-mode). |
+| `embedDeferred` | `(crop: Uint8Array) => Promise<EmbedResult>` | Deferred mode: queue one frame's `crop` for the background threads. |
+| `deferred` | `DeferredEmbedder \| null` (getter) | The background threads, in deferred mode. |
+| `measureEmbedMs` | `(): Promise<{ ep, embedMs, samples }>` | Times the live model on this computer (the median of 5 to 15 runs). Pauses the frame loop while it runs. |
+| `measureCameraFps` | `(ms = 1000): Promise<number \| null>` | Counts the camera's frames for `ms`. `null` without `requestVideoFrameCallback`. |
 
 ```ts
 interface InitResult {
@@ -246,6 +253,12 @@ interface ValidationResult {
 `runValidation` collects gaze rather than embeddings, so the tracker must already be calibrated.
 Targets that produced no gaze are reported with `NaN` errors rather than dropped.
 
+In [deferred mode](#deferred-mode), both queue their frames for the background threads and finish
+after the last target, once the threads have processed them. `runCalibration` adds the points
+then, and `runValidation` computes gaze with the calibration that was in place during the run.
+Nothing is on screen during that wait unless you put it there: give `TargetUi` a
+`processing(done, total)` function to show progress.
+
 ### Grids
 
 ```ts
@@ -323,6 +336,38 @@ Five problems throw an error rather than continue with bad numbers:
 
 The last is caught during `init()`, when the model is first run, before any participant data is
 collected.
+
+## Deferred mode
+
+For computers too slow to run the model on every frame as it arrives. The frame loop keeps doing
+what has to happen live (reading the camera, finding the face, cutting out the eye picture), and
+a pool of background threads runs the model on the pictures you submit, in the order you submit
+them. Gaze arrives late, so nothing gaze-contingent works. The
+[guide](../guides/deferred-mode) explains when to use it; this section is the API.
+
+```ts
+const decision = chooseMode({ ...(await tracker.measureEmbedMs()), cameraFps: await tracker.measureCameraFps() });
+if (decision.mode === "deferred") await tracker.enableDeferred();
+
+// Every frame now has `crop` set and `embedding` and `gaze` null.
+const owed = [];
+tracker.onFrame((f) => {
+  if (f.crop) owed.push(tracker.embedDeferred(f.crop).then((r) => ({ ...r, time: f.time.capture })));
+});
+// ... later ...
+const frames = await Promise.all(owed);
+const gaze = predictSeries(frames, tracker.getKernel(), tracker.getSmoothingFrames(), tracker.getCenter());
+```
+
+| Export | What |
+| --- | --- |
+| `tracker.enableDeferred(opts?)` | Starts the background threads, times them, and stops running the model in the frame loop. `opts`: `workers`, `maxQueue`, `createWorker`. Rejects, leaving the tracker live, if no thread starts. Reports a `deferred` progress stage while it works. |
+| `tracker.embedDeferred(crop)` | Queues a crop. Resolves with `{ embedding, weight }`, or rejects with a `DeferredFrameDropped` (its `reason` is `"queue-full"`, `"cancelled"`, `"failed"` or `"disposed"`). |
+| `chooseMode({ ep, embedMs, cameraFps })` | The rule `mode: "auto"` uses. Live needs WebGPU and an encode within 85% of a camera frame, between 30 and 80 ms (`LIVE_FRAME_SHARE`, `LIVE_FLOOR_MS`, `LIVE_CEILING_MS`). Returns a `ModeDecision`: `mode`, `reason`, `ep`, `embedMs`, `cameraFps`, `limitMs`. |
+| `predictSeries(frames, kernel, smoothingFrames?, center?)` | Gaze for a run of `{ embedding, weight, time }`, in capture order, smoothed the way the live loop smooths. Each result is `{ gaze, time }`. |
+| `recommendedWorkers()` | The default thread count: processor cores minus two, at most three (`MAX_DEFAULT_WORKERS`), and one with 4 GB of memory or less. |
+| `DeferredEmbedder` | The thread pool on its own: `init()`, `submit(crop)`, `measure()`, `drain({ deadlineMs, onProgress })`, `cancel()`, `dispose()`, and `pending`, `stats`, `latencyMs`, `throughput`. |
+| `EMBED_WORKER_SOURCE` | The thread's code. The pool starts it from a `blob:` URL; a page whose Content-Security-Policy forbids that can serve this text itself and pass `createWorker`. |
 
 ## `runLoopback`
 

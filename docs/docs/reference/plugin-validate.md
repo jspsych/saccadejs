@@ -47,6 +47,7 @@ timeline.push({ type: jsPsychSaccadeValidate });
 | `validation_duration` | `number` | `2000` | How long to record gaze at each dot, in ms. |
 | `point_size` | `number` | `20` | Diameter of the dot, in pixels. |
 | `show_validation_data` | `boolean` | `false` | At the end, show every gaze sample plotted against the dots. Useful while piloting; do not use it with real participants. |
+| `processing_message` | `string` | "Processing. This can take a few seconds." | [Deferred mode](../guides/deferred-mode) only: HTML shown after the last dot while the background threads finish this trial's frames, with a percentage under it. Never shown in live mode. |
 
 ## Data
 
@@ -57,6 +58,7 @@ timeline.push({ type: jsPsychSaccadeValidate });
 | `median_error_viewport` | `number` | **The number to report.** The typical error across dots, as a fraction of the window's diagonal. Comparable across screen sizes and shapes. |
 | `median_error_px` | `number` | The same error in pixels on this participant's screen. For each dot, the distance from the dot to the average of the gaze samples recorded there; then the median across dots. |
 | `samples_per_sec` | `number` | The average number of gaze samples per second while recording. |
+| `processing_ms` | `number \| null` | [Deferred mode](../guides/deferred-mode) only: how long the participant waited after the last dot for the frames to be processed. `null` in live mode. |
 | `rt` | `number` | Milliseconds from the start of the trial to the end of validation. |
 
 **Per dot:** each of these is an array with one entry per dot, in the order the dots were shown.
