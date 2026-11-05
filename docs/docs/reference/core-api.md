@@ -349,14 +349,18 @@ them. Gaze arrives late, so nothing gaze-contingent works. The
 const decision = chooseMode({ ...(await tracker.measureEmbedMs()), cameraFps: await tracker.measureCameraFps() });
 if (decision.mode === "deferred") await tracker.enableDeferred();
 
-// Every frame now has `crop` set and `embedding` and `gaze` null.
-const owed = [];
+// Frames with a face now carry `crop`; `embedding` and `gaze` are null.
+const owed: Promise<TimedEmbedding>[] = [];
 tracker.onFrame((f) => {
   if (f.crop) owed.push(tracker.embedDeferred(f.crop).then((r) => ({ ...r, time: f.time.capture })));
 });
-// ... later ...
-const frames = await Promise.all(owed);
-const gaze = predictSeries(frames, tracker.getKernel(), tracker.getSmoothingFrames(), tracker.getCenter());
+// ... later, once the tracker is calibrated ...
+// A frame can be dropped (a full queue, a failed thread), so keep the ones that arrived.
+const settled = await Promise.allSettled(owed);
+const frames = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
+const kernel = tracker.getKernel();
+if (!kernel) throw new Error("Calibrate before predicting");
+const gaze = predictSeries(frames, kernel, tracker.getSmoothingFrames(), tracker.getCenter());
 ```
 
 | Export | What |
@@ -377,7 +381,8 @@ runLoopback(tracker: SaccadeTracker, opts?: LoopbackOptions): Promise<LoopbackRe
 
 Measures the delay from a change on the screen to that change appearing in the camera: the
 monitor's delay and the camera's delay, as one number. It does this by switching the page
-between dark and light at random moments while the camera watches the screen.
+between dark and light at random moments while the camera records the light it throws on the
+participant's face.
 [How it works](../guides/how-it-works#measuring-the-screen-to-camera-delay) describes the method.
 This is what the [`saccade-time-sync`](plugin-time-sync) plugin runs.
 
@@ -431,7 +436,7 @@ interface SaccadeAssets {
   ortWasmUrl?: string;           // directory URL for onnxruntime-web's .wasm/.mjs
   mediapipeWasmUrl?: string;     // directory URL for @mediapipe/tasks-vision wasm
   faceLandmarkerUrl?: string;    // face_landmarker.task
-  ortModuleUrl?: string;         // script-tag build only
+  ortModuleUrl?: string;         // script-tag build, and deferred mode's threads in every build
   mediapipeModuleUrl?: string;   // script-tag build only
 }
 ```

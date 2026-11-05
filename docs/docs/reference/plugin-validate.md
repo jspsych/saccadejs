@@ -55,8 +55,8 @@ timeline.push({ type: jsPsychSaccadeValidate });
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `median_error_viewport` | `number` | **The number to report.** The typical error across dots, as a fraction of the window's diagonal. Comparable across screen sizes and shapes. |
-| `median_error_px` | `number` | The same error in pixels on this participant's screen. For each dot, the distance from the dot to the average of the gaze samples recorded there; then the median across dots. |
+| `median_error_viewport` | `number \| null` | **The number to report.** The typical error across dots, as a fraction of the window's diagonal. Comparable across screen sizes and shapes. `null` if no gaze was recorded at any dot. |
+| `median_error_px` | `number \| null` | The same error in pixels on this participant's screen. For each dot, the distance from the dot to the average of the gaze samples recorded there; then the median across dots. |
 | `samples_per_sec` | `number` | The average number of gaze samples per second while recording. |
 | `processing_ms` | `number \| null` | [Deferred mode](../guides/deferred-mode) only: how long the participant waited after the last dot for the frames to be processed. `null` in live mode. |
 | `rt` | `number` | Milliseconds from the start of the trial to the end of validation. |
@@ -90,7 +90,8 @@ const recalibrateIfBad = {
   timeline: [{ type: jsPsychSaccadeCalibrate }, validate],
   conditional_function: () => {
     const last = jsPsych.data.get().filter({ trial_type: "saccade-validate" }).last(1).values()[0];
-    return last.median_error_viewport > maxError;
+    // `null` means nothing was recorded, which should also get a second attempt.
+    return last.median_error_viewport === null || last.median_error_viewport > maxError;
   },
 };
 

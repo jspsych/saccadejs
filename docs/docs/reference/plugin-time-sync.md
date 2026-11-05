@@ -15,7 +15,8 @@ use the result.
 
 **What the participant sees:** the whole screen switches between black and white (or dark and
 light gray) at random moments, every half second to a second, for fifteen seconds. The camera
-watches the screen while this happens. The screen changes at most twice a second, which is under
+watches the participant's face, which gets brighter and darker with the screen. The camera does
+not need to see the screen itself. The screen changes at most twice a second, which is under
 the limit of three flashes a second that web accessibility guidelines (WCAG) set to protect people
 with photosensitive epilepsy.
 
@@ -99,7 +100,7 @@ timeline.push({
   instructions: `
     <h3>One quick screen test</h3>
     <p>For the next twenty seconds the background will change between dark and light every
-    second or so, while your camera watches the screen.</p>
+    second or so. Please keep looking at the screen.</p>
     <p>This measures how long your screen and camera take to respond, so that we can line up
     what you looked at with when it appeared.</p>`,
 });

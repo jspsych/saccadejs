@@ -39,7 +39,7 @@ npm install @saccadejs/core @saccadejs/extension @saccadejs/plugin-validate
       roi_radius: 200,
       on_finish: (data) => {
         // flag a poor fit; 0.1 is a placeholder, so set it from your own pilot data
-        data.recalibrate = data.median_error_viewport > 0.1;
+        data.recalibrate = data.median_error_viewport === null || data.median_error_viewport > 0.1;
       },
     },
   ]);

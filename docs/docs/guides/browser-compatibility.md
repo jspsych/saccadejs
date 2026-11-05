@@ -28,8 +28,8 @@ feature is missing.
 | Camera access (`getUserMedia`) on a secure page | Everything | Nothing works |
 | WebAssembly | Running the face finder and the eye model | Nothing works |
 | WebGL | Reading camera frames into the face finder, and running it on the graphics card | With WebGL 1 or software WebGL, the face finder runs on the processor, more slowly. With no WebGL at all, nothing works, and the tracker stops with a `WebGLUnavailableError` |
-| WebGPU | Running the eye model on the graphics card | The eye model runs on the processor instead, much more slowly |
-| Camera frame callbacks (`requestVideoFrameCallback`) | Processing each camera frame as it arrives, and knowing when it arrived | Frames are timestamped when processing finishes, not when they were captured |
+| WebGPU | Running the eye model on the graphics card | The eye model runs on the processor instead, much more slowly. With `mode: "auto"`, saccade.js switches to [deferred mode](deferred-mode) |
+| Camera frame callbacks (`requestVideoFrameCallback`) | Processing each camera frame as it arrives, and knowing when it arrived | Frames are timestamped at the next screen refresh, not when they were captured |
 | Capture timestamps (`captureTime`) | Knowing when each frame was captured, which the timing correction relies on | The timing correction is not a real measurement |
 
 Every current browser has camera access, WebAssembly and WebGL. WebGL can be switched off,
@@ -49,13 +49,19 @@ The other three features are covered below, most important first.
 
 WebGPU lets a web page use the computer's graphics card for heavy calculations. saccade.js tries
 to run the eye model with WebGPU first. If it is not available, it quietly uses WebAssembly
-instead, which runs on the main processor. That works, but more slowly, so the participant's
-computer produces fewer gaze estimates per second. How much slower depends on the computer; the
-[`saccade-performance`](../reference/plugin-performance) trial measures it.
+instead, which runs on the main processor. That works, but more slowly. What that costs depends
+on the extension's `mode` setting:
+
+- With `mode: "live"` (the default), the participant's computer produces fewer gaze estimates per
+  second. How much slower depends on the computer; the
+  [`saccade-performance`](../reference/plugin-performance) trial measures it.
+- With `mode: "auto"`, a computer without WebGPU runs in [deferred mode](deferred-mode): gaze
+  keeps the camera's full rate, but arrives after the trial instead of during it, and nothing
+  gaze-contingent works.
 
 | Browser | WebGPU available |
 | --- | --- |
-| Chrome, Edge 113+ | On all platforms |
+| Chrome, Edge | On Windows, macOS and ChromeOS from 113. On Android from 121. On Linux, depending on the version and graphics card |
 | Safari 26+ | On macOS 26 and iOS 26 |
 | Firefox 141+ | On Windows. On Apple Silicon Macs from Firefox 145. Not yet on Linux, Android, or Intel Macs |
 
@@ -75,10 +81,10 @@ delivers a new frame, and when. It has been available in all major browsers sinc
 | Safari | 15.4 |
 | Firefox | 132 |
 
-In an older browser without it, saccade.js checks for new frames once per screen refresh instead,
-and stamps each gaze sample with the time processing _finished_. That is later than when the
-frame was captured, and later than when the screen changed. The data records this as `clock:
-"callback"`.
+In an older browser without it, saccade.js processes whatever frame the video is showing once per
+screen refresh instead, and stamps each gaze sample with the time of that refresh. That is later
+than when the frame was captured, and the same frame can be processed twice. The data records this
+as `clock: "callback"`.
 
 ## Capture timestamps
 
@@ -97,7 +103,8 @@ This matters less than it sounds. The [`saccade-time-sync`](../reference/plugin-
 does not rely on what the browser claims. It measures the whole delay directly, from a change on
 the screen to that change showing up in a camera frame. Whatever the browser adds to the
 timestamp is measured along with everything else and subtracted with it. In Safari the measured
-lag will simply be larger.
+lag will simply be larger. A browser that reports only when the frame arrived records `clock:
+"receiveTime"`, which the time-sync measurement corrects in the same way.
 
 What _would_ break the correction is a delay that keeps changing, and the time-sync trial already
 catches that: it reports an `UNRELIABLE` verdict, whatever the browser. The case to watch for is
@@ -111,15 +118,19 @@ Every run records what it actually got. These are the fields to look at:
 | Trial | Field | Warning sign |
 | --- | --- | --- |
 | [`saccade-preview`](../reference/plugin-preview) | `backend` | `"wasm"`: the model ran on the slower path |
+| Any trial | `saccade_mode` | `"deferred"`: gaze was computed after the trial, not during it |
 | [`saccade-performance`](../reference/plugin-performance) | `fps_median` | A low number, whatever the browser |
 | Any trial that records gaze | `saccade_timing.clock` | `"callback"`: no real capture times |
 | [`saccade-time-sync`](../reference/plugin-time-sync) | `verdict`, `clock_source` | `"UNRELIABLE"`, `"callback"` |
 
 For deciding who takes part, a minimum frame rate in `saccade-performance` works better than a
-browser check, because it tests what you actually care about. A slow laptop running Chrome can be
+browser check, because it tests what you actually care about. This holds in live mode only. In
+deferred mode the frame loop does not run the model, so the frame rate looks healthy on exactly
+the slow computers that were sent there; see
+[the performance trial in deferred mode](../reference/plugin-performance#in-deferred-mode). A slow laptop running Chrome can be
 too slow for your study while a fast desktop running Firefox is fine. The
 [timing guide](timing-and-synchrony#deciding-which-trials-to-exclude) shows an exclusion rule
 that checks the timing and the frame rate together.
 
-If you do collect data in Firefox or Safari, look at `backend`, `clock` and `fps_median` before
-you rely on the timestamps.
+If you do collect data in Firefox or Safari, look at `backend`, `saccade_mode`, `clock` and
+`fps_median` before you rely on the timestamps.

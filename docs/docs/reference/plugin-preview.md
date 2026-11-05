@@ -119,9 +119,12 @@ exclude participants, in your analysis.
 
 Before the camera image appears, the trial shows a progress bar that steps through each part of
 loading, in order: camera permission, MediaPipe (the face finder's software), the face finder
-model, onnxruntime-web (the eye model's software), the eye model, and a warm-up run. Only the eye
-model download reports its size, so it is the only stage where the bar moves smoothly, for example
-`Downloading eye model 12.3 / 20.6 MB`. The other stages move the bar forward as each one finishes.
+model, onnxruntime-web (the eye model's software), the eye model, and a warm-up run. In
+[deferred mode](../guides/deferred-mode) one more stage follows, labelled `Your computer needs a
+little longer to get ready`, while the background threads start. Only the eye model download
+reports its size, so it is the only stage where the bar moves smoothly, for example
+`Downloading the eye tracker (12.3 of 20.6 MB)…`. The other stages move the bar forward as each one
+finishes.
 
 The progress comes from the extension's `onSetupProgress`, if you want to build your own loading
 screen.

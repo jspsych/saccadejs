@@ -9,7 +9,7 @@ description: What saccade.js downloads at run time, and how to serve it yourself
 
 When a participant starts your experiment, their browser downloads four sets of files that
 saccade.js needs: the eye model and the software that runs it, plus Google's face finder and the
-software that runs that. It adds up to about 25 MB on a first visit. After that the browser keeps
+software that runs that. It adds up to about 30 MB on a first visit. After that the browser keeps
 a copy.
 
 By default these files come from public servers (content delivery networks, or CDNs). That is fine
@@ -21,10 +21,10 @@ study partway through collection.
 
 | File | Size | Where it comes from by default | Setting to change it |
 | --- | --- | --- | --- |
-| `eye_embedding.onnx`, the eye model | ~20 MB | Bundled with your experiment if you use npm and a bundler; otherwise the jsDelivr CDN | `modelUrl` |
+| `eye_embedding.onnx`, the eye model | ~20 MB | The copy published with your version of `@saccadejs/core`: from the CDN that served the `<script>` tag (unpkg or jsDelivr), or from jsDelivr if you use a bundler. A bundler does not bundle the model | `modelUrl` |
 | onnxruntime-web, which runs the eye model (`.wasm` and `.mjs` files) | a few MB | jsDelivr | `ortWasmUrl` (a folder) |
 | MediaPipe, which runs the face finder (`.wasm` files) | ~3 MB | jsDelivr | `mediapipeWasmUrl` (a folder) |
-| `face_landmarker.task`, the face finder model | ~3 MB | Google's servers | `faceLandmarkerUrl` |
+| `face_landmarker.task`, the face finder model | ~4 MB | Google's servers | `faceLandmarkerUrl` |
 
 ## Serving the files yourself
 
@@ -47,8 +47,12 @@ cp node_modules/onnxruntime-web/dist/*.wasm node_modules/onnxruntime-web/dist/*.
 cp -r node_modules/@mediapipe/tasks-vision/wasm public/assets/mediapipe/
 # The face finder model
 curl -o public/assets/face_landmarker.task \
-  https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
+  https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 ```
+
+By default saccade.js loads the face finder from Google's `latest` address, which Google could
+point at a new model. The command above downloads version `1` by its own address (today the two
+are the same file), so your copy cannot change under you.
 
 **2. Point saccade.js at them.** Pass the locations when you register the extension:
 
@@ -87,7 +91,9 @@ sign.
 **Two more settings you probably do not need.** `ortModuleUrl` and `mediapipeModuleUrl` exist for
 experiments loaded with `<script>` tags, which have to load each piece of software from a URL.
 `ortModuleUrl` defaults to the right file inside `ortWasmUrl`, so the example above does not need
-either. If you use a bundler, both are ignored.
+either. If you use a bundler, `mediapipeModuleUrl` is ignored, but `ortModuleUrl` is still used by
+the background threads of [deferred mode](deferred-mode#hosting), which cannot reach the bundled
+copy.
 
 ## Server settings
 
@@ -107,8 +113,11 @@ Most web servers handle these correctly already. If something does not load, che
   rather than every time the page loads.
 - **Do not add `Cross-Origin-Opener-Policy` or `Cross-Origin-Embedder-Policy` headers.** These
   headers are what let a page run WebAssembly on several threads at once. saccade.js deliberately
-  runs the model on a single thread, so it never needs them. They will not make it
-  faster, and they can break other parts of your page.
+  runs each copy of the model on a single thread (in deferred mode, several copies in separate
+  background threads), so it never needs them. They will not make it faster, and they can break
+  other parts of your page.
+- **If your page sets a Content-Security-Policy, allow `worker-src blob:`.** Deferred mode starts
+  its background threads from `blob:` URLs.
 
 ## Checking that it works
 

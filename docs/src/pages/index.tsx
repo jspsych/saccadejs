@@ -270,6 +270,11 @@ const PACKAGES = [
     to: "/reference/plugin-validate",
     what: "Measures how accurate the calibration is.",
   },
+  {
+    name: "@saccadejs/plugin-catch-up",
+    to: "/reference/plugin-catch-up",
+    what: "In deferred mode, waits for gaze to finish processing before the data is saved.",
+  },
 ];
 
 const REQUIREMENTS = [
@@ -284,7 +289,7 @@ const REQUIREMENTS = [
       "in the browser, so the tracker can use the graphics card. Without it, the tracker still runs, but more slowly.",
   },
   {
-    what: "About 25 MB",
+    what: "About 30 MB",
     detail:
       "downloaded on a participant's first visit, cached by the browser afterwards.",
   },
