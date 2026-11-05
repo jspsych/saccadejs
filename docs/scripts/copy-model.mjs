@@ -16,7 +16,7 @@
  *
  * Layout in `packages/core/models/`: the current model sits at the top level as
  * `eye_embedding.onnx`, because `packageModelUrl()` in assets.ts resolves exactly that path
- * for bundler users. Superseded versions move into `<version>/eye_embedding.onnx`, and each
+ * when core is loaded from a CDN, and the jsDelivr fallback fetches it for everyone else. Superseded versions move into `<version>/eye_embedding.onnx`, and each
  * release's `file` in releases.json names wherever its bytes actually live. So a new release
  * means: move the outgoing model down into its version directory, drop the new one at the
  * top level, and update both `file` fields. Forget either and this script fails loudly on a
