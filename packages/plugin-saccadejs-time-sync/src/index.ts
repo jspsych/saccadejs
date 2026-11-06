@@ -124,7 +124,7 @@ const info = <const>{
     plateau_width_ms: {
       type: ParameterType.FLOAT,
     },
-    /** Peak of the edge-difference statistic, between 0 and 1. Values below 0.5 mean the camera
+    /** Peak of the edge-difference statistic, between 0 and 1. Values below 0.6 mean the camera
      * never really saw the screen change and the estimate should not be trusted. */
     peak_d: {
       type: ParameterType.FLOAT,

@@ -96,7 +96,7 @@ If the measurement threw (no camera, for instance), every field is `null` except
 
 | Verdict          | Meaning                                                                                                                                                                                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"OK"`           | The estimate is well constrained: a strong edge signal (`peak_d ≥ 0.5`), a plateau no wider than one camera frame (≤ 34 ms), and the two halves of the run agreeing.                                                                                          |
+| `"OK"`           | The estimate is well constrained: a strong edge signal (`peak_d ≥ 0.6`), a plateau no wider than one camera frame (≤ 34 ms), and the two halves of the run agreeing.                                                                                          |
 | `"INCONCLUSIVE"` | There was nothing to estimate from: no usable camera samples, or fewer than two luminance edges.                                                                                                                                                              |
 | `"UNRELIABLE"`   | An estimate exists but fails at least one of the checks above: a weak edge signal, a plateau wider than a camera frame, or halves that disagree (or too few camera samples to compare them). `reason` says which. `lag_ms` from such a run cannot be trusted. |
 
