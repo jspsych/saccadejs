@@ -105,7 +105,7 @@ function Hero(): React.ReactElement {
               Each participant follows a dot for about twenty seconds to
               calibrate, then a second set of dots measures how accurate the
               tracker is for them. All the processing happens in the
-              participant's browser: no video leaves their computer.
+              participant's browser, and no video leaves their computer.
             </p>
           </div>
         </div>
@@ -172,10 +172,10 @@ function Features(): React.ReactElement {
           <GridIcon className={styles.featureIcon} />
           <h2 className={styles.featureTitle}>Calibration and validation</h2>
           <p className={styles.featureBody}>
-            Calibration takes about twenty seconds, with thirteen dots. A
-            second set of nine dots, mostly in new positions, then measures the
-            typical error as a fraction of the screen, so accuracy can be
-            compared across participants with different screens.
+            The participant looks at thirteen dots, which takes about twenty
+            seconds. Nine more dots, mostly in new positions, then measure the
+            typical error as a fraction of the screen, so you can compare
+            accuracy across participants with different screens.
           </p>
         </div>
         <div>
@@ -200,7 +200,7 @@ const TIMELINE_SAMPLE = `const jsPsych = initJsPsych({
 jsPsych.run([
   { type: jsPsychSaccadePreview },     // camera and model
   { type: jsPsychSaccadeCalibrate },   // 13 points
-  { type: jsPsychSaccadeValidate },    // 9 held-out points
+  { type: jsPsychSaccadeValidate },    // 9 points to check accuracy
   {
     type: jsPsychHtmlKeyboardResponse,
     stimulus: '<img id="face" src="face.png">',

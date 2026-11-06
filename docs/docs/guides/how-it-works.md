@@ -7,132 +7,126 @@ description: The pipeline from a camera frame to a point on the screen, in one p
 
 # How it works
 
-You do not need this page to use saccade.js. It is for when you are writing the methods section
-of a paper, or trying to understand why the tracker is behaving the way it is.
+You do not need this page to use saccade.js. Read it when you are writing the methods section of a
+paper, or when you want to understand why the tracker behaves the way it does.
 
-The short version: a model that was trained once, in advance, turns a picture of the eyes into a
-list of numbers describing how the eyes look. Calibration then learns, for this one participant,
-how those numbers relate to positions on their screen.
+In brief, a model trained once, in advance, turns a picture of the eyes into a list of numbers
+that describe how the eyes look. Calibration then learns how those numbers map onto positions on
+this participant's screen.
 
 ## From a camera frame to a point on the screen
 
-Each camera frame goes through the same six steps. Technical terms you may want for a methods
-section are in parentheses.
+Every camera frame goes through the same six steps. Terms you may want for a methods section
+appear in parentheses.
 
 1. **The camera captures a frame.** Along with the image, the browser reports when it thinks the
-   camera captured it (`captureTime`). That time is what gaze samples are stamped with.
+   camera captured it (`captureTime`). saccade.js stamps gaze samples with this time.
 
 2. **Find the face.** Google's MediaPipe Face Landmarker looks for one face and marks 478 points on
    it (landmarks). saccade.js uses only the points around the eyes, and only to decide where to
-   cut the image. If no face is found, that frame produces no gaze estimate. This is why a gap in
-   `saccade_data` means something: the participant blinked, looked away, or left the frame.
+   cut the image. A frame with no face produces no gaze estimate, so a gap in `saccade_data`
+   tells you something: the participant blinked, looked away, or left the frame.
 
-3. **Cut out the eyes.** The frame is cropped to a single strip covering both eyes, shrunk to
-   converted to grayscale, and shrunk to 144 × 36 pixels. Its contrast is then adjusted region by region
-   (CLAHE, contrast-limited adaptive histogram equalization), which evens out differences in
-   lighting between rooms. This small strip is the only thing the model ever sees. Color and the
-   rest of the face are thrown away.
+3. **Cut out the eyes.** saccade.js crops the frame to a single strip covering both eyes, converts
+   it to grayscale, and shrinks it to 144 × 36 pixels. It then adjusts the contrast region by
+   region (CLAHE, contrast-limited adaptive histogram equalization) to even out differences in
+   lighting between rooms. The model sees only this small strip. Color and the rest of the face
+   are thrown away.
 
    Contrast adjustment cannot restore detail the camera never captured. If a lamp behind the
-   participant leaves their eyes in shadow, the strip will be dark and noisy no matter what.
+   participant leaves their eyes in shadow, the strip will be dark and noisy.
 
-4. **Describe the eyes as numbers.** The strip goes through a small neural network (a
-   convolutional network, about 20 MB, in ONNX format). The network returns 128 numbers that
-   together describe how the eyes look in this frame (an embedding). It also returns one more
-   number between 0 and 1 that rates how usable the frame is. A frame caught mid-blink, for
-   example, gets a low rating.
+4. **Describe the eyes as numbers.** A small neural network (a convolutional network, about 20 MB,
+   in ONNX format) reads the strip and returns 128 numbers that together describe how the eyes
+   look in this frame (an embedding). It also returns a usability rating between 0 and 1. A frame
+   caught mid-blink, for example, gets a low rating.
 
-   This network was trained once, on a large collection of webcam images, and is identical for
-   every participant. Nothing about it is learned in the participant's browser. It runs on the
-   graphics card when the browser allows it (WebGPU) and on the processor otherwise
-   (WebAssembly), which is slower.
+   The network was trained once, on a large collection of webcam images, and is the same for
+   every participant. It learns nothing in the participant's browser. It runs on the graphics
+   card when the browser allows it (WebGPU) and on the slower processor otherwise (WebAssembly).
 
    In [deferred mode](deferred-mode), this step runs later, in background threads on the
-   processor, while the experiment carries on; steps 5 and 6 then run once it finishes. The
+   processor, while the experiment carries on. Steps 5 and 6 run once it finishes. The
    `saccade_mode` column records which mode a trial used.
 
-5. **Optionally, average a few frames.** A single frame's estimate can be jumpy. saccade.js can
-   average the numbers from the last few frames before making an estimate, which is steadier.
-   Frames are weighted by their usability rating, so a blink contributes little instead of
-   dragging the estimate with it. The `smoothing_frames` setting controls how many frames are
-   averaged. It is 1 by default, meaning no averaging. If you raise it, each estimate is stamped
-   with the average capture time of the frames it came from, so estimates lag slightly behind
-   what the participant is doing.
+5. **Optionally, average a few frames.** A single frame's estimate can be jumpy, so saccade.js can
+   average the numbers from the last few frames to steady it. Each frame counts in proportion to
+   its usability rating, so a blink barely moves the estimate. The `smoothing_frames` setting
+   controls how many frames go into the average. The default, 1, means no averaging. If you raise
+   it, each estimate is stamped with the average capture time of its frames, and estimates lag
+   slightly behind the participant's eyes.
 
 6. **Turn the numbers into a screen position.** A linear equation, fitted to this participant
    during calibration, converts the 128 numbers into an `x` and a `y` on the screen (ridge
-   regression). This equation is the only part of the system that is specific to the participant.
-   Because it is so simple to fit, calibration takes about twenty seconds rather than minutes.
+   regression). This equation is the only part of the system specific to the participant. It is
+   quick to fit, which is why calibration takes about twenty seconds instead of minutes.
 
 ## Calibration and validation
 
-**Calibration** is how step 6 gets fitted. saccade.js shows a dot, waits one second for the
-participant's eyes to reach it, then records the eye numbers for half a second. Every frame
-recorded there, paired with the dot's position, becomes one example. The default is thirteen
-dots, so a few hundred examples at 30 frames a second. Because the frames of one dot differ
-while the gaze position does not, they also show the fit which differences in the numbers are
-noise.
+**Calibration** fits the equation in step 6. saccade.js shows a dot, waits one second for the
+participant's eyes to reach it, then records the eye numbers for half a second. Each frame
+recorded, paired with the dot's position, becomes one example. The default thirteen dots at 30
+frames a second give a few hundred examples. The frames for one dot all share a gaze position, so
+whatever differs between them is noise, and the fit learns to ignore it.
 
-The frame usability rating sets how much each frame counts toward the fit. A frame caught
-mid-blink counts for less than a clean one. The calibration trial records whether this weighting
-was used in a `weighting` column. Report it: a weighted fit and an unweighted fit are different
-analyses, and nothing else in the data tells them apart.
+The usability rating sets how much each frame counts toward the fit: a frame caught mid-blink
+counts for less than a clean one. The calibration trial records whether it used this weighting in
+a `weighting` column. Report it, because a weighted fit and an unweighted fit are different
+analyses and nothing else in the data tells them apart.
 
-A note on the fitting. The equation has 128 coefficients for each of `x` and `y`, one per number
-the model produces, but the examples come from only about a dozen dots. Fitted naively, it would
-match those dots perfectly and predict everything else badly. Ridge regression adds a penalty
-that keeps the coefficients small and prevents this. The penalty is fixed at 3 unless you set
-`lambda` yourself.
+The equation has 128 coefficients for each of `x` and `y`, one per number the model produces, but
+the examples come from only about a dozen dots. An ordinary least-squares fit would match those
+dots perfectly and predict everything else badly. Ridge regression prevents this by adding a
+penalty that keeps the coefficients small. The penalty is 3 unless you set `lambda` yourself.
 
-Earlier versions (`@saccadejs/core` before 0.4.0) averaged each dot's frames into a single example instead. That
-fit is still available as `fit: "points"`, for reproducing earlier data. The calibration trial
-records which one ran in a `fit` column; report it alongside `weighting`.
+Before version 0.4.0, `@saccadejs/core` averaged each dot's frames into a single example. That fit
+is still available as `fit: "points"`, for reproducing earlier data. The calibration trial records
+which fit ran in a `fit` column. Report it alongside `weighting`.
 
-**Validation** checks the result on a second set of nine dots, set in from the edges of the
-screen. Eight of the nine are in positions calibration did not use; the ninth is the center of
-the screen. Using new positions matters. Measured on the calibration dots themselves, the error
-would show how well the equation fits the examples it was built from, which always looks better
-than how well it works on new ones. The error on the validation dots is the number to report.
+**Validation** checks the result on a second set of nine dots, set in from the edges of the screen.
+Eight of them sit where calibration never put a dot, and the ninth is at the center. The new
+positions matter. Error measured on the calibration dots shows how well the equation fits the
+examples it was built from, which always looks better than how it does on new ones. Report the
+error on the validation dots.
 
 ## Measuring the screen-to-camera delay
 
-The timestamp on a camera frame is not the moment the image on screen changed. Between the two
-there is the time the monitor takes to show a new image, and the time the camera takes to capture
-and deliver a frame. Neither is visible to JavaScript.
+A camera frame's timestamp lags behind the moment the screen changed. The monitor takes time to
+show a new image, and the camera takes time to capture and deliver a frame. JavaScript can see
+neither.
 
-The `saccade-time-sync` trial measures the two together, like this:
+The `saccade-time-sync` trial measures the two together:
 
-1. For fifteen seconds, the page switches between black and white at random moments, with at
-   least half a second between switches.
-2. saccade.js records the exact time of each switch.
-3. At the same time, the camera watches the participant, whose face and surroundings get brighter
-   and darker with the screen. saccade.js records how bright each camera frame is and when it was
-   captured.
+1. For fifteen seconds, the page switches between black and white at random moments, at least half
+   a second apart.
+2. saccade.js records the time of each switch.
+3. Meanwhile, the participant's face and surroundings brighten and darken with the screen.
+   saccade.js records how bright each camera frame is and when the camera captured it.
 4. The delay is the time shift that best lines up the switches with the jumps in brightness.
 
-Because the camera only takes a picture every 33 ms or so, any delay within that window lines up
-equally well. saccade.js reports the middle of the window as the delay, the width of the window as
-its uncertainty, and a verdict on whether the measurement was trustworthy.
+The camera takes a picture only every 33 ms or so, so any delay within that window lines up
+equally well. saccade.js reports the middle of the window as the delay, the window's width as its
+uncertainty, and a verdict on whether to trust the measurement.
 
-The switches come at random times for a reason. At a steady rate, each switch would land at the
-same point in the camera's own rhythm, and the error would pile up in the same direction every
-time. The minimum gap also means the screen changes at most twice a second, under the limit of
-three flashes a second that web accessibility guidelines (WCAG) set to protect people with
-photosensitive epilepsy.
+The switches come at random times on purpose. At a steady rate, every switch would land at the
+same point in the camera's rhythm, and the error would pile up in one direction. The half-second
+minimum gap keeps the screen to at most two changes a second, under the limit of three flashes a
+second that the web accessibility guidelines (WCAG) set to protect people with photosensitive
+epilepsy.
 
 ## What limits accuracy
 
-These limits follow from how the method works. How much accuracy each one costs has not been
-measured.
+These limits follow from how the method works. Nobody has yet measured how much accuracy each one
+costs.
 
-1. **Moving the head after calibration.** The equation fitted in calibration assumes the head is
-   where it was during calibration. Leaning in or turning away changes how the eyes look for the
-   same point on the screen.
-2. **Lighting.** The model sees only the eye strip. Anything that leaves it dark, such as a window
-   or lamp behind the participant, removes what the model has to work with.
+1. **Moving the head after calibration.** The calibration equation assumes the head stays where it
+   was during calibration. Leaning in or turning changes how the eyes look for the same point on
+   the screen.
+2. **Lighting.** The model sees only the eye strip. A window or lamp behind the participant that
+   leaves the eyes dark removes what the model needs.
 3. **Glasses.** Reflections on lenses can hide the eyes at some head angles.
 4. **Camera frame rate.** The tracker produces at most one estimate per camera frame. At 30 frames
-   per second that is one every 33 ms, so no event can be timed more finely than that.
+   per second that is one every 33 ms, so you cannot time an event more finely than that.
 
-Because these vary from participant to participant, measure accuracy for every participant with
+These vary from participant to participant, so measure accuracy for every participant with
 [`saccade-validate`](../reference/plugin-validate) and report the distribution across your sample.

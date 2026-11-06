@@ -131,7 +131,7 @@ const CALIBRATE_INSTRUCTIONS = instructions(
 
 const VALIDATE_INSTRUCTIONS = instructions(
   "Accuracy check",
-  `<p>Look at each of nine new dots, just as before. Afterwards you'll see where the tracker
+  `<p>Look at each of nine more dots, just as before. Afterwards you'll see where the tracker
   thought you were looking.</p>`,
 );
 
@@ -993,7 +993,7 @@ function Menu({
         <Card
           title="Accuracy check"
           cost="about 40 seconds"
-          blurb="Nine new dots measure how far off the tracker is."
+          blurb="Nine more dots measure how far off the tracker is."
           result={
             validation ? (
               <>

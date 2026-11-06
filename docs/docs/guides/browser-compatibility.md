@@ -14,12 +14,9 @@ description: The browser features saccade.js depends on, which browsers have the
   have not yet been tested with a real webcam and checked against known results, so treat them as
   _untested_ rather than unsupported.
 - saccade.js does not check which browser it is in. The one feature it refuses to run without is
-  WebGL (see below). Any other missing feature makes it slower, or its timestamps less precise,
+  WebGL (see below). Any other missing feature makes it slower or its timestamps less precise,
   and **it does not warn you** when that happens. So check the data each participant produces
   rather than their browser name. The last section of this page shows how.
-
-The rest of this page explains what saccade.js needs from a browser, and what happens when a
-feature is missing.
 
 ## What saccade.js needs
 
@@ -30,7 +27,7 @@ feature is missing.
 | WebGL | Reading camera frames into the face finder, and running it on the graphics card | With WebGL 1 or software WebGL, the face finder runs on the processor, more slowly. With no WebGL at all, nothing works, and the tracker stops with a `WebGLUnavailableError` |
 | WebGPU | Running the eye model on the graphics card | The eye model runs on the processor instead, much more slowly. With `mode: "auto"`, saccade.js switches to [deferred mode](deferred-mode) |
 | Camera frame callbacks (`requestVideoFrameCallback`) | Processing each camera frame as it arrives, and knowing when it arrived | Frames are timestamped at the next screen refresh, not when they were captured |
-| Capture timestamps (`captureTime`) | Knowing when each frame was captured, which the timing correction relies on | The timing correction is not a real measurement |
+| Capture timestamps (`captureTime`) | Knowing when each frame was captured, which the timing correction relies on | Frames are stamped when they arrive (`receiveTime`), which the timing correction still accounts for. With neither timestamp, frames are stamped at the next screen refresh, and the timing correction is no longer a real measurement |
 
 Every current browser has camera access, WebAssembly and WebGL. WebGL can be switched off,
 though. If a participant has turned off hardware acceleration in their browser's settings, or the
@@ -43,14 +40,12 @@ stops with a `WebGLUnavailableError`. The preview trial tells the participant wh
 screen these participants out before you ask for the camera, call `webglAvailable()` from the
 [core API](../reference/core-api#lower-level-exports).
 
-The other three features are covered below, most important first.
-
 ## WebGPU: the difference that matters most
 
 WebGPU lets a web page use the computer's graphics card for heavy calculations. saccade.js tries
-to run the eye model with WebGPU first. If it is not available, it quietly uses WebAssembly
-instead, which runs on the main processor. That works, but more slowly. What that costs depends
-on the extension's `mode` setting:
+to run the eye model with WebGPU first. If WebGPU is not available, it quietly falls back to
+WebAssembly, which runs on the main processor and is slower. What that costs you depends on the
+extension's `mode` setting:
 
 - With `mode: "live"` (the default), the participant's computer produces fewer gaze estimates per
   second. How much slower depends on the computer; the
@@ -65,9 +60,9 @@ on the extension's `mode` setting:
 | Safari 26+ | On macOS 26 and iOS 26 |
 | Firefox 141+ | On Windows. On Apple Silicon Macs from Firefox 145. Not yet on Linux, Android, or Intel Macs |
 
-So a participant using Firefox on Linux, or any Firefox older than 141, will run on the slower
-path. Note also that the library saccade.js uses to run the model (onnxruntime-web) is developed
-and tested mainly on Chrome. A browser having WebGPU does not guarantee the model will use it.
+So a participant using Firefox on Linux, or any Firefox older than 141, runs on the slower path.
+Even a browser with WebGPU may not run the model on it, because onnxruntime-web, the library that
+runs the model, is developed and tested mainly on Chrome.
 
 ## Camera frame callbacks
 
@@ -103,17 +98,17 @@ This matters less than it sounds. The [`saccade-time-sync`](../reference/plugin-
 does not rely on what the browser claims. It measures the whole delay directly, from a change on
 the screen to that change showing up in a camera frame. Whatever the browser adds to the
 timestamp is measured along with everything else and subtracted with it. In Safari the measured
-lag will simply be larger. A browser that reports only when the frame arrived records `clock:
+lag will be larger. A browser that reports only when the frame arrived records `clock:
 "receiveTime"`, which the time-sync measurement corrects in the same way.
 
-What _would_ break the correction is a delay that keeps changing, and the time-sync trial already
-catches that: it reports an `UNRELIABLE` verdict, whatever the browser. The case to watch for is
+A delay that keeps changing would break the correction, but the time-sync trial catches that and
+reports an `UNRELIABLE` verdict, whatever the browser. The case to watch for is
 a browser that provides no capture timestamp at all, which shows up in the data as
 `clock: "callback"`.
 
 ## Check the data, not the browser name
 
-Every run records what it actually got. These are the fields to look at:
+Every run records what the browser gave it. These are the fields to look at:
 
 | Trial | Field | Warning sign |
 | --- | --- | --- |
@@ -123,12 +118,12 @@ Every run records what it actually got. These are the fields to look at:
 | Any trial that records gaze | `saccade_timing.clock` | `"callback"`: no real capture times |
 | [`saccade-time-sync`](../reference/plugin-time-sync) | `verdict`, `clock_source` | `"UNRELIABLE"`, `"callback"` |
 
-For deciding who takes part, a minimum frame rate in `saccade-performance` works better than a
-browser check, because it tests what you actually care about. This holds in live mode only. In
-deferred mode the frame loop does not run the model, so the frame rate looks healthy on exactly
-the slow computers that were sent there; see
-[the performance trial in deferred mode](../reference/plugin-performance#in-deferred-mode). A slow laptop running Chrome can be
-too slow for your study while a fast desktop running Firefox is fine. The
+To decide who takes part, a minimum frame rate in `saccade-performance` works better than a
+browser check, because it tests what you care about. A slow laptop running Chrome can be too slow
+for your study while a fast desktop running Firefox is fine. This holds in live mode only. In
+deferred mode the frame loop does not run the model, so the frame rate looks healthy on the very
+computers that were too slow for live mode. See
+[the performance trial in deferred mode](../reference/plugin-performance#in-deferred-mode). The
 [timing guide](timing-and-synchrony#deciding-which-trials-to-exclude) shows an exclusion rule
 that checks the timing and the frame rate together.
 

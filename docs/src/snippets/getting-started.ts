@@ -35,12 +35,12 @@ ${scripts}
     const timeline = [
       // Ask for the camera, download the model, and let the participant line up their face.
       { type: jsPsychSaccadePreview },
-      // Measure this computer's screen-to-camera delay, so later timestamps can be corrected.
+      // Measure the screen-to-camera delay and correct later timestamps for it.
       { type: jsPsychSaccadeTimeSync },
-      // Calibrate on 13 dots, then check accuracy on 9 different dots.
+      // Calibrate on 13 dots, then check accuracy on 9 more.
       { type: jsPsychSaccadeCalibrate },
       { type: jsPsychSaccadeValidate },
-      // The task. The \`extensions\` line is what turns gaze recording on for this trial.
+      // The task. The \`extensions\` line turns on gaze recording for this trial.
       {
         type: jsPsychHtmlKeyboardResponse,
         stimulus: \`
