@@ -124,7 +124,7 @@ export class StubSaccadeExtension implements JsPsychExtension {
   });
 
   calibratePoint = jest.fn(
-    async (x: number, y: number, _embeddings?: Float32Array[], captureMs = 500) => {
+    async (x: number, y: number, { captureMs = 500 }: { captureMs?: number } = {}) => {
       this.calibrationCalls.push({ x, y, captureMs });
       return 1;
     },

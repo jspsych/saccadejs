@@ -459,11 +459,9 @@ describe("SaccadeExtension public API", () => {
     const { extension, tracker } = await makeExtension(display);
     const embeddings = [new Float32Array(128)];
 
-    const n = await extension.calibratePoint(
-      window.innerWidth / 2,
-      window.innerHeight / 4,
+    const n = await extension.calibratePoint(window.innerWidth / 2, window.innerHeight / 4, {
       embeddings,
-    );
+    });
 
     expect(n).toBe(1);
     expect(tracker.calibrationPoints).toHaveLength(1);
@@ -477,7 +475,7 @@ describe("SaccadeExtension public API", () => {
 
   it("collects its own embeddings when none are supplied", async () => {
     const { extension, tracker } = await makeExtension(display);
-    const n = await extension.calibratePoint(10, 10, undefined, 5);
+    const n = await extension.calibratePoint(10, 10, { captureMs: 5 });
     expect(n).toBeGreaterThan(0);
     expect(tracker.nextSample).toHaveBeenCalled();
   });
@@ -486,7 +484,7 @@ describe("SaccadeExtension public API", () => {
     const { extension } = await makeExtension(display);
     expect(extension.fitCalibration()).toBeNull();
 
-    await extension.calibratePoint(0, 0, [new Float32Array(128)]);
+    await extension.calibratePoint(0, 0, { embeddings: [new Float32Array(128)] });
     expect(extension.fitCalibration(2.5)).toEqual({
       lambda: 2.5,
       nPoints: 1,
@@ -579,9 +577,9 @@ describe("SaccadeExtension public API", () => {
     const { extension, tracker } = await makeExtension(display);
     tracker.nextSample.mockImplementation(() => new Promise(() => undefined) as any);
 
-    await expect(extension.calibratePoint(0, 0, undefined, 1000, 20)).rejects.toThrow(
-      /no camera frames for 20 ms/,
-    );
+    await expect(
+      extension.calibratePoint(0, 0, { captureMs: 1000, timeoutMs: 20 }),
+    ).rejects.toThrow(/no camera frames for 20 ms/);
   });
 
   it("fans the tracker's setup progress out to subscribers", async () => {
@@ -853,7 +851,7 @@ describe("deferred mode", () => {
     };
 
     const dropped = record();
-    const first = await extension.catchUp({ max_wait_ms: 0 });
+    const first = await extension.catchUp({ maxWaitMs: 0 });
     expect(first).toMatchObject({
       mode: "deferred",
       frames_waiting: 1,
@@ -865,7 +863,7 @@ describe("deferred mode", () => {
     expect(dropped.saccade_deferred!.crops).toBeUndefined();
 
     const saved = record();
-    const second = await extension.catchUp({ max_wait_ms: 0, save_unprocessed_crops: true });
+    const second = await extension.catchUp({ maxWaitMs: 0, saveUnprocessedCrops: true });
     expect(second.crops_saved).toBe(1);
     const crops = saved.saccade_deferred!.crops!;
     expect(crops).toMatchObject({ t: [10], width: 144, height: 36, kernel: [1, 0, 0, 1] });
@@ -887,7 +885,7 @@ describe("deferred mode", () => {
     const { extension, tracker } = await deferredExtension();
     tracker.clearCalibration();
     tracker.nextFrame = async () => frame(0) as any;
-    const queued = await extension.calibratePoint(100, 100, undefined, 20);
+    const queued = await extension.calibratePoint(100, 100, { captureMs: 20 });
     expect(queued).toBeGreaterThan(0);
     expect(tracker.calibrationPoints).toHaveLength(0);
 

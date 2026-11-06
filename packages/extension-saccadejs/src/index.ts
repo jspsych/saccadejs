@@ -95,6 +95,26 @@ export interface SaccadeDeferredInfo {
   };
 }
 
+/** Options for `calibratePoint(x, y, options)`. */
+export interface SaccadeCalibratePointOptions {
+  /** Pre-collected embeddings for this point. Omit to collect them from the camera now. */
+  embeddings?: Float32Array[];
+  /** How long to collect embeddings for, in ms, when `embeddings` is omitted. Default 500. */
+  captureMs?: number;
+  /** How long to wait for a single camera frame before rejecting, in ms. Default 5000. */
+  timeoutMs?: number;
+}
+
+/** Options for `catchUp(options)`. */
+export interface SaccadeCatchUpOptions {
+  /** Give up on frames still queued after this many ms. `null` or omitted: no limit. */
+  maxWaitMs?: number | null;
+  /** Save the eye crops of abandoned frames in their trials' `saccade_deferred.crops`. */
+  saveUnprocessedCrops?: boolean;
+  /** Called as the queue drains, with the frames still waiting and the total at the start. */
+  onProgress?: (pending: number, total: number) => void;
+}
+
 /** What `catchUp()` (and the `saccade-catch-up` plugin) report. */
 export interface SaccadeCatchUpResult {
   /** The mode the tracker is in. In live mode there is never anything to catch up on. */
@@ -671,18 +691,22 @@ class SaccadeExtension implements JsPsychExtension {
    *
    * @param x Horizontal position of the target, in pixels from the left of the viewport.
    * @param y Vertical position of the target, in pixels from the top of the viewport.
-   * @param embeddings Pre-collected embeddings for this point. Omit to collect them now.
-   * @param captureMs How long to collect embeddings for when `embeddings` is omitted.
-   * @param timeoutMs How long to wait for a single camera frame before rejecting with `no
-   *   camera frames for <ms> ms`. Without it a dead frame source freezes the trial silently.
+   * @param options.embeddings Pre-collected embeddings for this point. Omit to collect them now.
+   * @param options.captureMs How long to collect embeddings for when `embeddings` is omitted.
+   *   Default 500.
+   * @param options.timeoutMs How long to wait for a single camera frame before rejecting with
+   *   `no camera frames for <ms> ms`. Without it a dead frame source freezes the trial silently.
+   *   Default 5000.
    * @returns The number of embeddings recorded for the point (0 if none could be collected).
    */
   calibratePoint = async (
     x: number,
     y: number,
-    embeddings?: Float32Array[],
-    captureMs = 500,
-    timeoutMs = DEFAULT_FRAME_TIMEOUT_MS,
+    {
+      embeddings,
+      captureMs = 500,
+      timeoutMs = DEFAULT_FRAME_TIMEOUT_MS,
+    }: SaccadeCalibratePointOptions = {},
   ): Promise<number> => {
     const tracker = this.getTracker();
     const target = {
@@ -847,26 +871,20 @@ class SaccadeExtension implements JsPsychExtension {
    * trial's `saccade_data` is complete before the data is saved. The `saccade-catch-up` plugin
    * calls this; it resolves at once in live mode.
    *
-   * If `max_wait_ms` runs out first, the frames still queued are given up on. With
-   * `save_unprocessed_crops`, their eye crops are written into their trials'
+   * If `maxWaitMs` runs out first, the frames still queued are given up on. With
+   * `saveUnprocessedCrops`, their eye crops are written into their trials'
    * `saccade_deferred.crops` so they can be embedded offline; otherwise they are counted in
    * `saccade_deferred.lost` and discarded. A 144 x 36 strip across both eyes is a recognisable
    * picture of a person, so think about your data sharing before saving them.
    */
-  catchUp = async (
-    opts: {
-      max_wait_ms?: number | null;
-      save_unprocessed_crops?: boolean;
-      onProgress?: (pending: number, total: number) => void;
-    } = {},
-  ): Promise<SaccadeCatchUpResult> => {
+  catchUp = async (opts: SaccadeCatchUpOptions = {}): Promise<SaccadeCatchUpResult> => {
     const started = performance.now();
     const embedder = this.tracker?.deferred ?? null;
     const frames_waiting = embedder?.pending ?? 0;
     let timed_out = false;
     if (embedder) {
       const drained = await embedder.drain({
-        deadlineMs: opts.max_wait_ms ?? null,
+        deadlineMs: opts.maxWaitMs ?? null,
         onProgress: opts.onProgress,
       });
       if (drained.timedOut) {
@@ -882,7 +900,7 @@ class SaccadeExtension implements JsPsychExtension {
     let crops_saved = 0;
     for (const trial of Array.from(this.deferredTrials)) {
       frames_lost += trial.lost.length;
-      if (opts.save_unprocessed_crops && trial.lost.length) {
+      if (opts.saveUnprocessedCrops && trial.lost.length) {
         trial.info.crops = this.encodeCrops(trial);
         crops_saved += trial.lost.length;
       }
