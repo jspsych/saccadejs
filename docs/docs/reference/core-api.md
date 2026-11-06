@@ -14,10 +14,11 @@ thin wrappers around what is on this page. You need it if you are:
 - writing your own jsPsych plugin that uses gaze, or
 - re-analyzing stored timing measurements.
 
-If you are using jsPsych and the plugins, you probably do not need this page.
+If you are using jsPsych and the plugins, you can skip this page.
 
-A minimal session looks like this: the same four stages the plugins run. `ui` is your code for
-drawing calibration dots, described [below](#calibration-and-validation-helpers).
+Here is a minimal session. It runs the same four stages as the plugins: start the tracker,
+measure the delay, calibrate, and read gaze. `ui` is your code for drawing calibration dots,
+described [below](#calibration-and-validation-helpers).
 
 ```js
 import { SaccadeTracker, runCalibration, runLoopback, defaultGrid13 } from "@saccadejs/core";
@@ -28,22 +29,23 @@ tracker.start();               // start processing frames
 
 const lag = await runLoopback(tracker);                        // measure screen-to-camera delay
 await runCalibration(tracker, defaultGrid13(), { settleMs: 1000, captureMs: 500 }, ui);
-tracker.fitCalibration();                                      // fit the calibration
+tracker.fitCalibration();                                      // map eyes to screen positions
 
 tracker.onFrame((frame) => {
   if (frame.gaze) console.log(frame.gaze.x, frame.gaze.y);     // 0-1 fractions of the window
 });
 ```
 
-If you load the library with a `<script>` tag instead of `import`, everything is available on one
-global, `Saccade`: `new Saccade.SaccadeTracker()`, `await Saccade.runLoopback(tracker)`.
+If you load the library with a `<script>` tag instead of `import`, everything lives on one
+global, `Saccade`. For example, write `new Saccade.SaccadeTracker()` and
+`await Saccade.runLoopback(tracker)`.
 
-Three conventions apply throughout:
+Three conventions hold across the whole API:
 
 - **Positions are fractions of the window, not pixels.** `x` and `y` run from 0 to 1, with
   `{x: 0, y: 0}` at the top left and `{x: 1, y: 1}` at the bottom right. Multiply by
-  `window.innerWidth` and `window.innerHeight` to get pixels. (The jsPsych extension does this for
-  you.)
+  `window.innerWidth` and `window.innerHeight` to get pixels: on a 1,600 × 900 window,
+  `{x: 0.25, y: 0.5}` is pixel (400, 450). The jsPsych extension does this for you.
 - **Times are `performance.now()` milliseconds**, the browser's high-resolution clock.
 - **Nothing touches the camera until `init()`.** Creating a tracker is safe at any time.
 
@@ -155,17 +157,18 @@ interface FrameQuality {
 }
 ```
 
-`quality` holds the two measures of the recording conditions that predicted accuracy in the
-saccade.js validation study. The eye measures are of the crop at the camera's resolution, before
-it is resized and equalized, since equalization evens out exactly the contrast being measured.
-The [`saccade-preview`](plugin-preview#distance-and-lighting-feedback) plugin turns them into
-advice for the participant.
+`quality` measures the two recording conditions that predicted accuracy in the saccade.js
+validation study: how far the participant sits from the camera, and how well their eyes are lit.
+saccade.js measures brightness and contrast on the eye region at the camera's full resolution,
+before resizing and equalizing it, because equalization would flatten the contrast it is trying
+to measure. The [`saccade-preview`](plugin-preview#distance-and-lighting-feedback) plugin turns
+these numbers into advice for the participant, such as "move a little closer to the camera".
 
-`timings` is how long each processing stage took, in ms. It is for diagnostics only. In deferred
-mode `embed` is `0`, because the model runs elsewhere.
+`timings` reports how long each processing stage took, in ms, for diagnostics. In deferred mode
+`embed` is `0`, because the model runs on background threads instead.
 
-`crop` is set on every frame in which the eyes were found, in both modes. It is `null` when no
-face or eye region was found.
+`crop` is set on every frame where the tracker found the eyes, in both modes, and `null`
+otherwise.
 
 ## `FrameTime`
 
@@ -180,19 +183,19 @@ face or eye region was found.
 | `emit` | `number` | When the prediction became available. |
 | `meanCapture` | `number \| null` | The average `capture` time of the frames averaged into `gaze`, so the time the smoothed estimate refers to. Equals `capture` when `smoothingFrames` is 1. Use this one. |
 
-**Which time to use:** record `meanCapture ?? capture` with each gaze estimate. It is when the
-camera captured the frame (averaged over the frames combined, if `smoothingFrames` is above 1),
-not when the estimate was ready.
+Record `meanCapture ?? capture` with each gaze estimate. That is the moment the camera captured
+the frame (averaged over the combined frames, if `smoothingFrames` is above 1), which is earlier
+than when the estimate was ready.
 
-Even `capture` is later than the moment the screen changed: it cannot include the time the
-monitor took to show the change, or the camera's own delay. [`runLoopback`](#runloopback)
-measures those two together, so you can subtract them.
+Even `capture` lags behind what was on screen. It cannot account for the time the monitor took to
+show a change, or for the camera's own delay. [`runLoopback`](#runloopback) measures those two
+delays together so you can subtract them.
 
 ## Calibration and validation helpers
 
-Both step through a list of target positions, telling your code when to show each one. They do
-not draw anything themselves: you supply a `showTarget` function that draws the dot however you
-like.
+`runCalibration` and `runValidation` step through a list of target positions and tell your code
+when to show each one. They draw nothing themselves. You supply a `showTarget` function that
+draws the dot however you like.
 
 ```ts
 interface CollectOptions { settleMs: number; captureMs: number; timeoutMs?: number }
@@ -204,11 +207,13 @@ interface TargetUi {
 
 For each target, in order:
 
-1. `showTarget(target, "settle")`: draw the dot. The eyes have `settleMs` to reach it.
-2. `showTarget(target, "capture")`: data is collected for `captureMs`. You might change the dot's
-   color here, as the plugins do.
+1. `showTarget(target, "settle")` asks you to draw the dot. The participant's eyes get `settleMs`
+   to reach it.
+2. `showTarget(target, "capture")` means recording has started and lasts `captureMs`. The plugins
+   change the dot's color here, and you can too.
 
-After the last target, `showTarget(null, …)` tells you to clear the screen.
+After the last target, `showTarget(null, …)` asks you to clear the screen. Here is a `ui` that
+does all three with a single `#dot` element:
 
 ```js
 const dot = document.getElementById("dot");
@@ -227,13 +232,13 @@ const ui = {
 };
 ```
 
-`timeoutMs` (default `5000`; `0` waits forever) stops the run from hanging if the camera stops
-delivering frames, for example because the page stopped displaying the `<video>`, another program
-took the camera, or the camera was unplugged. If a single frame takes longer than `timeoutMs`,
-the run fails with the error `no camera frames for 5000 ms` instead of leaving a dot on screen
-forever. The plugins show that message to the participant. The same guard is exported as
-`withFrameTimeout(promise, ms = DEFAULT_FRAME_TIMEOUT_MS)`, for your own loops over
-`nextFrame()`; `DEFAULT_FRAME_TIMEOUT_MS` is `5000`.
+`timeoutMs` (default `5000`, or `0` to wait forever) keeps the run from hanging when the camera
+stops delivering frames. That happens if the page stops displaying the `<video>`, another program
+takes the camera, or someone unplugs it. If no frame arrives within `timeoutMs`, the run fails
+with the error `no camera frames for 5000 ms` instead of leaving a dot on screen forever. The
+plugins show that message to the participant. For your own loops over `nextFrame()`, the same
+guard is exported as `withFrameTimeout(promise, ms = DEFAULT_FRAME_TIMEOUT_MS)`, where
+`DEFAULT_FRAME_TIMEOUT_MS` is `5000`.
 
 ```ts
 runCalibration(tracker, targets: Gaze[], opts: CollectOptions, ui: TargetUi): Promise<CalPoint[]>
@@ -279,14 +284,14 @@ interface ValidationSample {
 }
 ```
 
-`runValidation` collects gaze rather than embeddings, so the tracker must already be calibrated.
-Targets that produced no gaze are reported with `NaN` errors rather than dropped.
+`runValidation` collects gaze estimates, so calibrate the tracker first. A target that produced
+no gaze stays in `points` with `NaN` errors, so you can see which one failed.
 
-In [deferred mode](#deferred-mode), both queue their frames for the background threads and finish
-after the last target, once the threads have processed them. `runCalibration` adds the points
-then, and `runValidation` computes gaze with the calibration that was in place during the run.
-Nothing is on screen during that wait unless you put it there: give `TargetUi` a
-`processing(done, total)` function to show progress.
+In [deferred mode](#deferred-mode), both helpers queue their frames for the background threads.
+They finish once the threads have processed every frame, which can take a while after the last
+target. At that point `runCalibration` adds the points, and `runValidation` computes gaze with
+the calibration that was in place during the run. The screen stays blank during that wait unless
+you add a `processing(done, total)` function to `TargetUi` to show progress.
 
 ### Grids
 
@@ -298,15 +303,17 @@ lambdaFor(nPoints: number, fit?: CalFit): number   // "frames" (default): 3; "po
 countTargets(cal: CalPoint[]): number   // distinct targets: nine dots shown twice is 9
 ```
 
-Validate on `validationGrid9()`, not on the calibration points.
+Validate on `validationGrid9()`. Its points sit away from the calibration grid, so validation
+measures accuracy at positions the fit has never seen.
 
 ### How the calibration is fit
 
-The calibration is a ridge regression from the eye model's output to the dot's position on
-the screen. By default every frame recorded at every dot is one row of that regression. A
-participant's eyes do not move while they look at one dot, but the model's output still varies
-a little from frame to frame. Fitting every frame shows the regression which of that variation
-is noise. The ridge penalty is 3 at any number of dots.
+The calibration is a ridge regression (linear regression with a penalty that keeps the
+coefficients small) from the eye model's output to the dot's position on the screen. By default
+every frame recorded at every dot is one row of that regression. While a participant looks at one
+dot their gaze holds still, but the model's output still varies a little from frame to frame.
+Fitting every frame lets the regression learn that this variation is noise. The ridge penalty is
+3 at any number of dots.
 
 Up to version 0.3, saccade.js averaged each dot's frames into one row and used a penalty of 1,
 or 3 with nine dots or fewer. Set `calibrationFit: "points"` to get that fit back, for example
@@ -315,47 +322,46 @@ cut the median error by about 13%, and roughly halved it after a nine-dot calibr
 
 ### Row weighting
 
-This section explains how frames of different quality (for example, a frame caught mid-blink)
-are weighted during calibration. You only need it if you are changing the default behavior or
-describing it in a paper.
+Calibration gives some frames more say than others, so that a frame caught mid-blink barely
+affects the fit. You only need this section if you are changing that behavior or describing it in
+a paper.
 
 Each frame (or, with `calibrationFit: "points"`, each point) is one weighted row of the ridge
-fit. The weight comes from the first of these that applies:
+fit. The weight comes from the first of these sources that applies:
 
 | Source | When | `weighting` |
 | --- | --- | --- |
 | A `CalHead` you supply (a separate scoring model; see below) | `SaccadeTrackerOptions.calHead`, or `fitCalibration({ calHead })`. If both are set, the argument to `fitCalibration` wins. | `"head"` |
 | The model's second output | The loaded model produces a quality score for each frame. Each frame is weighted by its own score; with `"points"`, a point's weight is the average score over its frames. | `"model"` |
-| Nothing | Neither of the above. Every point counts equally, which is plain unweighted ridge regression. | `"uniform"` |
+| Nothing | Neither of the above. Every row counts equally, which is plain unweighted ridge regression. | `"uniform"` |
 
-`fitCalibration()` returns which one ran, and `getCalWeighting()` reports it afterwards. Record
-it: a weighted fit and an unweighted one are different analyses, and nothing else in the data
-tells them apart. `saccade-calibrate` writes the `weighting` column for you.
+`fitCalibration()` returns which source it used, and `getCalWeighting()` reports it afterwards.
+Record it in your data. A weighted fit and an unweighted one are different analyses, and nothing
+else in the data tells them apart. `saccade-calibrate` writes the `weighting` column for you.
 
-The weights are applied to individual frames **before** they are averaged, so a low-scoring
-frame contributes little to the point's embedding, rather than only lowering the weight of the
-finished point. Smoothing during tracking uses the same weights, so a smoothed gaze estimate and
-a calibration point are computed the same way.
+When frames are averaged, saccade.js weights each frame **before** averaging. A low-scoring frame
+therefore contributes little to a point's mean embedding. Smoothing during tracking uses the same
+weights, so a smoothed gaze estimate and a calibration point are computed the same way.
 
 `CAL_HEAD` is a separate scoring model (a logistic regression) exported alongside eye-embedding
 1.0.0. It is off by default, and most experiments do not need it, because eye-embedding 1.0.0
-already produces its own quality score. A scoring model only works with the eye model it was
-trained on; given another model's embeddings, its scores are meaningless.
+already scores its own frames. A scoring model only works with the eye model it was trained on.
+Given another model's embeddings, its scores are meaningless.
 
 ### Embedding width
 
 This section matters only if you are using [your own model](../models#using-your-own-model).
 
-Nothing in calibration is fixed at 128 numbers. The fit and the frame averaging both take their
-length from the embeddings they receive, so a model of any output length works, as long as the
-length is the same on every frame of a session. `EMB_DIM` is the published model's length. It is
-useful for sizing a buffer, but it is not a limit.
+Calibration works with embeddings of any length, not only 128. The fit and the frame averaging
+both take their length from the embeddings they receive, so any model works as long as its
+output length stays the same for the whole session. `EMB_DIM` is the published model's length,
+handy for sizing a buffer.
 
 For an embedding of length _d_, fitting takes memory proportional to _d_² and time proportional
-to _d_³. It happens once, when calibration ends. At 128 the cost is negligible; at a few thousand
-it would be noticeable.
+to _d_³. The fit runs once, when calibration ends. At 128 the cost is negligible. At a few
+thousand you would notice it.
 
-Five problems throw an error rather than continue with bad numbers:
+saccade.js throws an error, instead of carrying on with bad numbers, for any of these:
 
 - an embedding whose length changes during a session,
 - calibration points whose embeddings have different lengths,
@@ -363,16 +369,17 @@ Five problems throw an error rather than continue with bad numbers:
 - a calibration set where some points have weights and others do not,
 - a quality score that is not a number between 0 and 1.
 
-The last is caught during `init()`, when the model is first run, before any participant data is
-collected.
+`init()` catches the last one when it first runs the model, before you collect any participant
+data.
 
 ## Deferred mode
 
-For computers too slow to run the model on every frame as it arrives. The frame loop keeps doing
-what has to happen live (reading the camera, finding the face, cutting out the eye picture), and
-a pool of background threads runs the model on the pictures you submit, in the order you submit
-them. Gaze arrives late, so nothing gaze-contingent works. The
-[guide](../guides/deferred-mode) explains when to use it; this section is the API.
+Deferred mode is for computers too slow to run the model on every frame as it arrives. The frame
+loop still does the live work of reading the camera, finding the face, and cutting out the eye
+picture. A pool of background threads then runs the model on the pictures you submit, in the
+order you submit them. Gaze arrives late, so you cannot change the display based on where the
+participant is looking. The [guide](../guides/deferred-mode) explains when to use it. This
+section covers the API.
 
 ```ts
 const decision = chooseMode({ ...(await tracker.measureEmbedMs()), cameraFps: await tracker.measureCameraFps() });
@@ -400,7 +407,7 @@ const gaze = predictSeries(frames, kernel, tracker.getSmoothingFrames(), tracker
 | `opts.modelBytes` | The model file's bytes, if you already have them. Default: fetched from `assets.modelUrl`. |
 | `opts.createWorker` | `() => WorkerLike`: start one thread yourself, for example from your own copy of `EMBED_WORKER_SOURCE`. |
 | `tracker.embedDeferred(crop)` | Queues a crop. Resolves with `{ embedding, weight }`, or rejects with a `DeferredFrameDropped` if no thread will ever process it (its `reason` is `"queue-full"`, `"cancelled"`, `"failed"` or `"disposed"`). Rejects with a plain `Error` in live mode or for a crop of the wrong length. |
-| `chooseMode({ ep, embedMs, cameraFps })` | The rule `mode: "auto"` uses. Live needs WebGPU and an encode that takes at most a limit: 85% of one camera frame, kept between 30 and 80 ms, or 30 ms when the camera's rate is unknown (`LIVE_FRAME_SHARE`, `LIVE_FLOOR_MS`, `LIVE_CEILING_MS`). Returns a `ModeDecision`: `mode`, `reason`, `ep`, `embedMs`, `cameraFps`, `limitMs`. |
+| `chooseMode({ ep, embedMs, cameraFps })` | The rule `mode: "auto"` uses. Live mode needs WebGPU, and one run of the model (`embedMs`) must fit within 85% of a camera frame, clamped to between 30 and 80 ms. At 30 fps that limit is about 28 ms, so it becomes 30. When the camera's rate is unknown, the limit is 30 ms. The constants are exported as `LIVE_FRAME_SHARE`, `LIVE_FLOOR_MS` and `LIVE_CEILING_MS`. Returns a `ModeDecision`: `mode`, `reason`, `ep`, `embedMs`, `cameraFps`, `limitMs`. |
 | `predictSeries(frames, kernel, smoothingFrames?, center?)` | Gaze for a run of `{ embedding, weight, time }`, in capture order, smoothed the way the live loop smooths. Each result is `{ gaze, time }`. |
 | `recommendedWorkers()` | The default thread count: processor cores minus two, between one and three (`MAX_DEFAULT_WORKERS`), and one with 4 GB of memory or less. Memory is only known in Chromium browsers; elsewhere the cores alone decide. |
 | `DeferredEmbedder` | The thread pool on its own; see below. `tracker.deferred` is the tracker's pool. |
@@ -414,14 +421,14 @@ const gaze = predictSeries(frames, kernel, tracker.getSmoothingFrames(), tracker
 | --- | --- | --- |
 | `init` | `(): Promise<{ workers, requested }>` | Starts the threads and waits for each to start or fail. A thread that fails (out of memory, say) is dropped. Resolves with how many started out of how many were asked for; rejects if none start. |
 | `submit` | `(crop: Uint8Array): Promise<EmbedResult>` | Queues a crop. Frames are processed in the order submitted. |
-| `measure` | `(rounds = 3): Promise<{ latencyMs, perFrameMs }>` | Times one round of encodes across the pool: ms for one encode on one thread, and ms per frame for the whole pool. |
+| `measure` | `(rounds = 3): Promise<{ latencyMs, perFrameMs }>` | Times the pool. `latencyMs` is how long one thread takes to embed one frame. `perFrameMs` is the time per frame with every thread working. |
 | `drain` | `(opts?: { deadlineMs?, onProgress?(left, total) }): Promise<DrainResult>` | Waits for the queue to empty, or for `deadlineMs`. Cancels nothing: whatever is left keeps going. Resolves with `{ left, timedOut }`. |
 | `cancel` | `(): number` | Drops every frame still waiting, and returns how many. |
 | `dispose` | `(): void` | Stops every thread; waiting frames reject with reason `"disposed"`. |
 | `workers` | `number` (getter) | Threads running. |
 | `pending` | `number` (getter) | Frames waiting or being processed. |
 | `stats` | `DeferredStats` (getter) | `{ workers, queued, inFlight, embedded, failed, dropped }`. |
-| `latencyMs` | `number \| null` (getter) | Running estimate of one encode on one thread. |
+| `latencyMs` | `number \| null` (getter) | Running estimate of how long one thread takes to embed one frame. |
 | `throughput` | `number \| null` (getter) | Frames per second the pool can process. |
 | `info` | `{ dim, emitsWeight } \| null` | The embedding length and weight output the threads reported. |
 
@@ -431,21 +438,25 @@ const gaze = predictSeries(frames, kernel, tracker.getSmoothingFrames(), tracker
 runLoopback(tracker: SaccadeTracker, opts?: LoopbackOptions): Promise<LoopbackResult>
 ```
 
-Measures the delay from a change on the screen to that change appearing in the camera: the
-monitor's delay and the camera's delay, as one number. It does this by switching the page
-between dark and light at random moments while the camera records the light it throws on the
-participant's face.
+Measures how long a change on the screen takes to show up in the camera image. The result
+combines the monitor's delay and the camera's delay into one number. To measure it, the page
+switches between dark and light at random moments while the camera records the light the screen
+throws on the participant's face.
 [How it works](../guides/how-it-works#measuring-the-screen-to-camera-delay) describes the method.
 This is what the [`saccade-time-sync`](plugin-time-sync) plugin runs.
 
-The tracker must be initialized first. If it is running, gaze processing pauses during the
-measurement and resumes afterwards.
+Call `tracker.init()` first. If the tracker is running, `runLoopback` pauses gaze processing
+during the measurement and resumes it afterwards.
 
 ```js
 const result = await runLoopback(tracker);
-if (result.verdict === "OK") {
-  // subtract result.lagMs from every capture time from now on
-}
+const lag = result.verdict === "OK" ? result.lagMs : 0;
+
+tracker.onFrame((frame) => {
+  if (!frame.gaze) return;
+  const t = (frame.time.meanCapture ?? frame.time.capture) - lag;
+  console.log(frame.gaze.x, frame.gaze.y, t);
+});
 ```
 
 | Option | Default | Meaning |
@@ -472,12 +483,11 @@ if (result.verdict === "OK") {
 | `flips`, `samples` | Raw flip times and per-frame luminance, for re-analysis. |
 | `seed`, `settings` | What was actually run. |
 
-The verdict is `"OK"` when `peakD` is at least 0.5, the plateau is at most 34 ms, and the halves
+The verdict is `"OK"` when `peakD` is at least 0.6, the plateau is at most 34 ms, and the halves
 agree: within 8 ms when there are at least 15 edges per half, within 20 ms otherwise.
 
-The functions that compute the estimate are exported too, so you can re-analyze stored `flips`
-and `samples` later, outside the experiment:
-`estimateLagEdges`, `estimateLag`, `refineLag`, `sparseSchedule`, `mSequence`, `seededRandom`,
+To re-analyze stored `flips` and `samples` after the experiment, use the same functions
+`runLoopback` uses, which are exported too: `estimateLagEdges`, `estimateLag`, `refineLag`, `sparseSchedule`, `mSequence`, `seededRandom`,
 `intervalStats`, `splitHalves`, `stimulusAt`.
 
 ## Assets
@@ -494,13 +504,14 @@ interface SaccadeAssets {
 ```
 
 Leave a field out to use its default. [Hosting the assets](../guides/hosting-the-assets) lists
-where each default comes from. The pinned versions and default URLs are exported as `ORT_VERSION`, `MEDIAPIPE_VERSION`,
-`DEFAULT_ORT_WASM_URL`, `DEFAULT_MEDIAPIPE_WASM_URL` and `DEFAULT_FACE_LANDMARKER_URL`.
+where each default comes from. The pinned versions and default URLs are exported as
+`ORT_VERSION`, `MEDIAPIPE_VERSION`, `DEFAULT_ORT_WASM_URL`, `DEFAULT_MEDIAPIPE_WASM_URL` and
+`DEFAULT_FACE_LANDMARKER_URL`.
 
 ## Lower-level exports
 
-The building blocks the tracker is made of, for testing, research, or building a different
-pipeline. Most code never needs them.
+These are the pieces the tracker is built from. They are useful for tests, research, or building
+a different pipeline, and most code never needs them.
 
 | Export | What |
 | --- | --- |
@@ -522,10 +533,10 @@ pipeline. Most code never needs them.
 | `interocularDistance(lm)` | The distance measure in `FrameQuality`, from a landmark list. |
 | `formatModelIdentity(id)` | The string written to `saccade_model`: `"eye-embedding@1.0.0"`, `"sha256:…"`, or `"unverified"`. |
 | `SECOND_PEAK_MIN_SEPARATION_MS` (40) | How far from the peak a second peak must be to count, in the loopback analysis. |
+| `version` | The package version, as published. |
 
 Types exported alongside these, for TypeScript users: `ClaheOptions`, `LandmarkerOptions`,
 `FaceDetection`, `HeadPose`, `EmbedResult` (`{ embedding, weight }`), `EmbeddingModel` (what the
 `model` option takes), `ModelIdentity` (see [The model](/models#recording-which-model-you-used)),
 `TimedEmbedding`, `WorkerLike`, `DeferredStats`, `DrainResult`, and the loopback's `LagOptions`,
 `LagResult`, `Flip`, `LumSample`, `CurvePoint`, `Plateau`, `IntervalStats` and `SplitHalves`.
-| `version` | The package version, as published. |
