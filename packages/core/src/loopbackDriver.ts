@@ -22,7 +22,7 @@ import type { FrameTime } from "./pipeline";
 import type { SaccadeTracker } from "./tracker";
 
 /** D(tau) is normalised so 1.0 = every edge's full luminance jump was captured. */
-const MIN_PEAK_D = 0.5;
+const MIN_PEAK_D = 0.6;
 /** One camera frame at 30 fps: the plateau must be narrower to have sub-frame resolution. */
 const MAX_PLATEAU_WIDTH_MS = 34;
 /** With this many edges per half the estimate is well determined, so hold it to 8 ms. */
