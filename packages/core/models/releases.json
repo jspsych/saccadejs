@@ -58,7 +58,7 @@
           "onnx": "1.17.0"
         }
       },
-      "notes": "First public model. Hybrid backbone, embedding_dim 128, token_pool_extra 1. Two outputs: the embedding, and a per-frame calibration weight (sigmoid, [0,1]) from the trained Calibration_Weights head. The embedding is bit-identical to the pre-release export that carried only one output."
+      "notes": "First public model. Hybrid backbone, embedding_dim 128, token_pool_extra 1. Two outputs: the embedding, and a per-frame calibration weight (sigmoid, [0,1]) from the trained Calibration_Weights head."
     }
   ]
 }
