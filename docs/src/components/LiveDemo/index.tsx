@@ -5,21 +5,22 @@ import Link from "@docusaurus/Link";
 import useBaseUrl from "@docusaurus/useBaseUrl";
 import clsx from "clsx";
 import type { JsPsych } from "jspsych";
-import type { SaccadeTracker } from "@saccadejs/core";
+import type { ModeDecision, SaccadeTracker } from "@saccadejs/core";
 import type SaccadeExtension from "@saccadejs/extension";
 import releases from "@saccadejs/core/models/releases.json";
 import FreeViewing from "./FreeViewing";
-import { detectFixations, drawScanpath, type Fixation, type Rect, type Sample } from "./scanpath";
+import { detectFixations, drawScanpath, type Rect, type Sample } from "./scanpath";
 import styles from "./styles.module.css";
 
 /**
  * The live demo on `/demo`.
  *
- * Four things SaccadeJS can do, offered as a menu rather than as a fixed four-minute run:
- * calibrate, check the accuracy of that calibration, record a scanpath over a painting, and
- * watch gaze live with the knobs exposed. Only calibration is available at the start, because
- * the other three have nothing to show without a fitted model, and any of them can be repeated
- * as often as the visitor likes.
+ * A speed check, then four things SaccadeJS can do, offered as a menu rather than as a fixed
+ * four-minute run: calibrate, check the accuracy of that calibration, record a scanpath over a
+ * painting, and watch gaze live with the knobs exposed. Only the speed check is available at the
+ * start. It opens the camera, and it decides where the model runs, so calibration waits for it;
+ * the other three have nothing to show without a fitted model. Any of them can be repeated as
+ * often as the visitor likes.
  *
  * Three of the four are **real jsPsych trials**: the published extension and the published
  * plugins, on a timeline that would work unchanged in a study, rendered into a container on this
@@ -33,12 +34,12 @@ import styles from "./styles.module.css";
  * from one activity to the next. Each activity is its own short `jsPsych.run`, and the results
  * are lifted out of its data afterwards and kept here.
  *
- * A setting above the cards chooses where the model runs: `"live"`, on every frame as it
- * arrives, or `"deferred"`, in background threads with each trial's gaze filled in afterwards,
- * which is what a study's `mode: "auto"` falls back to on a slow computer. The first activity
- * hands it to the extension, whose `start()` (run by the preview trial) applies it; after that the
- * shared tracker is switched directly, since no later activity starts the extension again.
- * Free viewing and the live gaze dot need live gaze, so they wait for live mode.
+ * The speed check chooses where the model runs: `"live"`, on every frame as it arrives, or
+ * `"deferred"`, in background threads with each trial's gaze filled in afterwards. It times the
+ * model and applies `chooseMode`, the same rule a study's `mode: "auto"` uses, and the visitor
+ * can override the result from its card. The shared tracker is then switched before the next
+ * activity, since no later activity starts the extension again. Free viewing and the live gaze
+ * dot need live gaze, so they wait for live mode.
  *
  * The one thing a study does that the menu does not offer is `saccade-time-sync`, which measures
  * this computer's screen-to-camera lag so gaze can be lined up with stimulus timing. Nothing
@@ -63,6 +64,7 @@ const FIXATION_MIN_MS = 150;
 interface Modules {
   initJsPsych: typeof import("jspsych").initJsPsych;
   SaccadeTracker: typeof import("@saccadejs/core").SaccadeTracker;
+  chooseMode: typeof import("@saccadejs/core").chooseMode;
   extension: typeof import("@saccadejs/extension").default;
   preview: typeof import("@saccadejs/plugin-preview").default;
   calibrate: typeof import("@saccadejs/plugin-calibrate").default;
@@ -96,6 +98,7 @@ function loadModules(): Promise<Modules> {
       ([jspsych, core, extension, preview, calibrate, validate, catchUp, button, keyboard]) => ({
         initJsPsych: jspsych.initJsPsych,
         SaccadeTracker: core.SaccadeTracker,
+        chooseMode: core.chooseMode,
         extension: extension.default,
         preview: preview.default,
         calibrate: calibrate.default,
@@ -127,6 +130,12 @@ const CALIBRATE_INSTRUCTIONS = instructions(
   "Calibration",
   `<p>Thirteen dots will appear one at a time. Look at each one until it moves, keeping your head
   still and moving only your eyes.</p>`,
+);
+
+const CHECK_MEASURING = instructions(
+  "Timing the eye model",
+  `<p>Running the model a few times to see how fast this computer is. This takes a couple of
+  seconds.</p>`,
 );
 
 const VALIDATE_INSTRUCTIONS = instructions(
@@ -218,12 +227,11 @@ function comparisonStimulus(src: string): string {
     ${comparisonPanel(src, VIEWING_TASKS[1], 1)}
   </div>
   <div class="demo-caption">
-    <p class="demo-explain">Each circle is a place your gaze rested, larger the longer it stayed,
-    and the lines are the jumps between them. The picture was the same both times; only the
-    question changed.</p>
+    <p class="demo-explain">Each circle is a place your gaze rested, larger the longer it stayed.
+    The lines are the jumps between them.</p>
     <p class="demo-legend"><span>start of the view</span><i></i><span>end</span></p>
-    <p class="demo-credit">Ilya Repin, <i>They Did Not Expect Him</i> (1884–88), the painting
-    Yarbus used.</p>
+    <p class="demo-credit">Ilya Repin, <i>They Did Not Expect Him</i> (1884–88). Task from
+    Yarbus, A. L. (1967). <i>Eye movements and vision</i>. Plenum Press.</p>
   </div>`;
 }
 
@@ -279,7 +287,7 @@ function mountScanpath(
   scene: SceneTrial,
   precisionPx: number | null,
   index: number,
-): { fixations: Fixation[]; teardown: () => void } {
+): () => void {
   const img = display.querySelector<HTMLImageElement>(`#scanpath-scene-${index}`);
   const canvas = display.querySelector<HTMLCanvasElement>(`#scanpath-canvas-${index}`);
   const samples = scene.saccade_data ?? [];
@@ -292,7 +300,7 @@ function mountScanpath(
   if (!img || !canvas || !from || !from.width || !from.height || samples.length === 0) {
     const note = display.querySelector(`#scanpath-note-${index}`);
     if (note) note.textContent = "No gaze was recorded for this view.";
-    return { fixations: [], teardown: () => {} };
+    return () => {};
   }
 
   const fixations = detectFixations(samples, {
@@ -315,14 +323,17 @@ function mountScanpath(
   else img.addEventListener("load", () => requestAnimationFrame(draw), { once: true });
 
   window.addEventListener("resize", draw);
-  return { fixations, teardown: () => window.removeEventListener("resize", draw) };
+  return () => window.removeEventListener("resize", draw);
 }
 
 // ---------------------------------------------------------------------------------------
 // what the session remembers
 
-/** The four things a visitor can choose. `explore` is the one that is not a jsPsych trial. */
-type Activity = "calibrate" | "validate" | "scanpath" | "explore";
+/**
+ * The five things a visitor can choose. `check` and `explore` are the two that are not
+ * jsPsych trials, though `check` opens with one (`saccade-preview`) the first time.
+ */
+type Activity = "check" | "calibrate" | "validate" | "scanpath" | "explore";
 
 /** Where the model runs: on each frame as it arrives, or later, in background threads. */
 type Mode = "live" | "deferred";
@@ -344,26 +355,17 @@ interface ValidationResult {
   mode: Mode;
 }
 
-/** One of the two views: the question it was recorded under, and what came out of it. */
-interface ScanpathView {
-  task: string;
-  fixations: number;
-  samples: number;
-}
-
-interface ScanpathResult {
-  views: ScanpathView[];
-  /** Samples per second over both views together — the rate a study would record at. */
-  hz: number | null;
-  mode: Mode;
-}
-
 interface Session {
-  /** The mode the next activity runs in. */
+  /** The mode the next activity runs in. Set by the speed check; the visitor can override it. */
   mode: Mode;
+  /** What the speed check measured and decided, or null before it has run. */
+  check: ModeDecision | null;
+  /** The visitor ticked or unticked deferred mode themselves, so the speed check leaves it be. */
+  modeChosen: boolean;
   calibration: CalibrationState;
   validation: ValidationResult | null;
-  scanpath: ScanpathResult | null;
+  /** Whether the painting has been done since the last calibration, for its button label. */
+  scanpathDone: boolean;
   /** Frames averaged per estimate: the tracker's own default until free viewing changes it. */
   smoothingFrames: number;
   /** Show the live gaze dot during the accuracy check. Off by default, as it would be in a study. */
@@ -372,9 +374,11 @@ interface Session {
 
 const EMPTY_SESSION: Session = {
   mode: "live",
+  check: null,
+  modeChosen: false,
   calibration: "none",
   validation: null,
-  scanpath: null,
+  scanpathDone: false,
   smoothingFrames: 1,
   showGazeDuringCheck: false,
 };
@@ -390,16 +394,9 @@ function median(values: number[]): number | null {
  * Fold one finished activity's data into the session.
  *
  * A fresh calibration invalidates whatever was measured against the old one, so the accuracy
- * check and the scanpath are cleared rather than left on screen describing a model that no
- * longer exists.
+ * check is cleared rather than left on screen describing a model that no longer exists.
  */
-function absorb(
-  prev: Session,
-  activity: Activity,
-  jsPsych: JsPsych,
-  fixations: Fixation[][],
-  mode: Mode,
-): Session {
+function absorb(prev: Session, activity: Activity, jsPsych: JsPsych, mode: Mode): Session {
   const data = jsPsych.data.get();
   const first = (trial_type: string): any => data.filter({ trial_type }).values()[0] ?? {};
   const next: Session = { ...prev };
@@ -410,7 +407,7 @@ function absorb(
     const calibration = first("saccade-calibrate");
     next.calibration = Number.isFinite(calibration.lambda) ? "ok" : "failed";
     next.validation = null;
-    next.scanpath = null;
+    next.scanpathDone = false;
   }
 
   if (activity === "validate") {
@@ -425,22 +422,7 @@ function absorb(
     };
   }
 
-  if (activity === "scanpath") {
-    // By `demo_step` rather than by `trial_type`, so it keeps finding the viewing trials if
-    // they are ever rebuilt on a different plugin. Two rows, in the order they were shown.
-    const scenes = data.filter({ demo_step: "scene" }).values();
-    const views = scenes.map((scene: any, i: number) => ({
-      task: scene.viewing_task ?? VIEWING_TASKS[i]?.label ?? "",
-      fixations: fixations[i]?.length ?? 0,
-      samples: (scene.saccade_data ?? []).length,
-    }));
-    const samples = views.reduce((total, view) => total + view.samples, 0);
-    next.scanpath = {
-      views,
-      hz: samples ? samples / ((scenes.length * SCENE_MS) / 1000) : null,
-      mode,
-    };
-  }
+  if (activity === "scanpath") next.scanpathDone = true;
 
   return next;
 }
@@ -609,8 +591,9 @@ function Demo() {
         // Before the camera has started, `mode` goes to the extension below and the preview
         // trial's `start()` applies it, behind the setup progress bar. Once it is running, only
         // a new `start()` would look at `mode` again, and no later activity calls one, so the
-        // tracker is switched here instead.
-        if (tracker.initialized && tracker.mode !== session.mode) {
+        // tracker is switched here instead. The speed check is the exception: it times the
+        // live model whatever mode the tracker is in, and only then decides.
+        if (activity !== "check" && tracker.initialized && tracker.mode !== session.mode) {
           if (session.mode === "live") {
             tracker.disableDeferred();
           } else {
@@ -641,10 +624,6 @@ function Demo() {
         jsPsychRef.current = jsPsych;
         extensionRef.current = jsPsych.extensions.saccade as unknown as SaccadeExtension;
 
-        // Set by the comparison screen and read once the run is over, one list per view: the
-        // figures the participant saw and the counts on the results card have to agree.
-        let fixations: Fixation[][] = [];
-
         // Camera permission, the model download with its progress bar, and head positioning.
         // Only on the first activity of the session: after that the camera is already open, and
         // making somebody sit through a preview screen to recalibrate is friction for nothing.
@@ -652,7 +631,31 @@ function Demo() {
           ? []
           : [{ type: m.preview, instructions: PREVIEW_INSTRUCTIONS }];
 
-        const timelines: Record<Exclude<Activity, "explore">, any[]> = {
+        // The speed check: camera setup if this is the first activity, then the rule a study's
+        // `mode: "auto"` uses, run from here so it can be repeated once the camera is open
+        // (the extension only applies `"auto"` when its `start()` opens the camera).
+        if (activity === "check") {
+          if (setup.length) {
+            await jsPsych.run(setup);
+            if (!mountedRef.current || jsPsychRef.current !== jsPsych) return;
+          }
+          display.innerHTML = CHECK_MEASURING;
+          display.scrollIntoView({ block: "center" });
+          const { ep, embedMs } = await tracker.measureEmbedMs();
+          const cameraFps = await tracker.measureCameraFps();
+          if (!mountedRef.current || runIdRef.current !== runId) return;
+          const check = m.chooseMode({ ep, embedMs, cameraFps });
+          setSession((prev) => ({
+            ...prev,
+            check,
+            mode: prev.modeChosen ? prev.mode : check.mode,
+          }));
+          endActivity();
+          setPhase("menu");
+          return;
+        }
+
+        const timelines: Record<Exclude<Activity, "explore" | "check">, any[]> = {
           calibrate: [
             ...setup,
             {
@@ -712,8 +715,7 @@ function Demo() {
             // with a progress bar, so the comparison below has something to draw. In live mode
             // it ends at once.
             { type: m.catchUp },
-            // Both recordings, given back side by side. Drawn from the same fixations the
-            // results card then counts.
+            // Both recordings, given back side by side.
             {
               type: m.button,
               stimulus: comparisonStimulus(sceneUrl),
@@ -722,11 +724,10 @@ function Demo() {
               on_load: () => {
                 const scenes = jsPsych.data.get().filter({ demo_step: "scene" }).values();
                 scanpathTeardownRef.current();
-                const mounted = scenes.map((scene: any, index: number) =>
+                const teardowns = scenes.map((scene: any, index: number) =>
                   mountScanpath(display, scene, session.validation?.precisionPx ?? null, index),
                 );
-                fixations = mounted.map((view) => view.fixations);
-                scanpathTeardownRef.current = () => mounted.forEach((view) => view.teardown());
+                scanpathTeardownRef.current = () => teardowns.forEach((teardown) => teardown());
               },
               on_finish: () => {
                 scanpathTeardownRef.current();
@@ -739,7 +740,7 @@ function Demo() {
         await jsPsych.run(timelines[activity]);
         if (!mountedRef.current || jsPsychRef.current !== jsPsych) return;
 
-        setSession((prev) => absorb(prev, activity, jsPsych, fixations, tracker.mode));
+        setSession((prev) => absorb(prev, activity, jsPsych, tracker.mode));
         endActivity();
         setPhase("menu");
       } catch (err) {
@@ -760,7 +761,7 @@ function Demo() {
   );
 
   const setMode = useCallback((mode: Mode) => {
-    setSession((prev) => ({ ...prev, mode }));
+    setSession((prev) => ({ ...prev, mode, modeChosen: true }));
   }, []);
 
   const setSmoothing = useCallback((smoothingFrames: number) => {
@@ -844,8 +845,8 @@ function Preamble({ supported }: { supported: boolean }) {
   return (
     <div className={styles.preamble}>
       <p className={styles.lead}>
-        Look at a few dots and this page learns where on the screen you're looking. Then you can
-        check its accuracy, trace your gaze over a painting, or watch it live.{" "}
+        See webcam eye tracking work on your own eyes. Turn on your camera, look at a few dots, and
+        then watch a dot follow your gaze around the page.{" "}
         <strong>Everything runs on your computer, and nothing is uploaded.</strong>
       </p>
       {!supported ? (
@@ -862,87 +863,70 @@ interface CardProps {
   title: string;
   cost: string;
   blurb: React.ReactNode;
-  /** What this activity measured last time it ran, or null if it has not. */
-  result: React.ReactNode;
-  /** A setting for the next run, shown under the blurb so the result's rule lines up across cards. */
+  /** What this activity measured last time it ran, or null if it has not run. */
+  result?: React.ReactNode;
+  /** A setting for the next run, shown under the blurb. */
   option?: React.ReactNode;
   cta: string;
   disabled: boolean;
   onRun: () => void;
+  /** One of the two setup steps: narrower, and centered on the path. */
+  step?: boolean;
+  /** The thing to do next. Exactly one card at a time gets the filled button. */
+  next?: boolean;
 }
 
-function Card({ title, cost, blurb, result, option, cta, disabled, onRun }: CardProps) {
+function Card({ title, cost, blurb, result, option, cta, disabled, onRun, step, next }: CardProps) {
   return (
-    <div className={clsx(styles.card, disabled && styles.cardDisabled)}>
+    <div className={clsx(styles.card, step && styles.cardStep, disabled && styles.cardDisabled)}>
       <div className={styles.cardHead}>
         <h3 className={styles.cardTitle}>{title}</h3>
         <span className={styles.cardCost}>{cost}</span>
       </div>
       <p className={styles.cardBlurb}>{blurb}</p>
       {option ? <div className={styles.cardOption}>{option}</div> : null}
-      <div className={styles.cardResult}>
-        {result ?? <span className={styles.cardPending}>Not run yet</span>}
-      </div>
-      <button className={styles.secondary} onClick={onRun} disabled={disabled}>
+      {result ? <div className={styles.cardResult}>{result}</div> : null}
+      <button
+        className={clsx(styles.secondary, next && styles.cardNext)}
+        onClick={onRun}
+        disabled={disabled}
+      >
         {cta}
       </button>
     </div>
   );
 }
 
-const MODES: { mode: Mode; label: string; help: string }[] = [
-  {
-    mode: "live",
-    label: "Live",
-    help: "The model runs on every camera frame as it arrives, so gaze is available at once.",
-  },
-  {
-    mode: "deferred",
-    label: "Deferred",
-    help:
-      "The model runs in background threads and each activity's gaze is filled in afterwards, " +
-      "as on a computer too slow to keep up. Free viewing and the live gaze dot need live mode.",
-  },
-];
-
-/** Live or deferred, for the next activity. Switching keeps the calibration. */
-function ModeSetting({
-  mode,
-  disabled,
-  onChange,
-}: {
-  mode: Mode;
-  disabled: boolean;
-  onChange: (mode: Mode) => void;
-}) {
-  return (
-    <fieldset className={styles.modeSetting} disabled={disabled}>
-      <legend className={styles.modeLegend}>Where the model runs</legend>
-      <div className={styles.modeOptions}>
-        {MODES.map((m) => (
-          <label key={m.mode} className={styles.toggle}>
-            <input
-              type="radio"
-              name="saccade-demo-mode"
-              value={m.mode}
-              checked={mode === m.mode}
-              onChange={() => onChange(m.mode)}
-            />
-            {m.label}
-          </label>
-        ))}
-      </div>
-      <p className={styles.controlHelp}>
-        {MODES.find((m) => m.mode === mode)?.help} It applies from the next activity, and the
-        calibration carries over. <Link to="/guides/deferred-mode">About deferred mode</Link>
-      </p>
-    </fieldset>
-  );
+/** Why the speed check chose the mode it did, in a line under the result. */
+function checkDetail(check: ModeDecision): string {
+  if (check.reason === "no WebGPU") return "This browser can't run the model on the graphics card.";
+  const ms = `${check.embedMs.toFixed(0)} ms per frame`;
+  const limit = `${check.limitMs.toFixed(0)} ms`;
+  return check.mode === "live"
+    ? `${ms}, within the ${limit} limit`
+    : `${ms}, over the ${limit} limit`;
 }
 
-/** Which mode a result was measured in, under the number. */
-function measuredIn(mode: Mode): string {
-  return `measured in ${mode} mode`;
+/**
+ * The arrow between steps. One arrow straight down, or with `branches`, a fork into that many
+ * columns, lined up over the cards below it. Drawn in the accent color once the step above it is
+ * done, so the path shows how far the visitor has come.
+ */
+function Connector({ done, branches = 1 }: { done: boolean; branches?: number }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={clsx(
+        styles.connector,
+        branches > 1 && styles.connectorFork,
+        done && styles.connectorDone,
+      )}
+    >
+      {Array.from({ length: branches }, (_, i) => (
+        <span key={i} className={styles.arrow} />
+      ))}
+    </div>
+  );
 }
 
 function Menu({
@@ -962,51 +946,37 @@ function Menu({
   onShowGazeDuringCheckChange: (show: boolean) => void;
   onModeChange: (mode: Mode) => void;
 }) {
-  const { calibration, validation, scanpath } = session;
+  const { check, calibration, validation, scanpathDone } = session;
   const live = session.mode === "live";
+  const checked = check !== null;
+
+  // The one card with a filled button: the next step along the path, ending at the live gaze
+  // dot, which is the moment this page is for. In deferred mode there is no live dot, so the
+  // painting takes its place.
+  const next: Activity = !checked
+    ? "check"
+    : !calibrated
+      ? "calibrate"
+      : live
+        ? "explore"
+        : "scanpath";
 
   return (
     <div className={styles.menu}>
       <Preamble supported={supported} />
 
-      <ModeSetting mode={session.mode} disabled={!supported} onChange={onModeChange} />
-
-      <div className={styles.cards}>
+      <div className={styles.path}>
         <Card
-          title="Calibration"
-          cost="about a minute"
-          blurb="Look at thirteen dots so the tracker can learn how your eyes move."
+          step
+          next={next === "check"}
+          title="Camera and speed check"
+          cost={checked ? "a few seconds" : "under a minute"}
+          blurb="Turns on your camera and checks that this computer can track your eyes as they move."
           result={
-            calibration === "ok" ? (
-              "Calibration complete"
-            ) : calibration === "failed" ? (
-              <span className={styles.cardPending}>
-                That calibration didn't work. Try again with more light on your face.
-              </span>
-            ) : null
-          }
-          cta={calibration === "none" ? "Calibrate" : "Calibrate again"}
-          disabled={!supported}
-          onRun={() => onRun("calibrate")}
-        />
-
-        <Card
-          title="Accuracy check"
-          cost="about 40 seconds"
-          blurb="Nine more dots measure how far off the tracker is."
-          result={
-            validation ? (
+            check ? (
               <>
-                {validation.errorPercent === null
-                  ? "—"
-                  : `${validation.errorPercent.toFixed(1)}% of the screen diagonal`}
-                <span className={styles.cardAside}>
-                  {validation.errorPx === null ? null : `${validation.errorPx.toFixed(0)} px off`}
-                  {validation.precisionPx === null
-                    ? null
-                    : ` · ${validation.precisionPx.toFixed(0)} px scatter`}
-                </span>
-                <span className={styles.cardAside}>{measuredIn(validation.mode)}</span>
+                {live ? "Ready to track live" : "Ready, tracking in the background"}
+                <span className={styles.cardAside}>{checkDetail(check)}</span>
               </>
             ) : null
           }
@@ -1014,59 +984,116 @@ function Menu({
             <label className={styles.toggle}>
               <input
                 type="checkbox"
-                checked={session.showGazeDuringCheck && live}
-                disabled={!calibrated || !supported || !live}
-                onChange={(e) => onShowGazeDuringCheckChange(e.target.checked)}
+                checked={!live}
+                disabled={!supported}
+                onChange={(e) => onModeChange(e.target.checked ? "deferred" : "live")}
               />
-              {live ? "Show my gaze live during the check" : "Live gaze needs live mode"}
+              <span>
+                Use deferred mode (<Link to="/guides/deferred-mode">what is this?</Link>)
+              </span>
             </label>
           }
-          cta={!calibrated ? "Calibrate first" : validation ? "Check again" : "Check the accuracy"}
-          disabled={!calibrated || !supported}
-          onRun={() => onRun("validate")}
+          cta={checked ? "Check again" : "Start"}
+          disabled={!supported}
+          onRun={() => onRun("check")}
         />
 
+        <Connector done={checked} />
+
         <Card
-          title="Image scanpath"
+          step
+          next={next === "calibrate"}
+          title="Calibration"
           cost="about a minute"
-          blurb="One painting, two questions, and where your eyes went for each."
+          blurb="Look at thirteen dots so the tracker can learn how your eyes move."
           result={
-            scanpath ? (
-              <>
-                Two scanpaths
-                {scanpath.views.map((view) => (
-                  <span className={styles.cardAside} key={view.task}>
-                    {view.task}: {view.fixations} fixations
-                  </span>
-                ))}
-                <span className={styles.cardAside}>{measuredIn(scanpath.mode)}</span>
-              </>
+            calibration === "ok" ? (
+              "Calibrated"
+            ) : calibration === "failed" ? (
+              <span className={styles.cardPending}>
+                That didn't work. Try again with more light on your face.
+              </span>
             ) : null
           }
-          cta={!calibrated ? "Calibrate first" : scanpath ? "Do it again" : "Record two scanpaths"}
-          disabled={!calibrated || !supported}
-          onRun={() => onRun("scanpath")}
+          cta={calibration === "none" ? "Calibrate" : "Calibrate again"}
+          disabled={!checked || !supported}
+          onRun={() => onRun("calibrate")}
         />
 
-        <Card
-          title="Free viewing"
-          cost="as long as you like"
-          blurb="Watch a dot follow your gaze around the page."
-          result={
-            <span className={styles.cardPending}>
-              {live ? "Nothing is recorded" : "Needs live mode: deferred gaze arrives too late"}
-            </span>
-          }
-          cta={!calibrated ? "Calibrate first" : !live ? "Switch to live mode" : "Look around"}
-          disabled={!calibrated || !supported || !live}
-          onRun={() => onRun("explore")}
-        />
+        <Connector done={calibrated} branches={3} />
+
+        <div className={styles.branches}>
+          <Card
+            next={next === "explore"}
+            title="Watch your gaze"
+            cost="as long as you like"
+            blurb="A dot follows your eyes around the page. Nothing is recorded."
+            result={
+              calibrated && !live ? (
+                <span className={styles.cardPending}>Needs live mode.</span>
+              ) : null
+            }
+            cta="Look around"
+            disabled={!calibrated || !supported || !live}
+            onRun={() => onRun("explore")}
+          />
+
+          <Card
+            next={next === "scanpath"}
+            title="Gaze on a painting"
+            cost="about a minute"
+            blurb="One painting, two questions. See where your eyes went each time."
+            cta={scanpathDone ? "Do it again" : "Look at the painting"}
+            disabled={!calibrated || !supported}
+            onRun={() => onRun("scanpath")}
+          />
+
+          <Card
+            title="Accuracy check"
+            cost="about 40 seconds"
+            blurb="Nine more dots show how far off the tracker is."
+            result={
+              validation ? (
+                <>
+                  {validation.errorPercent === null
+                    ? "Couldn't measure"
+                    : `Off by ${validation.errorPercent.toFixed(1)}% of the screen`}
+                  <span className={styles.cardAside}>
+                    {[
+                      validation.errorPx === null ? null : `${validation.errorPx.toFixed(0)} px`,
+                      validation.precisionPx === null
+                        ? null
+                        : `${validation.precisionPx.toFixed(0)} px scatter`,
+                      `${validation.mode} mode`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </>
+              ) : null
+            }
+            option={
+              <label className={styles.toggle}>
+                <input
+                  type="checkbox"
+                  checked={session.showGazeDuringCheck && live}
+                  disabled={!calibrated || !supported || !live}
+                  onChange={(e) => onShowGazeDuringCheckChange(e.target.checked)}
+                />
+                {live ? "Show my gaze during the check" : "Live gaze needs live mode"}
+              </label>
+            }
+            cta={validation ? "Check again" : "Check accuracy"}
+            disabled={!calibrated || !supported}
+            onRun={() => onRun("validate")}
+          />
+        </div>
       </div>
 
-      {calibration !== "none" ? (
+      {checked || calibration !== "none" ? (
         <div className={styles.buttonRow}>
           <button className={styles.abandon} onClick={onReset}>
-            Stop the camera and reset calibration
+            Stop the camera and start over
           </button>
         </div>
       ) : null}
