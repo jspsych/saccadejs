@@ -34,12 +34,12 @@ same setup steps in your browser and then shows you where you looked on a painti
 
 ## How the pieces fit together
 
-saccade.js adds two kinds of things to a jsPsych experiment:
+SaccadeJS adds two kinds of things to a jsPsych experiment:
 
 - **Setup trials.** A handful of plugins, each with one job: start the camera, measure timing,
   calibrate, or check accuracy. They go near the start of your timeline, like consent or
   instructions.
-- **Recording.** The saccade.js _extension_ records gaze during any trial you attach it to. Your
+- **Recording.** The SaccadeJS _extension_ records gaze during any trial you attach it to. Your
   task trials can use any jsPsych plugin you like, and one extra line turns recording on for a
   trial.
 
@@ -50,7 +50,7 @@ saccade.js adds two kinds of things to a jsPsych experiment:
 
 ### Load the packages
 
-Each part of saccade.js is its own small package. Load them in your page's `<head>`, alongside
+Each part of SaccadeJS is its own small package. Load them in your page's `<head>`, alongside
 jsPsych:
 
 <CodeBlock language="html">{headSnippet}</CodeBlock>
@@ -96,7 +96,7 @@ model (about 20 MB) while showing a progress bar. Once it is running, the partic
 - an indicator that turns on when their face is found.
 
 The **Continue** button stays disabled until a face is found. Put this trial before any other
-saccade.js trial, because they all need the camera running.
+SaccadeJS trial, because they all need the camera running.
 
 </Step>
 <Step>
@@ -112,7 +112,7 @@ later. The delay differs from one computer to the next, and the browser has no w
 
 This trial measures it. For fifteen seconds the screen switches between black and white at
 random moments, and the camera picks up the light it throws on the participant's face.
-saccade.js compares when the screen changed with when the camera saw the change, and subtracts
+SaccadeJS compares when the screen changed with when the camera saw the change, and subtracts
 the difference from every gaze timestamp recorded afterwards. In the example data further down,
 the delay was 78 ms.
 
@@ -134,7 +134,7 @@ of the screen. The participant follows a dot to thirteen positions, which
 takes about twenty seconds. Until calibration finishes, the tracker cannot estimate gaze at all.
 
 **Validation** then checks how well calibration worked. The participant looks at nine more dots,
-eight of them in positions calibration did not use, and saccade.js measures how far its estimates
+eight of them in positions calibration did not use, and SaccadeJS measures how far its estimates
 land from each dot. It saves the median error as `median_error_viewport`, a fraction of the
 window's diagonal, so the number compares across screens of different sizes. A value of `0.08`
 means the estimates typically landed 8% of the diagonal away from the dot, roughly 150 pixels on
@@ -274,7 +274,7 @@ The timeline stays the same. `@saccadejs/core` is installed automatically as a d
 the other packages; you only need to install it yourself if you use the
 [core API](reference/core-api) directly.
 
-## Using saccade.js without jsPsych
+## Using SaccadeJS without jsPsych
 
 The core library does not need jsPsych. Underneath, the plugins do the same four things you just
 saw: start the tracker, measure the delay, calibrate, and then read gaze estimates as they

@@ -7,7 +7,7 @@ description: Wait for deferred mode's background threads to finish, so every tri
 
 # `saccade-catch-up`
 
-In [deferred mode](../guides/deferred-mode), a recording trial can end before saccade.js has
+In [deferred mode](../guides/deferred-mode), a recording trial can end before SaccadeJS has
 computed its gaze. Its camera frames wait in a queue for the background threads, which fill in the
 trial's `saccade_data` as they finish. This trial waits for the queue to empty, and shows the
 participant a progress bar and an estimate of the time left.

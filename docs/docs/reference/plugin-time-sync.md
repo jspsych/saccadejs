@@ -8,7 +8,7 @@ description: Measure this participant's screen-to-camera lag and apply it to gaz
 # `saccade-time-sync`
 
 `saccade-time-sync` measures how long a change on the participant's screen takes to show up in
-their camera. saccade.js then subtracts that delay from every gaze timestamp recorded afterwards.
+their camera. SaccadeJS then subtracts that delay from every gaze timestamp recorded afterwards.
 Use it when your study cares about _when_ people looked as well as _where_, for example when you
 measure how quickly the eyes reach a target.
 [Timing and synchrony](../guides/timing-and-synchrony) explains why the delay exists and how to
@@ -44,7 +44,7 @@ timeline.push({ type: jsPsychSaccadeTimeSync });
 | `instructions` | `HTML string` | an explanation of the test | Shown before the measurement starts. |
 | `button_text` | `string` | `"Start"` | The label on the button that starts the measurement. |
 | `require_ok` | `boolean` | `false` | If the verdict is `"UNRELIABLE"`, run the measurement once more. The experiment continues either way. |
-| `apply_offset` | `boolean` | `true` | If the verdict is `"OK"`, subtract the measured delay from gaze timestamps in all later trials. With any other verdict, saccade.js records the delay but does not apply it. |
+| `apply_offset` | `boolean` | `true` | If the verdict is `"OK"`, subtract the measured delay from gaze timestamps in all later trials. With any other verdict, SaccadeJS records the delay but does not apply it. |
 
 ## Data
 
@@ -52,10 +52,10 @@ timeline.push({ type: jsPsychSaccadeTimeSync });
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `lag_ms` | `number` | The measured delay from screen to camera, in ms. This is the number saccade.js subtracts. |
+| `lag_ms` | `number` | The measured delay from screen to camera, in ms. This is the number SaccadeJS subtracts. |
 | `verdict` | `"OK" \| "INCONCLUSIVE" \| "UNRELIABLE" \| null` | Whether the measurement can be trusted. See [how the verdict is decided](#how-the-verdict-is-decided). |
 | `reason` | `string \| null` | Why the verdict is not `"OK"`, when it is not. |
-| `applied` | `boolean` | Whether saccade.js will subtract the delay from later trials. |
+| `applied` | `boolean` | Whether SaccadeJS will subtract the delay from later trials. |
 | `clock_source` | `"captureTime" \| "receiveTime" \| "callback"` | Where the browser's frame timestamps came from. Only `"captureTime"` gives a real measurement. With anything else, treat `lag_ms` as a rough guide. |
 
 ### Quality checks

@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"
      role="img" aria-labelledby="saccadejs-logo-title">
-  <title id="saccadejs-logo-title">saccade.js</title>
+  <title id="saccadejs-logo-title">SaccadeJS</title>
   <!--
-    saccade.js scanpath mark.
+    SaccadeJS scanpath mark.
 
     Eye tracking plots gaze the same way jsPsych draws its brain: circles of
     varying radius. So the mark is built from that shared primitive — four

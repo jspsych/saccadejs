@@ -2,14 +2,14 @@
 id: models
 title: The model
 sidebar_label: The model
-description: The eye-embedding model behind saccade.js, its published releases, how a run records which model it used, and what a replacement model must provide.
+description: The eye-embedding model behind SaccadeJS, its published releases, how a run records which model it used, and what a replacement model must provide.
 ---
 
 import ModelReleases from "@site/src/components/ModelReleases";
 
 # The model
 
-saccade.js estimates gaze in two stages. First, a neural network looks at a small picture of the
+SaccadeJS estimates gaze in two stages. First, a neural network looks at a small picture of the
 participant's eyes and turns it into a list of numbers describing how the eyes look (an
 _embedding_). Then the participant's calibration turns those numbers into a point on the screen.
 [How it works](/guides/how-it-works) walks through the whole process.
@@ -71,7 +71,7 @@ finished files.
 
 ## Recording which model you used
 
-The jsPsych extension does this automatically. When the model loads, saccade.js computes the
+The jsPsych extension does this automatically. When the model loads, SaccadeJS computes the
 fingerprint of the file it actually downloaded, looks it up in the list of published releases,
 and adds a `saccade_model` column to your data:
 
@@ -81,7 +81,7 @@ and adds a `saccade_model` column to your data:
 | `sha256:f4669a8398d9` | The file is not a published release. The value is the start of its fingerprint, so you can still identify it. |
 | `unverified` | The fingerprint could not be computed. Browsers compute it only on secure pages, which the camera requires anyway, so in practice you will not see this. |
 
-saccade.js identifies the file by its contents, not its name or URL. It still recognizes a
+SaccadeJS identifies the file by its contents, not its name or URL. It still recognizes a
 renamed copy of a published release, and it still identifies a model of your own by its
 fingerprint.
 
@@ -100,11 +100,11 @@ const id = jsPsych.extensions.saccade.getTracker().getModelIdentity();
 // }
 ```
 
-saccade.js finds `dim` and `emitsWeight` by running the model once when it loads, rather than
+SaccadeJS finds `dim` and `emitsWeight` by running the model once when it loads, rather than
 looking them up, so they are correct for an unfamiliar model too.
 
 Whether calibration used the frame-quality ratings depends on the calibration, not the model, so
-saccade.js records it separately. `saccade-calibrate` saves a `weighting` column with the value
+SaccadeJS records it separately. `saccade-calibrate` saves a `weighting` column with the value
 `"model"`, `"head"` or `"uniform"`, and `fitCalibration()` returns the same value.
 
 ## Using your own model
@@ -113,7 +113,7 @@ If you have trained your own eye model, set `modelUrl` to your model file. It mu
 same eye picture as the published model, but it can produce any number of values.
 
 **The input must match exactly.** The model receives a 144 × 36 grayscale strip spanning both
-eyes, as a float32 tensor of shape `[1, 36, 144, 1]` with values from 0 to 255. saccade.js builds
+eyes, as a float32 tensor of shape `[1, 36, 144, 1]` with values from 0 to 255. SaccadeJS builds
 that strip in one fixed way, in this order:
 
 1. crop around fixed MediaPipe face landmarks,
@@ -123,19 +123,19 @@ that strip in one fixed way, in this order:
 
 A model that expects a different shape fails to load, so you will notice. A model that expects
 the same shape but was trained on pictures prepared differently will load, run, and produce
-nonsense, and saccade.js cannot detect that. Check your training preprocessing
+nonsense, and SaccadeJS cannot detect that. Check your training preprocessing
 against the list above.
 
 **The outputs are flexible.** The first output is the embedding. It can be any length, as long as
-it is the same length on every frame of a session. saccade.js reads the length from the model.
+it is the same length on every frame of a session. SaccadeJS reads the length from the model.
 
 A second output is optional. If your model has an output named `cal_weight`, `weight` or
-`quality`, saccade.js reads it as a quality score for each frame between 0 and 1, and uses it to
+`quality`, SaccadeJS reads it as a quality score for each frame between 0 and 1, and uses it to
 weight both the averaging of frames and the calibration. An output with any other name is read the
 same way if it is the model's only other output and holds a single number. Without one, every
 frame counts equally. Live and [deferred mode](/guides/deferred-mode) apply the same rule.
 
-**What saccade.js checks.** Two problems stop it when the model loads, before any participant
+**What SaccadeJS checks.** Two problems stop it when the model loads, before any participant
 data is collected:
 
 - an input shape it cannot provide,
@@ -144,6 +144,6 @@ data is collected:
 A third stops it during the session, on the frame where it happens: an embedding whose length
 changes from one frame to the next.
 
-saccade.js cannot check how your training pictures were prepared. It also does not compare the
+SaccadeJS cannot check how your training pictures were prepared. It also does not compare the
 `contract` number in the release table with the one it implements. That number is recorded, not
 enforced.

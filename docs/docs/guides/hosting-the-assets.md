@@ -2,13 +2,13 @@
 id: hosting-the-assets
 title: Hosting the assets
 sidebar_label: Hosting the assets
-description: What saccade.js downloads at run time, and how to serve it yourself.
+description: What SaccadeJS downloads at run time, and how to serve it yourself.
 ---
 
 # Hosting the assets
 
 When a participant starts your experiment, their browser downloads four sets of files for
-saccade.js: the eye model, the software that runs it, Google's face finder model, and the software
+SaccadeJS: the eye model, the software that runs it, Google's face finder model, and the software
 that runs that. Together they come to about 30 MB on the first visit, and the browser keeps a copy
 after that.
 
@@ -28,7 +28,7 @@ through.
 
 ## Serving the files yourself
 
-There are two steps: copy the files into your experiment's folder, then tell saccade.js where
+There are two steps: copy the files into your experiment's folder, then tell SaccadeJS where
 they are.
 
 **1. Copy the files.** The example below assumes your experiment is served from a folder called
@@ -50,11 +50,11 @@ curl -o public/assets/face_landmarker.task \
   https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 ```
 
-The `curl` line uses the same versioned address saccade.js loads by default. Google also serves
+The `curl` line uses the same versioned address SaccadeJS loads by default. Google also serves
 the face finder at a `latest` address. Avoid that one, because Google could point it at a new
 model at any time.
 
-**2. Point saccade.js at them.** Pass the locations when you register the extension:
+**2. Point SaccadeJS at them.** Pass the locations when you register the extension:
 
 ```js
 const jsPsych = initJsPsych({
@@ -111,7 +111,7 @@ Most web servers handle these correctly already. If something does not load, che
   `Cache-Control: public, max-age=31536000, immutable`, each participant downloads the model once,
   rather than every time the page loads.
 - **Do not add `Cross-Origin-Opener-Policy` or `Cross-Origin-Embedder-Policy` headers.** These
-  headers are what let a page run WebAssembly on several threads at once. saccade.js runs each
+  headers are what let a page run WebAssembly on several threads at once. SaccadeJS runs each
   copy of the model on a single thread (in deferred mode, several copies in separate
   background threads), so it never needs them. They will not make it faster, and they can break
   other parts of your page.

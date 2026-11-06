@@ -7,7 +7,7 @@ description: SaccadeTracker, the calibration and validation helpers, runLoopback
 
 # Core API — `@saccadejs/core`
 
-The core library is saccade.js without jsPsych. The [extension](extension) and the plugins are
+The core library is SaccadeJS without jsPsych. The [extension](extension) and the plugins are
 thin wrappers around what is on this page. You need it if you are:
 
 - building an experiment with something other than jsPsych,
@@ -66,7 +66,7 @@ new SaccadeTracker(options?: SaccadeTrackerOptions)
 | `stream` | `MediaStream` | — | Use this camera stream instead of calling `getUserMedia`. The tracker will not stop a stream it did not open. |
 | `model` | `EmbeddingModel` | — | Use an embedding model you have already loaded, instead of loading one from `assets.modelUrl`. Mainly useful in tests. Deferred mode cannot use it: the background threads load `assets.modelUrl` themselves, so `enableDeferred()` throws unless you also pass `createWorker`. |
 | `calHead` | `CalHead \| null` | `null` | A separate scoring model that weights calibration frames, overriding the model's own scores. See [Row weighting](#row-weighting). |
-| `calibrationFit` | `"frames" \| "points"` | `"frames"` | How calibration uses the frames recorded at each dot. `"frames"` uses each frame on its own. `"points"` averages each dot's frames first, which is how saccade.js calibrated up to 0.3. See [How the calibration is fit](#how-the-calibration-is-fit). |
+| `calibrationFit` | `"frames" \| "points"` | `"frames"` | How calibration uses the frames recorded at each dot. `"frames"` uses each frame on its own. `"points"` averages each dot's frames first, which is how SaccadeJS calibrated up to 0.3. See [How the calibration is fit](#how-the-calibration-is-fit). |
 
 ### Members
 
@@ -157,9 +157,9 @@ interface FrameQuality {
 }
 ```
 
-`quality` measures the two recording conditions that predicted accuracy in the saccade.js
+`quality` measures the two recording conditions that predicted accuracy in the SaccadeJS
 validation study: how far the participant sits from the camera, and how well their eyes are lit.
-saccade.js measures brightness and contrast on the eye region at the camera's full resolution,
+SaccadeJS measures brightness and contrast on the eye region at the camera's full resolution,
 before resizing and equalizing it, because equalization would flatten the contrast it is trying
 to measure. The [`saccade-preview`](plugin-preview#distance-and-lighting-feedback) plugin turns
 these numbers into advice for the participant, such as "move a little closer to the camera".
@@ -315,7 +315,7 @@ dot their gaze holds still, but the model's output still varies a little from fr
 Fitting every frame lets the regression learn that this variation is noise. The ridge penalty is
 3 at any number of dots.
 
-Up to version 0.3, saccade.js averaged each dot's frames into one row and used a penalty of 1,
+Up to version 0.3, SaccadeJS averaged each dot's frames into one row and used a penalty of 1,
 or 3 with nine dots or fewer. Set `calibrationFit: "points"` to get that fit back, for example
 to reproduce an earlier study. Replayed on 200 participants' recorded data, fitting every frame
 cut the median error by about 13%, and roughly halved it after a nine-dot calibration.
@@ -339,7 +339,7 @@ fit. The weight comes from the first of these sources that applies:
 Record it in your data. A weighted fit and an unweighted one are different analyses, and nothing
 else in the data tells them apart. `saccade-calibrate` writes the `weighting` column for you.
 
-When frames are averaged, saccade.js weights each frame **before** averaging. A low-scoring frame
+When frames are averaged, SaccadeJS weights each frame **before** averaging. A low-scoring frame
 therefore contributes little to a point's mean embedding. Smoothing during tracking uses the same
 weights, so a smoothed gaze estimate and a calibration point are computed the same way.
 
@@ -361,7 +361,7 @@ For an embedding of length _d_, fitting takes memory proportional to _d_² and t
 to _d_³. The fit runs once, when calibration ends. At 128 the cost is negligible. At a few
 thousand you would notice it.
 
-saccade.js throws an error, instead of carrying on with bad numbers, for any of these:
+SaccadeJS throws an error, instead of carrying on with bad numbers, for any of these:
 
 - an embedding whose length changes during a session,
 - calibration points whose embeddings have different lengths,

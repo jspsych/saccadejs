@@ -1,12 +1,12 @@
 /**
  * The scanpath figures the live demo shows after its two viewing trials.
  *
- * Nothing here is part of saccade.js. It is the analysis an experimenter would write over a
+ * Nothing here is part of SaccadeJS. It is the analysis an experimenter would write over a
  * trial's `saccade_data`: group the per-frame samples into fixations, then draw them over the
  * stimulus. It lives beside the demo rather than in a package because every lab draws this
  * figure slightly differently, and the library has no business deciding which way is right.
  *
- * The drawing follows the saccade.js mark: circles for fixations with radius encoding dwell,
+ * The drawing follows the SaccadeJS mark: circles for fixations with radius encoding dwell,
  * lines for the saccades between them, and colour running from the start of the trial to the
  * end along the same four brand stops. A visitor who has looked at the logo has already been
  * told how to read this.

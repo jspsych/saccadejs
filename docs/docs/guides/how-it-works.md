@@ -7,7 +7,7 @@ description: The pipeline from a camera frame to a point on the screen, in one p
 
 # How it works
 
-You do not need this page to use saccade.js. Read it when you are writing the methods section of a
+You do not need this page to use SaccadeJS. Read it when you are writing the methods section of a
 paper, or when you want to understand why the tracker behaves the way it does.
 
 In brief, a model trained once, in advance, turns a picture of the eyes into a list of numbers
@@ -20,14 +20,14 @@ Every camera frame goes through the same six steps. Terms you may want for a met
 appear in parentheses.
 
 1. **The camera captures a frame.** Along with the image, the browser reports when it thinks the
-   camera captured it (`captureTime`). saccade.js stamps gaze samples with this time.
+   camera captured it (`captureTime`). SaccadeJS stamps gaze samples with this time.
 
 2. **Find the face.** Google's MediaPipe Face Landmarker looks for one face and marks 478 points on
-   it (landmarks). saccade.js uses only the points around the eyes, and only to decide where to
+   it (landmarks). SaccadeJS uses only the points around the eyes, and only to decide where to
    cut the image. A frame with no face produces no gaze estimate, so a gap in `saccade_data`
    tells you something: the participant blinked, looked away, or left the frame.
 
-3. **Cut out the eyes.** saccade.js crops the frame to a single strip covering both eyes, converts
+3. **Cut out the eyes.** SaccadeJS crops the frame to a single strip covering both eyes, converts
    it to grayscale, and shrinks it to 144 × 36 pixels. It then adjusts the contrast region by
    region (CLAHE, contrast-limited adaptive histogram equalization) to even out differences in
    lighting between rooms. The model sees only this small strip. Color and the rest of the face
@@ -49,7 +49,7 @@ appear in parentheses.
    processor, while the experiment carries on. Steps 5 and 6 run once it finishes. The
    `saccade_mode` column records which mode a trial used.
 
-5. **Optionally, average a few frames.** A single frame's estimate can be jumpy, so saccade.js can
+5. **Optionally, average a few frames.** A single frame's estimate can be jumpy, so SaccadeJS can
    average the numbers from the last few frames to steady it. Each frame counts in proportion to
    its usability rating, so a blink barely moves the estimate. The `smoothing_frames` setting
    controls how many frames go into the average. The default, 1, means no averaging. If you raise
@@ -63,7 +63,7 @@ appear in parentheses.
 
 ## Calibration and validation
 
-**Calibration** fits the equation in step 6. saccade.js shows a dot, waits one second for the
+**Calibration** fits the equation in step 6. SaccadeJS shows a dot, waits one second for the
 participant's eyes to reach it, then records the eye numbers for half a second. Each frame
 recorded, paired with the dot's position, becomes one example. The default thirteen dots at 30
 frames a second give a few hundred examples. The frames for one dot all share a gaze position, so
@@ -99,13 +99,13 @@ The `saccade-time-sync` trial measures the two together:
 
 1. For fifteen seconds, the page switches between black and white at random moments, at least half
    a second apart.
-2. saccade.js records the time of each switch.
+2. SaccadeJS records the time of each switch.
 3. Meanwhile, the participant's face and surroundings brighten and darken with the screen.
-   saccade.js records how bright each camera frame is and when the camera captured it.
+   SaccadeJS records how bright each camera frame is and when the camera captured it.
 4. The delay is the time shift that best lines up the switches with the jumps in brightness.
 
 The camera takes a picture only every 33 ms or so, so any delay within that window lines up
-equally well. saccade.js reports the middle of the window as the delay, the window's width as its
+equally well. SaccadeJS reports the middle of the window as the delay, the window's width as its
 uncertainty, and a verdict on whether to trust the measurement.
 
 The switches come at random times on purpose. At a steady rate, every switch would land at the

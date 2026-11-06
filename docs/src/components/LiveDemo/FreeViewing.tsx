@@ -8,7 +8,7 @@ import styles from "./styles.module.css";
  * Free viewing: the tracker with the lid off.
  *
  * The other three activities are jsPsych trials, because that is how an experiment uses
- * saccade.js. This one is not, and deliberately so — it is the same `SaccadeTracker` those
+ * SaccadeJS. This one is not, and deliberately so — it is the same `SaccadeTracker` those
  * trials are running on, driven straight from React with `tracker.onFrame`, which is all a page
  * outside jsPsych ever needs. Nothing is recorded and nothing is scored: the participant looks
  * wherever they like, and the dot follows.

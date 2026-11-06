@@ -7,7 +7,7 @@ description: Start the camera, load the model, and let the participant position 
 
 # `saccade-preview`
 
-This is the first saccade.js trial in any experiment. It:
+This is the first SaccadeJS trial in any experiment. It:
 
 1. asks the participant for permission to use their camera,
 2. downloads the eye-tracking model (about 20 MB), with a progress bar,
@@ -21,7 +21,7 @@ Under the indicator, two lines of advice tell the participant whether they are c
 camera and whether their eyes are lit well enough. See [Distance and lighting
 feedback](#distance-and-lighting-feedback).
 
-Put it early in the timeline. Every other saccade.js trial needs the camera to be running.
+Put it early in the timeline. Every other SaccadeJS trial needs the camera to be running.
 
 ```js
 timeline.push({ type: jsPsychSaccadePreview });
@@ -84,8 +84,8 @@ timeline.push({
 
 ## Distance and lighting feedback
 
-In the saccade.js validation study, two features of the camera image predicted how accurately
-saccade.js tracked a participant:
+In the SaccadeJS validation study, two features of the camera image predicted how accurately
+SaccadeJS tracked a participant:
 
 - **How far apart the eyes are in the image.** This mostly reflects how near the participant sits
   to the camera. People who sat farther away were tracked less accurately.

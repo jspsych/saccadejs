@@ -10,7 +10,7 @@ const editUrl = "https://github.com/jspsych/saccadejs/tree/main/docs/";
 const baseUrl = "/";
 
 const config: Config = defineJspsychConfig({
-  title: "saccade.js",
+  title: "SaccadeJS",
   tagline: "Webcam eye tracking for experiments that run in the browser",
   // Custom domain, set by docs/static/CNAME and the repository's Pages settings.
   url: "https://saccade.jspsych.org",
@@ -31,7 +31,7 @@ const config: Config = defineJspsychConfig({
   },
 
   navbar: {
-    title: "saccade.js",
+    title: "SaccadeJS",
     items: [
       { to: "/demo", label: "Live demo", position: "left" },
       { to: "/getting-started", label: "Getting started", position: "left" },

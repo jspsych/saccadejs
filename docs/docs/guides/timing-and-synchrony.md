@@ -25,7 +25,7 @@ such as 1,280, because of two delays that neither you nor the browser can see:
 Together these make up the _lag_. It depends on the participant's monitor, camera, browser, and
 computer, so a value measured on your machine will not carry over to theirs.
 
-The `saccade-time-sync` trial measures the lag on each participant's own setup. saccade.js then
+The `saccade-time-sync` trial measures the lag on each participant's own setup. SaccadeJS then
 subtracts it from every gaze timestamp recorded afterwards.
 
 ## Adding it to your timeline
@@ -68,7 +68,7 @@ example:
 
 **Do not correct twice.** `lag_ms` already includes the display delay, so do not also subtract a
 figure from the monitor's spec sheet or a measurement of your own. Processing time is excluded
-too, because `t` marks when the camera captured the frame, and the time saccade.js spent on it
+too, because `t` marks when the camera captured the frame, and the time SaccadeJS spent on it
 afterwards does not count.
 
 ## Reading the verdict
@@ -77,7 +77,7 @@ The time-sync trial also saves a `verdict`, which says whether you can trust the
 
 | What you see | What it means |
 | --- | --- |
-| `verdict: "OK"` | The measurement is trustworthy, and saccade.js applies it. |
+| `verdict: "OK"` | The measurement is trustworthy, and SaccadeJS applies it. |
 | `verdict: "UNRELIABLE"`, and `peak_d` is low | The camera did not clearly see the screen change brightness. A dim monitor, the camera adjusting its own exposure, or something blocking the lens can cause this. |
 | `verdict: "UNRELIABLE"`, and `plateau_width_ms` is wide | Too few brightness changes to pin down the lag. A longer run (the `duration` parameter) gives more. |
 | `verdict: "UNRELIABLE"`, and the two `halves_ms` values are far apart | The first and second halves of the run gave different answers, so the lag changed during the measurement. |
@@ -85,7 +85,7 @@ The time-sync trial also saves a `verdict`, which says whether you can trust the
 | `clock_source: "receiveTime"` | The browser reported when frames arrived instead of when they were captured. The measured lag includes the difference, so an `OK` result is still usable. |
 | `clock_source: "callback"` | The browser did not report when frames were captured, so the number is not a real measurement. See [Browser compatibility](browser-compatibility#capture-timestamps). |
 
-saccade.js applies only an `OK` measurement. After any other verdict it saves the lag without
+SaccadeJS applies only an `OK` measurement. After any other verdict it saves the lag without
 subtracting it, and later trials show `saccade_timing.corrected: false`.
 
 Set `require_ok: true` to have the trial try once more after an `UNRELIABLE` result. Either way
@@ -97,11 +97,11 @@ participant.
 `saccade_timing` has what you need to find trials with untrustworthy timestamps. Two checks
 follow from how the correction works. Keep a trial only if:
 
-- saccade.js subtracted the lag (`corrected` is `true`), and
+- SaccadeJS subtracted the lag (`corrected` is `true`), and
 - the browser reported real capture times (`clock` is `"captureTime"`).
 
 You may also want to drop trials where the tracker ran slowly or dropped many frames. How slow is
-too slow depends on your design, and nobody has measured it for saccade.js yet, so the numbers
+too slow depends on your design, and nobody has measured it for SaccadeJS yet, so the numbers
 below are placeholders. Pick your own from pilot data and settle them before you collect:
 
 ```js
@@ -117,7 +117,7 @@ const untrustworthy = (d) =>
 
 ## Timing your own events
 
-`t` counts from the start of the trial, which saccade.js records as `saccade_timing.trial_start`.
+`t` counts from the start of the trial, which SaccadeJS records as `saccade_timing.trial_start`.
 Anything shown when the trial starts is at `t` = 0, give or take a frame.
 
 For anything that happens later in the trial, such as a word played after one second or a picture

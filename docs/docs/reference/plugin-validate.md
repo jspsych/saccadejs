@@ -11,8 +11,8 @@ description: Measure gaze accuracy on points the calibration never saw.
 calibration.
 
 The participant sees another series of dots, nine by default. They look at each dot for about
-three seconds: one second to get there and two while saccade.js records gaze. The whole trial
-takes about half a minute. saccade.js then compares where it estimated they were looking with
+three seconds: one second to get there and two while SaccadeJS records gaze. The whole trial
+takes about half a minute. SaccadeJS then compares where it estimated they were looking with
 where each dot was.
 
 Eight of the nine dots sit in places the calibration never used. Calibration fits its own dots as
@@ -57,9 +57,9 @@ timeline.push({ type: jsPsychSaccadeValidate });
 | Field | Type | Description |
 | --- | --- | --- |
 | `median_error_viewport` | `number \| null` | **The number to report.** The typical error across dots, as a fraction of the window's diagonal. Comparable across screen sizes and shapes. `null` if no gaze was recorded at any dot. |
-| `median_error_px` | `number \| null` | The same error in pixels on this participant's screen. saccade.js averages the gaze samples at each dot, measures the distance from that average to the dot, and takes the median across dots. |
+| `median_error_px` | `number \| null` | The same error in pixels on this participant's screen. SaccadeJS averages the gaze samples at each dot, measures the distance from that average to the dot, and takes the median across dots. |
 | `samples_per_sec` | `number \| null` | The average number of gaze samples per second while recording. `null` if no dot got two samples. |
-| `processing_ms` | `number \| null` | [Deferred mode](../guides/deferred-mode) only. How long the participant waited after the last dot while saccade.js processed the frames. `null` in live mode. |
+| `processing_ms` | `number \| null` | [Deferred mode](../guides/deferred-mode) only. How long the participant waited after the last dot while SaccadeJS processed the frames. `null` in live mode. |
 | `rt` | `number` | Milliseconds from the start of the trial to the end of validation. |
 
 ### Per dot
@@ -103,8 +103,8 @@ timeline.push(validate, recalibrateIfBad);
 
 ## Choosing an exclusion threshold
 
-saccade.js has no recommended cutoff for `median_error_viewport`. The right one depends on your
-design, and it has not been measured for saccade.js yet. Two large pictures on opposite sides of the screen can tolerate much more error
+SaccadeJS has no recommended cutoff for `median_error_viewport`. The right one depends on your
+design, and it has not been measured for SaccadeJS yet. Two large pictures on opposite sides of the screen can tolerate much more error
 than a line of small words. Run a pilot, look at the spread of errors, and fix your exclusion
 threshold before you start collecting.
 

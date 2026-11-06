@@ -92,7 +92,7 @@ function Hero(): React.ReactElement {
           </span>
           <div className={styles.heroText}>
             <h1 className={styles.heroTitle}>
-              <span className={styles.heroTitleAccent}>saccade.js</span>{" "}
+              <span className={styles.heroTitleAccent}>SaccadeJS</span>{" "}
               estimates where a participant is looking, from an ordinary
               webcam.
             </h1>
@@ -329,7 +329,7 @@ function Details(): React.ReactElement {
 
 export default function Home(): React.ReactElement {
   return (
-    <Layout description="saccade.js estimates where a participant is looking, from an ordinary webcam, in the browser. It provides a jsPsych extension, plugins for camera setup, calibration, validation and timing, and a core library that runs without jsPsych.">
+    <Layout description="SaccadeJS estimates where a participant is looking, from an ordinary webcam, in the browser. It provides a jsPsych extension, plugins for camera setup, calibration, validation and timing, and a core library that runs without jsPsych.">
       <main>
         <Hero />
         <Features />

@@ -2,7 +2,7 @@
 id: browser-compatibility
 title: Browser compatibility
 sidebar_label: Browser compatibility
-description: The browser features saccade.js depends on, which browsers have them, and what degrades when one is missing.
+description: The browser features SaccadeJS depends on, which browsers have them, and what degrades when one is missing.
 ---
 
 # Browser compatibility
@@ -10,22 +10,22 @@ description: The browser features saccade.js depends on, which browsers have the
 ## The short answer
 
 - **Chrome and Edge** are the tested browsers. Use them if you can.
-- **Firefox and Safari** will run saccade.js, and recent versions have every feature it uses. They
+- **Firefox and Safari** will run SaccadeJS, and recent versions have every feature it uses. They
   have not yet been tested with a real webcam and checked against known results, so treat them as
   _untested_ rather than unsupported.
-- saccade.js does not check which browser it is in. The one feature it refuses to run without is
+- SaccadeJS does not check which browser it is in. The one feature it refuses to run without is
   WebGL (see below). Any other missing feature makes it slower or its timestamps less precise,
   and **it does not warn you** when that happens. So check the data each participant produces
   rather than their browser name. The last section of this page shows how.
 
-## What saccade.js needs
+## What SaccadeJS needs
 
 | Feature | What it is for | If the browser lacks it |
 | --- | --- | --- |
 | Camera access (`getUserMedia`) on a secure page | Everything | Nothing works |
 | WebAssembly | Running the face finder and the eye model | Nothing works |
 | WebGL | Reading camera frames into the face finder, and running it on the graphics card | With WebGL 1 or software WebGL, the face finder runs on the processor, more slowly. With no WebGL at all, nothing works, and the tracker stops with a `WebGLUnavailableError` |
-| WebGPU | Running the eye model on the graphics card | The eye model runs on the processor instead, much more slowly. With `mode: "auto"`, saccade.js switches to [deferred mode](deferred-mode) |
+| WebGPU | Running the eye model on the graphics card | The eye model runs on the processor instead, much more slowly. With `mode: "auto"`, SaccadeJS switches to [deferred mode](deferred-mode) |
 | Camera frame callbacks (`requestVideoFrameCallback`) | Processing each camera frame as it arrives, and knowing when it arrived | Frames are timestamped at the next screen refresh, not when they were captured |
 | Capture timestamps (`captureTime`) | Knowing when each frame was captured, which the timing correction relies on | Frames are stamped when they arrive (`receiveTime`), which the timing correction still accounts for. With neither timestamp, frames are stamped at the next screen refresh, and the timing correction is no longer a real measurement |
 
@@ -35,14 +35,14 @@ browser has blocked their graphics card, the page gets no WebGL at all, and rece
 Chrome no longer fall back to a software version.
 
 The face finder needs WebGL even when it runs on the processor, because it uses WebGL to read each
-camera frame. So saccade.js checks for WebGL before downloading anything, and if it is missing,
+camera frame. So SaccadeJS checks for WebGL before downloading anything, and if it is missing,
 stops with a `WebGLUnavailableError`. The preview trial tells the participant what went wrong. To
 screen these participants out before you ask for the camera, call `webglAvailable()` from the
 [core API](../reference/core-api#lower-level-exports).
 
 ## WebGPU: the difference that matters most
 
-WebGPU lets a web page use the computer's graphics card for heavy calculations. saccade.js tries
+WebGPU lets a web page use the computer's graphics card for heavy calculations. SaccadeJS tries
 to run the eye model with WebGPU first. If WebGPU is not available, it quietly falls back to
 WebAssembly, which runs on the main processor and is slower. What that costs you depends on the
 extension's `mode` setting:
@@ -66,7 +66,7 @@ runs the model, is developed and tested mainly on Chrome.
 
 ## Camera frame callbacks
 
-The camera frame callback (`requestVideoFrameCallback`) tells saccade.js each time the camera
+The camera frame callback (`requestVideoFrameCallback`) tells SaccadeJS each time the camera
 delivers a new frame, and when. It has been available in all major browsers since October 2024
 ([Baseline](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback)):
 
@@ -76,7 +76,7 @@ delivers a new frame, and when. It has been available in all major browsers sinc
 | Safari | 15.4 |
 | Firefox | 132 |
 
-In an older browser without it, saccade.js processes whatever frame the video is showing once per
+In an older browser without it, SaccadeJS processes whatever frame the video is showing once per
 screen refresh instead, and stamps each gaze sample with the time of that refresh. That is later
 than when the frame was captured, and the same frame can be processed twice. The data records this
 as `clock: "callback"`.

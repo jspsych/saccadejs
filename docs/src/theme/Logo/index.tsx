@@ -11,7 +11,7 @@ import SaccadeMark from '@site/src/components/SaccadeMark';
  *
  * Identical to the theme's version — same home link, alt-text rules, and the
  * navbar__brand / navbar__logo / navbar__title class hooks the theme expects —
- * except the mark is saccade.js's scanpath rather than the shared jsPsych
+ * except the mark is SaccadeJS's scanpath rather than the shared jsPsych
  * dot-brain. It stays inlined as SVG rather than a flat <img> so the path can
  * draw itself on hover (see components/SaccadeMark).
  *

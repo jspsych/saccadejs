@@ -15,7 +15,7 @@ import styles from "./styles.module.css";
 /**
  * The live demo on `/demo`.
  *
- * Four things saccade.js can do, offered as a menu rather than as a fixed four-minute run:
+ * Four things SaccadeJS can do, offered as a menu rather than as a fixed four-minute run:
  * calibrate, check the accuracy of that calibration, record a scanpath over a painting, and
  * watch gaze live with the knobs exposed. Only calibration is available at the start, because
  * the other three have nothing to show without a fitted model, and any of them can be repeated
@@ -47,7 +47,7 @@ import styles from "./styles.module.css";
  *
  * Everything the experiment touches — `navigator.mediaDevices`, WebGPU/WebAssembly, a `<video>`
  * element — is absent while Docusaurus prerenders this page to static HTML, so the component is
- * wrapped in `<BrowserOnly>` and every saccade.js/jsPsych module is pulled in with a dynamic
+ * wrapped in `<BrowserOnly>` and every SaccadeJS/jsPsych module is pulled in with a dynamic
  * `import()` from inside a callback, never at module scope.
  */
 

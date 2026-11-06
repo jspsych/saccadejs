@@ -11,7 +11,7 @@ description: Measure the tracker's effective frame rate, and exclude machines to
 participant's computer. If you like, it can also end the experiment on computers that are too
 slow.
 
-When a computer or browser cannot use the graphics card, saccade.js quietly switches to a slower
+When a computer or browser cannot use the graphics card, SaccadeJS quietly switches to a slower
 method and carries on, producing fewer gaze samples per second. Nothing stops and nothing warns
 you. This trial gives you a number to check before your data depends on it.
 
@@ -106,14 +106,14 @@ const shortVersion = {
 ### Use `fps_median` for your threshold
 
 `fps_median` is the rate your experiment will run at, and so the rate at which gaze samples
-appear in your data. saccade.js processes one camera frame at a time and waits to finish it before
+appear in your data. SaccadeJS processes one camera frame at a time and waits to finish it before
 taking the next. The rate therefore depends on whichever is slower, the camera delivering frames
 or the computer processing them.
 
 ### Choose the threshold from your own design
 
-saccade.js has no recommended threshold. How many samples per second a study needs depends on
-what it measures, and nobody has studied this for saccade.js yet. Pilot without excluding anyone,
+SaccadeJS has no recommended threshold. How many samples per second a study needs depends on
+what it measures, and nobody has studied this for SaccadeJS yet. Pilot without excluding anyone,
 then choose a threshold from what you see.
 
 One limit applies to every design. At _f_ samples per second, you cannot place an eye movement in
@@ -148,13 +148,13 @@ participant whose frame rate is unknown has not passed the check.
 
 A frame with no face in it never reaches the eye model, so it takes almost no time to process.
 Counting those frames would report a rate the computer cannot keep up once it is tracking a face,
-so saccade.js counts them separately as `frames_without_face`. A large number there means the
+so SaccadeJS counts them separately as `frames_without_face`. A large number there means the
 participant was out of view for part of the measurement, and the rates rest on less data than the
 five seconds suggest.
 
 ### In deferred mode
 
 In [deferred mode](../guides/deferred-mode), the eye model runs later on background threads.
-The frame rate then measures only how fast saccade.js reads the camera and finds the face, which
+The frame rate then measures only how fast SaccadeJS reads the camera and finds the face, which
 is how many frames it queues for later. `embed_ms_median` is `null`. Every trial records the mode
 in its `saccade_mode` column, so check that column when you read these numbers.

@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import styles from './styles.module.css';
 
 /**
- * saccade.js scanpath mark.
+ * SaccadeJS scanpath mark.
  *
  * Eye tracking plots gaze the same way jsPsych draws its brain: circles of
  * varying radius. The mark is built from that shared primitive — four fixations
@@ -32,7 +32,7 @@ export default function SaccadeMark({
     <svg
       viewBox="0 0 200 200"
       role="img"
-      aria-label="saccade.js"
+      aria-label="SaccadeJS"
       className={clsx(styles.mark, className)}
       {...props}>
       {/* Butt caps, not round: a round cap paints a zero-length dash as a dot,
