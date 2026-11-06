@@ -241,7 +241,7 @@ class SaccadeCalibratePlugin implements JsPsychPlugin<Info> {
           }
 
           ui.setPhase("capture");
-          await extension.calibratePoint(x, y, undefined, trial.time_per_point);
+          await extension.calibratePoint(x, y, { captureMs: trial.time_per_point });
         }
       }
 

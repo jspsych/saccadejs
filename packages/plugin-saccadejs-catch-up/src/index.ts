@@ -147,8 +147,8 @@ class SaccadeCatchUpPlugin implements JsPsychPlugin<Info> {
 
     extension
       .catchUp({
-        max_wait_ms: trial.max_wait,
-        save_unprocessed_crops: trial.save_unprocessed_crops,
+        maxWaitMs: trial.max_wait,
+        saveUnprocessedCrops: trial.save_unprocessed_crops,
         onProgress: render,
       })
       .then((result) => {

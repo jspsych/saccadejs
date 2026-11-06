@@ -56,8 +56,8 @@ describe("saccade-catch-up trial", () => {
     expect(displayElement.innerHTML).toContain("Finishing up");
     expect(extension.pause).toHaveBeenCalled();
     expect(extension.catchUpOptions).toMatchObject({
-      max_wait_ms: 30000,
-      save_unprocessed_crops: true,
+      maxWaitMs: 30000,
+      saveUnprocessedCrops: true,
     });
 
     // Progress: half done, at 4 frames a second, 20 frames left is about 5 seconds.
@@ -85,8 +85,8 @@ describe("saccade-catch-up trial", () => {
       [{ type: SaccadeCatchUpPlugin, pause_tracking: false }],
       jsPsych,
     );
-    expect(extension.catchUpOptions.max_wait_ms).toBeNull();
-    expect(extension.catchUpOptions.save_unprocessed_crops).toBe(false);
+    expect(extension.catchUpOptions.maxWaitMs).toBeNull();
+    expect(extension.catchUpOptions.saveUnprocessedCrops).toBe(false);
     expect(extension.pause).not.toHaveBeenCalled();
     extension.release();
     await finished;

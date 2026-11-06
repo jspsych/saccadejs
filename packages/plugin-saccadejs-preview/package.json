@@ -51,6 +51,6 @@
   },
   "peerDependencies": {
     "jspsych": ">=8.0.0",
-    "@saccadejs/extension": ">=0.1.0"
+    "@saccadejs/extension": "^1.0.0"
   }
 }
